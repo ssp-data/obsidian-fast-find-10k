@@ -363,7 +363,8 @@ Calls made by the designer after the builder check (owner may override):
 Rulings made during implementation (controller):
 
 - Smart case (§6.2) is deferred: fuzzy matching runs the normalized query against normalized field strings, so case bonuses are inert in v1.
-- Fuzzy hits are rejected when the matched span exceeds `needle_chars + 2×max_typos + 1` characters or the score ratio is below 0.5, so scattered subsequences (`airflow` → "AI rules for low budgets") never enter tier 1.
+- Fuzzy hits are rejected when the matched span exceeds `needle_chars + 2×max_typos + 1` characters or the score ratio is below 0.65 (0.5 until task 23), so scattered subsequences (`airflow` → "AI rules for low budgets") never enter tier 1.
+- Fuzzy hits also need at least `needle_chars − max_typos` matched needle characters (distinct frizbee match indices) (task 23, owner feedback). frizbee's `max_typos` counts only missing needle chars, so substitutions were free: `writing` hit "Airbyte Checkpointing" (via "ointing") and "Don't use AI for everything…", `should` hit "Social Media Prescheduled Long Format". Final ratio floor 0.65 (no golden needed tuning in 0.6–0.7); transpositions such as `troubelshoot` → "Obsidian Troubleshooting" still match.
 - The short-term rule applies per compound part (`gen-ai` keeps `ai` exact-only in single-term queries).
 - `data engineer ai` ranks "AI for Data Engineers" first because `engineer`→`engineers` (8/9) outscores `engineer`→`engineering` (8/11); the §6.3 example assumed equal quality.
 - Structural (§6.4): the shorter-title bonus is replaced by an unmatched-title-word factor on the fields sum, `max(0.5, 1 − 0.15 × unmatched)` (step 0.15, floor 0.5), applied to tiers 1–3 with a matched alias standing in for the title, so `obsidian trouble` ranks "Obsidian Troubleshoot" above "Obsidian Trouble Tags Plugin".

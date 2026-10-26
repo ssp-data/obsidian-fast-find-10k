@@ -41,6 +41,9 @@ struct Case {
     expect_in_top: Vec<String>,
     #[serde(default)]
     must_not_top3: Vec<String>,
+    /// Names that must not be anywhere in the returned page.
+    #[serde(default)]
+    must_not_appear: Vec<String>,
     #[serde(default)]
     expect_similar_count: HashMap<String, u32>,
 }
@@ -196,6 +199,11 @@ fn run_case(engine: &Engine, case: &Case) -> Vec<Failure> {
     for name in &case.must_not_top3 {
         if hits.iter().take(3).any(|h| matches(h, name)) {
             out.push(fail(format!("{name:?} not in top 3")));
+        }
+    }
+    for name in &case.must_not_appear {
+        if hits.iter().any(|h| matches(h, name)) {
+            out.push(fail(format!("{name:?} not in the page")));
         }
     }
     let mut similar: Vec<(&String, &u32)> = case.expect_similar_count.iter().collect();

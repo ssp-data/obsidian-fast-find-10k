@@ -1,6 +1,7 @@
 # Golden queries against fixtures/vault (spec §12).
 # A name matches a hit when it equals the hit's title or the hit's path ends with it.
-# expect_in_top = within the first 5 hits; expect_similar_count = exact, hit anywhere in the page.
+# expect_in_top = within the first 5 hits; expect_similar_count = exact, hit anywhere in the page;
+# must_not_appear = not anywhere in the returned page.
 
 [[case]]
 query = "obsidian trouble"
@@ -102,3 +103,14 @@ expect_top = "👉🏻 Data Engineering"
 [[case]]
 query = "fundamentals data engineering"
 expect_top = "Fundamentals of Data Engineering (Joe Reis, Matt Housley)"
+
+# Fuzzy needs the matched needle chars (>= needle chars - typo budget) and ratio >= 0.65:
+# substitution-heavy alignments ("writing" ~ "checkpointing"/"everything", "should" ~
+# "prescheduled") are rejected. None of the decoys contains "writing" or "should".
+[[case]]
+query = "ai writing"
+must_not_appear = ["Airbyte Checkpointing"]
+
+[[case]]
+query = "should i change"
+must_not_appear = ["Social Media Prescheduled Long Format"]

@@ -258,9 +258,13 @@ fn finish(index: &Index, field: Field, doc: DocId, mut acc: Acc) -> TermHit {
     }
 }
 
+/// Minimum `score / self_score` of a fuzzy hit (spec §16).
+const MIN_FUZZY_RATIO: f32 = 0.65;
+
 /// frizbee match indices are byte offsets of matched bytes; widen each to its whole char.
-fn byte_ranges(s: &str, indices: &[u32]) -> SmallVec<[(u32, u32); 4]> {
-    let mut r = SmallVec::new();
+/// Returns the merged char ranges and the number of distinct matched chars.
+fn byte_ranges(s: &str, indices: &[u32]) -> (SmallVec<[(u32, u32); 4]>, usize) {
+    let mut r: SmallVec<[(u32, u32); 4]> = SmallVec::new();
     for &i in indices {
         let mut start = (i as usize).min(s.len());
         while !s.is_char_boundary(start) {
@@ -269,7 +273,10 @@ fn byte_ranges(s: &str, indices: &[u32]) -> SmallVec<[(u32, u32); 4]> {
         let end = start + s[start..].chars().next().map_or(0, char::len_utf8);
         r.push((start as u32, end as u32));
     }
-    merge(r)
+    r.sort_unstable();
+    r.dedup();
+    let chars = r.len();
+    (merge(r), chars)
 }
 
 fn typo_budget(len: usize, fuzzy: FuzzyLevel) -> Option<u16> {
@@ -285,8 +292,10 @@ fn typo_budget(len: usize, fuzzy: FuzzyLevel) -> Option<u16> {
 /// Allowed kinds by the char length of `term.parts[0]`: ≤ 3 → Exact (plus Prefix when
 /// `multi_term`); 4–5 → Exact|Prefix; ≥ 6 → Exact|Prefix|Fuzzy. Quality: Exact 1.0, Prefix
 /// `term_len / token_len`, Fuzzy `0.9 × score / self_score`. Compound parts apply the short-term
-/// rule on their own length. Fuzzy hits need `score / self_score ≥ 0.5` and a matched span of at
-/// most `needle_chars + 2 × max_typos + 1` chars.
+/// rule on their own length. Fuzzy hits need `score / self_score ≥ 0.65`, at least
+/// `needle_chars − max_typos` matched needle chars (frizbee's typo budget only counts missing
+/// chars, so substitutions would otherwise be free) and a matched span of at most
+/// `needle_chars + 2 × max_typos + 1` chars.
 pub fn match_term(index: &Index, term: &Term, multi_term: bool, fuzzy: FuzzyLevel) -> Vec<TermHit> {
     match_term_scoped(index, term, multi_term, fuzzy, Scope::All)
 }
@@ -387,14 +396,15 @@ pub fn match_term_scoped(
                 if r.score == 0 || r.exact || matched.contains(doc) {
                     continue;
                 }
-                // Reject scattered subsequences: a weak score or a match spread too wide.
+                // Reject scattered subsequences and substitution-heavy alignments: a weak score,
+                // too few needle chars matched, or a match spread too wide.
                 let ratio = r.score as f32 / *self_score;
-                let char_ranges = byte_ranges(s, &r.indices);
+                let (char_ranges, matched_chars) = byte_ranges(s, &r.indices);
                 let span = match (char_ranges.first(), char_ranges.last()) {
                     (Some(a), Some(b)) => s[a.0 as usize..b.1 as usize].chars().count(),
                     _ => continue,
                 };
-                if ratio < 0.5 || span > max_span {
+                if ratio < MIN_FUZZY_RATIO || matched_chars + (*typos as usize) < needle_chars || span > max_span {
                     continue;
                 }
                 let quality = 0.9 * ratio;
@@ -596,6 +606,13 @@ mod tests {
         let ix = ix_of(&[("AI rules for low budgets.md", ""), ("Gene editing in nature.md", "")]);
         assert!(match_term(&ix, &term("airflow"), false, NORMAL).is_empty());
         assert!(match_term(&ix, &term("engine"), false, NORMAL).is_empty());
+    }
+
+    #[test]
+    fn fuzzy_rejects_substitution_heavy_match() {
+        let ix = ix_of(&[("Airbyte Checkpointing.md", ""), ("Social Media Prescheduled Long Format.md", "")]);
+        assert!(match_term(&ix, &term("writing"), false, NORMAL).is_empty());
+        assert!(match_term(&ix, &term("should"), false, NORMAL).is_empty());
     }
 
     #[test]
