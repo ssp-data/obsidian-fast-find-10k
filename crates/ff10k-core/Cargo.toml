@@ -29,3 +29,7 @@ criterion = "0.5"
 [[test]]
 name = "golden"
 required-features = ["golden"]
+
+[[bench]]
+name = "engine"
+harness = false

@@ -1,5 +1,6 @@
 //! Engine: thin facade over the index, the ranking config and the frecency/combo/ghost state.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
@@ -33,6 +34,9 @@ pub struct Engine {
     combos: HashMap<String, HashMap<String, u32>>,
     /// Optional embedding matrix (keyed by path).
     vectors: Option<Vectors>,
+    /// `similar_count` per (path, with semantic neighbours), reused across keystrokes (a
+    /// semantic count is a full matrix scan); cleared by every index or vector mutation.
+    similar_counts: RefCell<HashMap<(String, bool), u32>>,
 }
 
 /// Most access timestamps kept per path.
@@ -90,17 +94,20 @@ impl Engine {
 
     pub fn upsert(&mut self, path: &str, mtime: f64, text: &str) {
         self.index.upsert_note(path, mtime, text);
+        self.similar_counts.get_mut().clear();
     }
 
     /// `upsert`, adding each phase's wall time to `prof` (dev profiling: `ff10k profile`).
     pub fn upsert_profiled(&mut self, path: &str, mtime: f64, text: &str, prof: &mut UpsertProfile) {
         self.index.upsert_note_profiled(path, mtime, text, prof);
+        self.similar_counts.get_mut().clear();
     }
 
     /// Drops every indexed note and the index caches at once (for a rebuild); access history,
     /// combos, ghosts, vectors and the config stay.
     pub fn clear(&mut self) {
         self.index = Index::new();
+        self.similar_counts.get_mut().clear();
     }
 
     /// Builds the lazy per-query caches of the index and the ghost set, so the first query
@@ -112,10 +119,12 @@ impl Engine {
     }
 
     pub fn remove(&mut self, path: &str) -> bool {
+        self.similar_counts.get_mut().clear();
         self.index.remove(path).is_some()
     }
 
     pub fn rename(&mut self, old: &str, new: &str) -> bool {
+        self.similar_counts.get_mut().clear();
         let renamed = self.index.rename(old, new);
         if renamed && old != new {
             if let Some(ts) = self.access.remove(old) {
@@ -142,11 +151,13 @@ impl Engine {
     /// Replaces the embedding matrix. On error the old matrix is kept.
     pub fn set_vectors(&mut self, dims: usize, paths: Vec<String>, data: Vec<f32>) -> Result<(), VectorError> {
         self.vectors = Some(Vectors::new(dims, paths, data)?);
+        self.similar_counts.get_mut().clear();
         Ok(())
     }
 
     pub fn clear_vectors(&mut self) {
         self.vectors = None;
+        self.similar_counts.get_mut().clear();
     }
 
     pub fn has_vectors(&self) -> bool {
@@ -220,7 +231,13 @@ impl Engine {
         // Neighbour counts only for the first page hits; the recent list (tier 0) stays instant.
         for (n, h) in hits.iter_mut().enumerate().take(SIMILAR_COUNT_HITS).filter(|(_, h)| !h.is_ghost && h.tier != 0) {
             if let Some(id) = self.index.id_of(&h.path) {
-                h.similar_count = self.similar_count(id, &h.path, n < SEMANTIC_COUNT_HITS);
+                let key = (h.path.clone(), n < SEMANTIC_COUNT_HITS);
+                let cached = self.similar_counts.borrow().get(&key).copied();
+                h.similar_count = cached.unwrap_or_else(|| {
+                    let c = self.similar_count(id, &h.path, key.1);
+                    self.similar_counts.borrow_mut().insert(key, c);
+                    c
+                });
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
@@ -760,6 +777,21 @@ mod tests {
         ps.dedup();
         assert_eq!(ps.len(), r.len());
         assert_eq!(e.similar("AI in Data Engineering.md", 1, 0.70).len(), 1);
+    }
+
+    #[test]
+    fn similar_count_cache_follows_mutations() {
+        let mut e = with_vectors(&[("AI in Data Engineering.md", 0.0), ("RW Pandas AI.md", 20.0)]);
+        let count = |e: &Engine| hit(&e.search("ai in data engineering", &opts()), "AI in Data Engineering").unwrap().similar_count;
+        let first = count(&e);
+        assert_eq!(e.similar_counts.borrow().len() > 0, true, "counts cached");
+        assert_eq!(count(&e), first);
+        e.upsert("AI in Data Engineering (1).md", 0.0, "");
+        assert_eq!(count(&e), first + 1, "an upsert invalidates the cache");
+        assert!(e.remove("AI in Data Engineering (1).md"));
+        assert_eq!(count(&e), first);
+        e.clear_vectors();
+        assert_eq!(count(&e), first - 1, "dropping vectors invalidates the cache");
     }
 
     #[test]
