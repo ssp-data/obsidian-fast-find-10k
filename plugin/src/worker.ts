@@ -32,7 +32,10 @@ function scheduleWarmUp(): void {
 	if (warmTimer !== null) clearTimeout(warmTimer);
 	warmTimer = setTimeout(() => {
 		warmTimer = null;
-		chain = chain.then(() => engine?.warm_up());
+		// Like every link of the chain, never left rejected: later messages must still run.
+		chain = chain
+			.then(() => engine?.warm_up())
+			.catch((e: unknown) => post({ t: 'error', message: `warm_up failed: ${e instanceof Error ? e.message : String(e)}` }));
 	}, WARM_IDLE_MS);
 }
 

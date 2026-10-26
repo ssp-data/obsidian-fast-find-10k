@@ -86,3 +86,51 @@ test('worker bundle answers init, upsert, search, stale and errors', async () =>
 		await w.terminate();
 	}
 });
+
+// Makes the wasm export behind WasmEngine.warm_up throw once (as a wasm trap would).
+const FAILING_WARM_UP = `
+const realInstantiate = WebAssembly.instantiate;
+WebAssembly.instantiate = async (...args) => {
+	const r = await realInstantiate(...args);
+	const real = r.instance.exports.wasmengine_warm_up;
+	let failed = false;
+	const exports = {
+		...r.instance.exports,
+		wasmengine_warm_up: (...a) => {
+			if (failed) return real(...a);
+			failed = true;
+			throw new Error('forced warm_up trap');
+		},
+	};
+	return { instance: { exports }, module: r.module };
+};
+`;
+
+test('a failing idle warm-up does not wedge the worker', async () => {
+	const w = new Worker(SHIM + FAILING_WARM_UP + (await buildWorker()), { eval: true });
+	const replies = [];
+	w.on('message', (m) => replies.push(m));
+	const waitFor = (pred, ms = 2000) =>
+		new Promise((resolve, reject) => {
+			const deadline = Date.now() + ms;
+			const check = () => {
+				const r = replies.find(pred);
+				if (r) resolve(r);
+				else if (Date.now() > deadline) reject(new Error(`no matching reply within ${ms} ms`));
+				else setTimeout(check, 5);
+			};
+			check();
+		});
+	try {
+		w.postMessage({ t: 'init', id: 1, config });
+		w.postMessage({ t: 'upsert', docs: [{ path: 'Obsidian Troubleshooting.md', mtime: 1, text: '# x' }] });
+		await waitFor((m) => m.t === 'upserted');
+		// the warm-up runs (and throws) 100 ms after the upsert
+		const err = await waitFor((m) => m.t === 'error');
+		assert.match(err.message, /forced warm_up trap/);
+		w.postMessage({ t: 'search', id: 2, query: 'obsidian', mode: 'all', limit: 10, debug: false });
+		assert.equal((await waitFor((m) => m.t === 'results' && m.id === 2)).res.hits[0].title, 'Obsidian Troubleshooting');
+	} finally {
+		await w.terminate();
+	}
+});

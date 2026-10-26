@@ -23,6 +23,9 @@ jobs:
       - name: cargo test --workspace
         run: cargo test --workspace
 
+      - name: Benches compile
+        run: cargo bench -p ff10k-core --no-run
+
       - name: Golden queries
         run: cargo test -p ff10k-core --features golden --test golden
 
