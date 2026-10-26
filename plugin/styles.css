@@ -421,6 +421,12 @@
 	color: var(--text-muted);
 }
 
+.ff10k-help-note {
+	margin-top: var(--size-4-3);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
 /* Settings tab: rejected key binding */
 input.ff10k-invalid {
 	border-color: var(--text-error);

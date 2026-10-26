@@ -10,7 +10,7 @@ async function load(entry) {
 
 const { mergeSettings, settingsToEngineConfig, migrateKeymap, DEFAULT_SETTINGS, DEFAULT_KEYMAP } = await load('src/settings.ts');
 const { parseKeySpec, validateBinding, keyLabel, conflicts } = await load('src/keys.ts');
-const { helpGroups } = await load('src/ui/help.ts');
+const { helpGroups, helpNotes } = await load('src/ui/help.ts');
 
 test('merge: nothing saved gives the defaults (fresh copies)', () => {
 	const s = mergeSettings(null);
@@ -190,4 +190,13 @@ test('help overlay: every action once, in its group, with its current binding', 
 	assert.equal(groups.find((g) => g.title === 'Open').rows.some((r) => r.action === 'openAll'), true);
 	assert.equal(groups.find((g) => g.title === 'Help').rows.some((r) => r.action === 'showHelp'), true);
 	assert.deepEqual(row('close').keys, ['Escape']);
+});
+
+test('help overlay: a Shift+letter binding notes that the capital letter cannot be typed', () => {
+	const notes = helpNotes(DEFAULT_KEYMAP, false);
+	assert.equal(notes.length, 1);
+	assert.match(notes[0], /Shift\+J, Shift\+K/);
+	assert.match(notes[0], /capital J, K/);
+	assert.match(notes[0], /Alt\+J/);
+	assert.deepEqual(helpNotes({ ...DEFAULT_KEYMAP, previewDown: 'Alt+J', previewUp: 'Alt+K' }, false), []);
 });

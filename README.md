@@ -43,7 +43,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 |---|---|
 | ↓ / Ctrl+J | next result |
 | ↑ / Ctrl+K | previous result |
-| Shift+J / Shift+K | scroll the preview down / up |
+| Shift+J / Shift+K | scroll the preview down / up (while bound, capital J and K cannot be typed into the query; rebind to e.g. Alt+J / Alt+K if you need them) |
 | Tab | focus the similar-notes panel |
 | Enter | open |
 | Mod+Enter | open in a new tab |
@@ -71,7 +71,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 
 Each query word (and each quoted phrase) must match, except optional words (`a an the of to in on i` by default), which only add to the score. A note's **tier** comes from the weakest field its words matched, and a lower tier never ranks above a higher one:
 
-1. **title · alias**: every word in the title or an alias (unresolved link targets, "ghosts", also appear here and can be created with Shift+Enter)
+1. **title · alias**: every word in the title or an alias (unresolved link targets, "ghosts", also appear here and can be created with Shift+Enter). A ghost is hidden when a note of that name exists, compared with diacritics and emoji folded: `[[Café]]` does not show as a ghost when `Cafe.md` exists
 2. **headings**: every word in a title, alias or H1–H3
 3. **content**: every word somewhere, including body, tags, links and path
 4. **partial**: some words missing but one in the title or an alias (shown when the other tiers have few hits)

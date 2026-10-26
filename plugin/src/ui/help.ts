@@ -37,6 +37,17 @@ export function helpGroups(km: Keymap): HelpGroup[] {
 	}));
 }
 
+/** Notes under the shortcut grid: a `Shift+<letter>` binding takes that capital letter away from
+ * the query (the defaults Shift+J / Shift+K scroll the preview). */
+export function helpNotes(km: Keymap, isMac: boolean): string[] {
+	const shifted = [...new Set(Object.values(km).filter((k) => /^Shift\+[A-Za-z]$/.test(k)))];
+	if (!shifted.length) return [];
+	const letters = shifted.map((k) => k.slice(-1).toUpperCase());
+	const labels = shifted.map((k) => keyLabel(k, isMac)).join(', ');
+	const alt = letters.map((l) => keyLabel(`Alt+${l}`, isMac)).join(' / ');
+	return [`${labels} are shortcuts here, so capital ${letters.join(', ')} cannot be typed into the query; rebind them (e.g. ${alt}) in the settings to type them.`];
+}
+
 const ARROWS: Record<string, string> = { ArrowDown: '↓', ArrowUp: '↑', Escape: 'Esc' };
 
 /** Fills `el` (emptied first) with the grouped rows. */
@@ -57,4 +68,5 @@ export function renderHelp(el: HTMLElement, km: Keymap, isMac: boolean): void {
 			row.createSpan({ cls: 'ff10k-help-label', text: r.label });
 		}
 	}
+	for (const note of helpNotes(km, isMac)) el.createDiv({ cls: 'ff10k-help-note', text: note });
 }
