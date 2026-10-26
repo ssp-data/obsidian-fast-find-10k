@@ -1,0 +1,27 @@
+# brainstorming mockups / scratch
+.superpowers/
+
+# Rust
+target/
+**/*.rs.bk
+
+# Node / plugin build
+node_modules/
+plugin/main.js
+plugin/*.map
+plugin/pkg/
+plugin/wasm/
+dist/
+
+# wasm-bindgen output
+crates/ff10k-wasm/pkg/
+
+# local-only tuning runs against the full test vault
+bench-results/
+*.local.toml
+
+# editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
