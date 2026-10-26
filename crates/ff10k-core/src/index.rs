@@ -244,6 +244,11 @@ impl Index {
         self.records.get(id as usize)?.as_ref().map(|r| r.text.as_str())
     }
 
+    /// Ids of all live docs, ascending.
+    pub fn ids(&self) -> impl Iterator<Item = DocId> + '_ {
+        self.records.iter().enumerate().filter(|(_, r)| r.is_some()).map(|(i, _)| i as DocId)
+    }
+
     pub fn id_of(&self, path: &str) -> Option<DocId> {
         self.path_to_id.get(path).copied()
     }

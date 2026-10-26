@@ -10,3 +10,5 @@ pub mod frecency;
 pub mod similar;
 pub mod vectors;
 pub mod engine;
+
+pub use engine::{Engine, Hit, SearchOptions};
