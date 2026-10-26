@@ -95,3 +95,51 @@ in IndexedDB. Tuning belongs to Task 22.
 
 Pre-existing errors from other plugins in the test vault (smart-connections "Ribbon actions require
 converged env.config.actions", cursor-smith watchdog) are unrelated.
+
+## Search modal (task 17)
+
+The CLI cannot type into Obsidian, but the modal reacts to synthetic DOM events, so it can be
+driven through `eval`: set the input value and fire `input`; fire `keydown` on `document`
+(Obsidian's keymap routes it to the modal's `Scope`).
+
+```bash
+o eval code="app.plugins.plugins['fast-find-10k'].settings.logTimings=true; 'ok'"   # session only
+o command id=fast-find-10k:search                 # or search-files (opens in files-only mode)
+# type a query
+o eval code="const i=document.querySelector('.ff10k-input'); i.value='obsidian trouble'; i.dispatchEvent(new Event('input')); 'ok'"
+# read status, tier labels and the top rows
+o eval code="const m=document.querySelector('.ff10k-modal'); [m.querySelector('.ff10k-status').textContent, [...m.querySelectorAll('.ff10k-tier')].map(e=>e.textContent).join(' | '), ...[...m.querySelectorAll('.ff10k-row')].slice(0,5).map(r=>r.textContent)].join('\n')"
+# press a key (Ctrl+F; use key:'Enter', key:'j', key:'/', key:'Escape', ctrlKey/altKey as needed)
+o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'f',ctrlKey:true,bubbles:true,cancelable:true})); 'ok'"
+# after an open: leaf count, active file, cursor
+o eval code="app.workspace.getLeavesOfType('markdown').length+' '+app.workspace.getActiveFile()?.path+' '+JSON.stringify(app.workspace.activeEditor?.editor?.getCursor())"
+# simulated typing, 15 chars, one per 60 ms; then read the timing lines
+o eval code="const q='data engineerin'; const i=document.querySelector('.ff10k-input'); let n=0; const step=()=>{ n++; i.value=q.slice(0,n); i.dispatchEvent(new Event('input')); if(n<q.length) setTimeout(step,60); }; step(); 'typing'"
+o dev:console | grep '\[ff10k\] search'           # query, engine µs, render ms
+o dev:screenshot path=/tmp/ff10k-modal.png        # may show the previous frame; re-run if stale
+```
+
+Observed on the test vault, 2026-10-26:
+
+| Check | Result |
+|---|---|
+| empty query | `recent` group, 20 rows, status `20 / 9,382 · 3 ms` |
+| `obsidian trouble` | first row `title` "Obsidian Troubleshoot" under `title · alias`; labels `title · alias \| headings \| content`; title highlights `<Obsidian> <Trouble>shoot` |
+| `data engineer ai` | 50 rows, labels `title · alias \| headings \| content` in that order; `N similar` pills on heading rows |
+| `AI` | 50 title rows (Artificial intelligence (AI), OpenAI, …), 0 rows containing "Airflow" |
+| Ctrl+F | pill `files only` active, only `title` badges (labels `title · alias \| partial`); Ctrl+F again → `all` |
+| Ctrl+J ×2, ↓ / Ctrl+K, ↑ | selection 0 → 3 → 1 |
+| Ctrl+P | `ff10k-preview-hidden` toggles on the modal |
+| Ctrl+/ | per-term debug line under every row, e.g. `obsidian: title exact 1.0 · trouble: title prefix 0.6 \| fields 158.33 · … \| score 186.92` |
+| Tab / Shift+Enter / Alt+Enter / Ctrl+S | Notice "coming in a later task" |
+| Enter | same leaf (3 → 3 leaves), opens Obsidian Troubleshoot, modal closed |
+| Mod+Enter | new tab (3 → 4 leaves) |
+| Mod+Alt+Enter | split (root split children 1 → 2) |
+| heading hit (`h3 ### Troubleshooting` in Obsidian.md) | cursor `{line:223, ch:0}`; line 223 is `### Troubleshooting` |
+| 30 rows rendered, scroll to bottom | 50 rows |
+| editor selection `# Obsidi` | prefilled as the query |
+| Esc | modal closed |
+| typing `data engineerin` at 60 ms/char | 15/15 responses painted; engine 6.1–15.3 ms (median ≈ 7.8), render 2.4–5.2 ms |
+| typing `obsidian troubl` at 15 ms/char | 12/15 painted (3 superseded as stale); engine 2.2–14.1 ms, render 2.5–3.9 ms; final top row correct |
+
+First query after a plugin reload takes 59–68 ms in the engine (cold); later queries 2–18 ms.

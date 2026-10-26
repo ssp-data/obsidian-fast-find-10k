@@ -3,38 +3,29 @@ import workerSource from 'virtual:worker-source';
 import { NoteCache } from './cache';
 import { EngineClient } from './engine-client';
 import { Indexer } from './indexer';
-import { DEFAULT_SETTINGS, type FastFindSettings, settingsToEngineConfig } from './settings';
+import type { Mode } from './protocol';
+import { DEFAULT_KEYMAP, DEFAULT_SETTINGS, type FastFindSettings, settingsToEngineConfig } from './settings';
+import { FastFindModal } from './ui/modal';
 
 export default class FastFindPlugin extends Plugin {
 	settings: FastFindSettings = { ...DEFAULT_SETTINGS };
 	engine: EngineClient | null = null;
 	cache: NoteCache | null = null;
 	indexer: Indexer | null = null;
+	private modal: FastFindModal | null = null;
 	private ready: Promise<void> = Promise.resolve();
 
 	async onload(): Promise<void> {
 		const saved = (await this.loadData()) as Partial<FastFindSettings> | null;
-		this.settings = { ...DEFAULT_SETTINGS, ...saved };
+		this.settings = { ...DEFAULT_SETTINGS, ...saved, keymap: { ...DEFAULT_KEYMAP, ...saved?.keymap } };
 
 		const engine = new EngineClient(workerSource);
 		this.engine = engine;
 		this.ready = this.startIndexing(engine);
 		this.ready.catch((e: unknown) => console.error('Fast Find 10K: startup failed', e));
 
-		this.addCommand({
-			id: 'search',
-			name: 'Search',
-			callback: async () => {
-				try {
-					await this.ready;
-					const s = this.indexer?.status;
-					const res = await engine.search('obsidian trouble', 'all', 5, false);
-					new Notice(`Fast Find 10K: ${s?.indexed ?? 0}/${s?.total ?? 0} indexed, top "${res.hits[0]?.title ?? '-'}"`);
-				} catch (e) {
-					new Notice(`Fast Find 10K: engine unavailable (${String(e)})`);
-				}
-			},
-		});
+		this.addCommand({ id: 'search', name: 'Search', callback: () => this.openModal('all') });
+		this.addCommand({ id: 'search-files', name: 'Search file names', callback: () => this.openModal('filesOnly') });
 
 		this.addCommand({
 			id: 'rebuild-index',
@@ -49,6 +40,18 @@ export default class FastFindPlugin extends Plugin {
 				}
 			},
 		});
+	}
+
+	private async openModal(mode: Mode): Promise<void> {
+		try {
+			await this.ready;
+		} catch (e) {
+			new Notice(`Fast Find 10K: engine unavailable (${String(e)})`);
+			return;
+		}
+		this.modal?.close();
+		this.modal = new FastFindModal(this.app, this, mode);
+		this.modal.open();
 	}
 
 	/** Engine init, cache open, then the indexer; resolves once the engine is searchable. */
@@ -67,6 +70,8 @@ export default class FastFindPlugin extends Plugin {
 	}
 
 	onunload(): void {
+		this.modal?.close(); // its engine is about to go away
+		this.modal = null;
 		this.indexer?.dispose();
 		this.indexer = null;
 		this.engine?.dispose();

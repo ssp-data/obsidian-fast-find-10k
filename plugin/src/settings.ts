@@ -4,6 +4,37 @@ import type { EngineConfig, PartialMode, Weights } from './protocol';
 
 export type FuzzySetting = 'off' | 'normal' | 'loose';
 
+/** Modal key bindings as `Mod+Alt+Enter` style strings (`Mod` = Cmd on macOS, Ctrl elsewhere). */
+export interface Keymap {
+	open: string;
+	openTab: string;
+	openSplit: string;
+	create: string;
+	insertLink: string;
+	filesOnly: string;
+	semantic: string;
+	moveDown: string;
+	moveUp: string;
+	togglePreview: string;
+	toggleDebug: string;
+	focusSimilar: string;
+}
+
+export const DEFAULT_KEYMAP: Keymap = {
+	open: 'Enter',
+	openTab: 'Mod+Enter',
+	openSplit: 'Mod+Alt+Enter',
+	create: 'Shift+Enter',
+	insertLink: 'Alt+Enter',
+	filesOnly: 'Ctrl+F',
+	semantic: 'Ctrl+S',
+	moveDown: 'Ctrl+J',
+	moveUp: 'Ctrl+K',
+	togglePreview: 'Ctrl+P',
+	toggleDebug: 'Ctrl+/',
+	focusSimilar: 'Tab',
+};
+
 export interface FastFindSettings {
 	ignoredGlobs: string[];
 	downrankedFolders: string[];
@@ -18,6 +49,7 @@ export interface FastFindSettings {
 	previewOpen: boolean;
 	debugByDefault: boolean;
 	logTimings: boolean;
+	keymap: Keymap;
 }
 
 export const DEFAULT_WEIGHTS: Weights = {
@@ -46,6 +78,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	previewOpen: true,
 	debugByDefault: false,
 	logTimings: false,
+	keymap: { ...DEFAULT_KEYMAP },
 };
 
 export function settingsToEngineConfig(s: FastFindSettings): EngineConfig {
