@@ -55,12 +55,15 @@ export class SimilarPanel {
 		if (token === this.token) this.renderRows(items.map((i) => ({ path: i.path, title: i.title, note: reasonLabel(i.reason) })));
 	}
 
-	/** Create guard: "Already have?" with the given existing notes (drops pending similar replies). */
-	showGuard(items: PanelItem[]): void {
+	/** Create guard: "Already have?" with the given existing notes (drops pending similar replies).
+	 * `keepSelection`: a refresh of the open guard (semantic rows arrived) keeps the selected row. */
+	showGuard(items: PanelItem[], keepSelection = false): void {
 		this.token++;
+		const selected = this.selected;
 		this.labelEl.setText('Already have?');
 		this.hintEl.toggle(false);
 		this.renderRows(items);
+		if (keepSelection && selected >= 0 && items.length > 0) this.setSelected(Math.min(selected, items.length - 1));
 	}
 
 	clear(): void {

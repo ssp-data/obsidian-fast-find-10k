@@ -69,3 +69,51 @@ test('backoff doubles from 1 s and stops at 60 s total', () => {
 	assert.equal(d.reduce((a, b) => a + b, 0), 60000);
 	assert.deepEqual(backoffDelays(5000, 1000), [1000, 2000, 2000]);
 });
+
+// --- embed(): timeout and in-flight sharing, against a stubbed smart_env ---
+globalThis.window ??= globalThis;
+const { SmartConnectionsBridge } = await load('src/smart-connections-bridge.ts');
+
+function stubBridge(embedBatch) {
+	window.smart_env = { smart_sources: { items: { 'a.md': { path: 'a.md' } }, embed_model: { dims: 3, embed_batch: embedBatch } } };
+	const app = { plugins: { enabledPlugins: new Set(['smart-connections']), plugins: { 'smart-connections': { manifest: { version: '4.7.2' } } } } };
+	const engine = { setVectors: async () => true, clearVectors() {} };
+	return new SmartConnectionsBridge(app, engine, { useSmartConnections: true });
+}
+
+test('embed resolves null within ~1.6 s when embed_batch never settles, warns once, caches nothing', async () => {
+	let calls = 0;
+	const warns = [];
+	const warn = console.warn;
+	console.warn = (m) => warns.push(m);
+	try {
+		const b = stubBridge(() => {
+			calls++;
+			return new Promise(() => {});
+		});
+		const t0 = performance.now();
+		assert.equal(await b.embed('hung query'), null);
+		const ms = performance.now() - t0;
+		assert.ok(ms >= 1400 && ms < 1700, `took ${ms} ms`);
+		assert.equal(await b.embed('hung query'), null);
+		assert.equal(calls, 2, 'a timeout is not cached');
+		assert.equal(warns.filter((w) => /timed out/.test(w)).length, 1);
+		assert.equal(b.available(), true, 'a slow model does not switch the bridge off');
+	} finally {
+		console.warn = warn;
+	}
+});
+
+test('embed shares one in-flight call per normalized query and caches the vector', async () => {
+	let calls = 0;
+	const b = stubBridge(async () => {
+		calls++;
+		await new Promise((r) => setTimeout(r, 20));
+		return [{ vec: new Float32Array([1, 0, 0]) }];
+	});
+	const [x, y] = await Promise.all([b.embed('Data  Pipelines'), b.embed(' data pipelines ')]);
+	assert.ok(x instanceof Float32Array);
+	assert.equal(x, y);
+	assert.equal(await b.embed('data pipelines'), x);
+	assert.equal(calls, 1);
+});

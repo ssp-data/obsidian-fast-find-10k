@@ -11,6 +11,8 @@ const SUPPORTED_MAJOR = 4;
 const POLL_TOTAL_MS = 60_000;
 const SYNC_INTERVAL_MS = 30_000;
 const EMBED_CACHE_MAX = 200;
+/** A query embedding slower than this (cold or stalled model) counts as none. */
+const EMBED_TIMEOUT_MS = 1500;
 /** Items read per slice while collecting vectors (each `vec` is a getter, ~20 µs). */
 const COLLECT_SLICE = 500;
 /** Items per slice of the fingerprint pass (plain data, ~4 µs each). */
@@ -119,6 +121,8 @@ export class SmartConnectionsBridge {
 	private polling = false;
 	private disposed = false;
 	private readonly embedCache = new Map<string, Float32Array>();
+	/** Embeddings in flight per normalized query, so auto tier, Ctrl+S and the guard embed once. */
+	private readonly embedPending = new Map<string, Promise<Float32Array | null>>();
 
 	constructor(app: App, engine: EngineClient, settings: FastFindSettings) {
 		this.app = app;
@@ -242,16 +246,31 @@ export class SmartConnectionsBridge {
 		return true;
 	}
 
-	/** Query embedding through Smart Connections' own model (memoized per normalized query). Null on any failure. */
-	async embed(query: string): Promise<Float32Array | null> {
+	/** Query embedding through Smart Connections' own model (memoized per normalized query; one call in
+	 * flight per query). Null on any failure or after 1.5 s (a timeout is neither cached nor a failure). */
+	embed(query: string): Promise<Float32Array | null> {
 		const key = query.trim().replace(/\s+/g, ' ').toLowerCase();
-		if (!key || !this.available()) return null;
-		const hit = this.embedCache.get(key);
-		if (hit) return hit;
+		if (!key || !this.available()) return Promise.resolve(null);
+		const hit = this.embedCache.get(key) ?? this.embedPending.get(key);
+		if (hit) return Promise.resolve(hit);
+		const p = this.embedNow(key, query.trim()).finally(() => this.embedPending.delete(key));
+		this.embedPending.set(key, p);
+		return p;
+	}
+
+	private async embedNow(key: string, input: string): Promise<Float32Array | null> {
+		let timer = 0;
 		try {
 			const model = sources()?.embed_model;
 			if (typeof model?.embed_batch !== 'function') throw new Error('no embed_batch');
-			const out = await model.embed_batch([{ embed_input: query.trim(), purpose: 'query' }]);
+			const timeout = new Promise<'timeout'>((r) => {
+				timer = window.setTimeout(() => r('timeout'), EMBED_TIMEOUT_MS);
+			});
+			const out = await Promise.race([model.embed_batch([{ embed_input: input, purpose: 'query' }]), timeout]);
+			if (out === 'timeout') {
+				this.warn('timeout', `query embedding timed out after ${EMBED_TIMEOUT_MS} ms (model still loading?)`);
+				return null;
+			}
 			const vec = Array.isArray(out) ? out[0]?.vec : undefined;
 			if (!(vec instanceof Float32Array) || vec.length === 0) throw new Error('no vec in the result');
 			if (this.embedCache.size >= EMBED_CACHE_MAX) this.embedCache.delete(this.embedCache.keys().next().value as string);
@@ -260,6 +279,8 @@ export class SmartConnectionsBridge {
 		} catch (e) {
 			this.fail('embed', `query embedding failed (${String(e)})`);
 			return null;
+		} finally {
+			window.clearTimeout(timer);
 		}
 	}
 

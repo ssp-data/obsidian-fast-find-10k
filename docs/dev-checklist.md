@@ -318,3 +318,14 @@ Test vault, 2026-10-26:
 | SC disabled (`app.plugins.disablePlugin`), ff10k reloaded | no ff10k warnings or errors; no semantic group; Ctrl+S → Notice `Smart Connections embeddings not available`; hint `Smart Connections off: title similarity only` shown |
 | SC re-enabled at runtime (`plugin:enable`) | SC itself is broken until an app reload (every `vec` getter throws `reading 'embedding_models'`); the bridge logs one `[ff10k] smart connections: reading vectors failed (…)` and stays off |
 | `o reload` | SC back (lazy loader), vectors back, `available true`, `hasVectors true` |
+
+Review fixes (task 20), 2026-10-26. The model was made to hang with
+`smart_env.smart_sources.embed_model.embed_batch = () => new Promise(() => {})`, then restored:
+
+| Check | Result |
+|---|---|
+| guard `keeping pipelines resilient` (normal model) | `RW How to Design Resilient … [0.71]`, `Restate [0.71]` |
+| guard `data pipeline` (normal model) | 3 title/alias rows, then `Overview data pipelines, … [0.78]`, `RW Data Science for Startups Data Pipelines [0.78]` |
+| hung model, guard `data orchestrators` | lexical rows at once (`Data Orchestrators [title]`, …); still 3 rows after 2 s |
+| hung model, guard `zqyy second hung` (no title match, `semantic` onDemand) | note created after 1,535 ms (the 1.5 s embed timeout); one `[ff10k] smart connections: query embedding timed out …`; note deleted |
+| `semantic` = never, guard `data pipeline` | title/alias rows only, `bridge.embed` called 0 times |

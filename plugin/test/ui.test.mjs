@@ -52,3 +52,46 @@ test('key specs split into modifiers and key', () => {
 	assert.equal(parseKeySpec(''), null);
 	assert.equal(parseKeySpec('Hyper+X'), null);
 });
+
+// --- create guard: semantic candidates and the lexical-first flow ---
+const { semanticGuard, runGuard } = await load('src/ui/modal.ts');
+
+const vecBridge = (embed) => ({ available: () => true, hasVectors: () => true, embed });
+const semEngine = { semantic: async () => [{ path: 'x.md', title: 'X', score: 0.812 }] };
+const settings = (semantic) => ({ useSmartConnections: true, semantic, minSimilarity: 0.7 });
+
+test('guard semantic rows carry the score; never embeds with semantic = never', async () => {
+	let embeds = 0;
+	const bridge = vecBridge(async () => (embeds++, new Float32Array([1])));
+	assert.deepEqual(await semanticGuard('n', { settings: settings('auto'), bridge, engine: semEngine }), [{ path: 'x.md', title: 'X', note: '0.81' }]);
+	assert.equal(embeds, 1);
+	assert.deepEqual(await semanticGuard('n', { settings: settings('never'), bridge, engine: semEngine }), []);
+	assert.equal(embeds, 1, 'embed not called with never');
+});
+
+test('guard shows lexical candidates at once while the embedding hangs, and appends semantic ones later', async () => {
+	const shown = [];
+	const ui = { current: () => true, show: (items) => shown.push(['show', items.map((i) => i.path)]), update: (items) => shown.push(['update', items.map((i) => i.path)]), create: () => shown.push(['create']) };
+	await runGuard([{ path: 'a.md', title: 'A', note: 'title' }], new Promise(() => {}), ui);
+	assert.deepEqual(shown, [['show', ['a.md']]]);
+
+	shown.length = 0;
+	let resolve;
+	await runGuard([{ path: 'a.md', title: 'A', note: 'title' }], new Promise((r) => (resolve = r)), ui);
+	resolve([{ path: 'a.md', title: 'A', note: '0.90' }, { path: 'b.md', title: 'B', note: '0.75' }]);
+	await new Promise((r) => setTimeout(r, 0));
+	assert.deepEqual(shown, [['show', ['a.md']], ['update', ['a.md', 'b.md']]]);
+});
+
+test('guard creates when there are no candidates (a timed-out embedding yields none)', async () => {
+	const shown = [];
+	const ui = { current: () => true, show: () => shown.push('show'), update: () => shown.push('update'), create: () => shown.push('create') };
+	await runGuard([], Promise.resolve([]), ui);
+	assert.deepEqual(shown, ['create']);
+	shown.length = 0;
+	await runGuard([], Promise.resolve([{ path: 'b.md', title: 'B', note: '0.75' }]), ui);
+	assert.deepEqual(shown, ['show']);
+	shown.length = 0;
+	await runGuard([], Promise.resolve([]), { ...ui, current: () => false });
+	assert.deepEqual(shown, [], 'superseded: nothing happens');
+});

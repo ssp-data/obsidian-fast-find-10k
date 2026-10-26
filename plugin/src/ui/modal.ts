@@ -4,7 +4,9 @@ import { type App, Modal, type Modifier, Notice, Platform, Scope } from 'obsidia
 import { createGhostNote, createNote, ghostNotePath, insertLink, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
 import type { Hit, Mode, SearchResponse, SemanticHit } from '../protocol';
-import type { Keymap } from '../settings';
+import type { EngineClient } from '../engine-client';
+import type { FastFindSettings, Keymap } from '../settings';
+import type { SmartConnectionsBridge } from '../smart-connections-bridge';
 import { Preview, queryTerms } from './preview';
 import { renderRow, renderTierLabel } from './results';
 import { type PanelItem, SimilarPanel } from './similar';
@@ -58,6 +60,55 @@ function semanticHit(h: SemanticHit): Hit {
 		ghostRefs: 0,
 		similarCount: 0,
 	};
+}
+
+/** What the create guard needs to look up semantic neighbours of a note name. */
+export interface GuardDeps {
+	settings: Pick<FastFindSettings, 'useSmartConnections' | 'semantic' | 'minSimilarity'>;
+	bridge: Pick<SmartConnectionsBridge, 'available' | 'hasVectors' | 'embed'> | null;
+	engine: Pick<EngineClient, 'semantic'> | null;
+}
+
+/** Up to 3 semantic neighbours of `name` labelled with their score; empty with semantics off
+ * (`never` or no Smart Connections) or on any failure. The bridge bounds the embedding to 1.5 s. */
+export async function semanticGuard(name: string, { settings, bridge, engine }: GuardDeps): Promise<PanelItem[]> {
+	if (settings.semantic === 'never' || !settings.useSmartConnections) return [];
+	if (!bridge?.available() || !bridge.hasVectors() || !engine) return [];
+	const vec = await bridge.embed(name);
+	if (!vec) return [];
+	try {
+		const hits = await engine.semantic(vec, GUARD_SEMANTIC, settings.minSimilarity);
+		return hits.map((h) => ({ path: h.path, title: h.title, note: h.score.toFixed(2) }));
+	} catch {
+		return [];
+	}
+}
+
+/** Create-guard flow: lexical candidates show at once and semantic ones are appended when they
+ * arrive; without lexical ones it waits for the (time-bounded) semantic lookup, then shows or
+ * creates. `current()` false (the user moved on) drops every step. */
+export async function runGuard(
+	lexical: PanelItem[],
+	semantic: Promise<PanelItem[]>,
+	ui: { current(): boolean; show(items: PanelItem[]): void; update(items: PanelItem[]): void; create(): unknown },
+): Promise<void> {
+	const merge = (sem: PanelItem[]) => {
+		const seen = new Set(lexical.map((i) => i.path));
+		return [...lexical, ...sem.filter((i) => !seen.has(i.path))];
+	};
+	if (lexical.length > 0) {
+		if (!ui.current()) return;
+		ui.show(lexical);
+		void semantic.then((sem) => {
+			const all = merge(sem);
+			if (all.length > lexical.length && ui.current()) ui.update(all);
+		});
+		return;
+	}
+	const sem = await semantic;
+	if (!ui.current()) return;
+	if (sem.length > 0) ui.show(sem);
+	else await ui.create();
 }
 
 interface State {
@@ -471,49 +522,42 @@ export class FastFindModal extends Modal {
 		}
 		this.leaveSimilar();
 		const seq = ++this.createSeq;
-		const candidates = this.plugin.settings.createGuard ? await this.guardCandidates(name) : [];
-		if (candidates === null || this.closed || seq !== this.createSeq || this.inputEl.value !== query) return;
-		if (candidates.length === 0) return this.create(name, ghost, where);
-		cancelAnimationFrame(this.paintFrame);
-		this.guard = { name, ghost };
-		this.modalEl.removeClass('ff10k-preview-hidden');
-		this.similar.showGuard(candidates);
-		this.enterSimilar(this.plugin.settings.keymap, true);
+		if (!this.plugin.settings.createGuard) return this.create(name, ghost, where);
+		const semantic = semanticGuard(name, this.plugin); // in parallel with the lexical lookup
+		const lexical = await this.lexicalGuard(name);
+		// still the same create request, the modal open, the query unchanged, no guard from elsewhere
+		const current = () => !this.closed && seq === this.createSeq && this.inputEl.value === query;
+		if (lexical === null || !current()) return;
+		await runGuard(lexical, semantic, {
+			current: () => current() && (this.guard === null || this.guard.name === name),
+			show: (items) => {
+				cancelAnimationFrame(this.paintFrame);
+				this.guard = { name, ghost };
+				this.modalEl.removeClass('ff10k-preview-hidden');
+				this.similar.showGuard(items);
+				this.enterSimilar(this.plugin.settings.keymap, true);
+			},
+			// only while that guard is still up (Esc or typing ends it)
+			update: (items) => {
+				if (this.guard?.name === name) this.similar.showGuard(items, true);
+			},
+			create: () => this.create(name, ghost, where),
+		});
 	}
 
-	/** Existing notes whose title/alias matches `name` (tier 1, no ghosts), then semantic
-	 * neighbours of the name's embedding (when available) labelled with their score.
-	 * Null when a newer search superseded the lookup (the user kept typing): then nothing is created. */
-	private async guardCandidates(name: string): Promise<PanelItem[] | null> {
+	/** Existing notes whose title/alias matches `name` (tier 1, no ghosts). Null when a newer
+	 * search superseded the lookup (the user kept typing): then nothing is created. */
+	private async lexicalGuard(name: string): Promise<PanelItem[] | null> {
 		const engine = this.plugin.engine;
 		if (!engine) return [];
-		const semantic = this.guardSemantic(name);
-		let lexical: PanelItem[];
 		try {
 			const res = await engine.search(name, 'filesOnly', GUARD_SEARCH, false);
-			lexical = res.hits
+			return res.hits
 				.filter((h) => h.tier === 1 && !h.isGhost)
 				.slice(0, GUARD_ROWS)
 				.map((h) => ({ path: h.path, title: h.title, note: h.badge.toLowerCase() }));
 		} catch (e) {
-			if (e === 'stale') return null;
-			lexical = [];
-		}
-		const seen = new Set(lexical.map((i) => i.path));
-		return [...lexical, ...(await semantic).filter((i) => !seen.has(i.path))];
-	}
-
-	/** Up to 3 semantic neighbours of `name`; empty without Smart Connections or on any failure. */
-	private async guardSemantic(name: string): Promise<PanelItem[]> {
-		const { settings, bridge, engine } = this.plugin;
-		if (!settings.useSmartConnections || !bridge?.available() || !bridge.hasVectors() || !engine) return [];
-		const vec = await bridge.embed(name);
-		if (!vec) return [];
-		try {
-			const hits = await engine.semantic(vec, GUARD_SEMANTIC, settings.minSimilarity);
-			return hits.map((h) => ({ path: h.path, title: h.title, note: h.score.toFixed(2) }));
-		} catch {
-			return [];
+			return e === 'stale' ? null : [];
 		}
 	}
 
