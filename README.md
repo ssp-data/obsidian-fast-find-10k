@@ -3,6 +3,8 @@
 A fast note finder for large vaults (10k+ notes). A Rust search engine compiled to WebAssembly runs in a worker and powers instant fuzzy, field-weighted, frecency-ranked search with optional semantic "similar notes".
 
 Spec: [docs/superpowers/specs/2026-10-26-fast-find-10k-design.md](docs/superpowers/specs/2026-10-26-fast-find-10k-design.md)
+This is how it looks:
+![image](docs/images/find-fast-preview.webp)
 
 ## Development
 
