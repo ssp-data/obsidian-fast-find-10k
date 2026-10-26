@@ -2,7 +2,9 @@
 
 mod smart_env;
 
+use std::alloc::{GlobalAlloc, Layout, System};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
@@ -101,6 +103,33 @@ fn attach_vectors(engine: &mut Engine, vault: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Global allocator wrapper counting live heap bytes, for `ff10k profile`.
+struct Counting;
+
+static LIVE_BYTES: AtomicUsize = AtomicUsize::new(0);
+
+unsafe impl GlobalAlloc for Counting {
+    unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+        LIVE_BYTES.fetch_add(l.size(), Relaxed);
+        System.alloc(l)
+    }
+    unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+        LIVE_BYTES.fetch_sub(l.size(), Relaxed);
+        System.dealloc(p, l)
+    }
+    unsafe fn realloc(&self, p: *mut u8, l: Layout, new: usize) -> *mut u8 {
+        LIVE_BYTES.fetch_add(new.wrapping_sub(l.size()), Relaxed);
+        System.realloc(p, l, new)
+    }
+}
+
+#[global_allocator]
+static ALLOC: Counting = Counting;
+
+fn live_mb() -> f64 {
+    LIVE_BYTES.load(Relaxed) as f64 / (1024.0 * 1024.0)
+}
+
 fn rss_kb() -> Option<u64> {
     let s = std::fs::read_to_string("/proc/self/status").ok()?;
     s.lines().find(|l| l.starts_with("VmRSS:"))?.split_whitespace().nth(1)?.parse().ok()
@@ -197,6 +226,7 @@ fn main() -> Result<()> {
         }
         Cmd::Profile { vault } => {
             let ex = exclusion(&vault)?;
+            let heap_before = live_mb();
             let t = Instant::now();
             let notes = read_vault_with(&vault, &*ex).with_context(|| format!("reading {}", vault.display()))?;
             let read = t.elapsed();
@@ -227,6 +257,8 @@ fn main() -> Result<()> {
             println!("  other          {:>9.1} ms", ms(upsert.saturating_sub(prof.extract + prof.unindex + prof.derive + prof.insert + prof.keys)));
             println!("ghosts (CLI)     {:>9.1} ms", ms(ghost));
             println!("first search     {:>9.1} ms", ms(first));
+            drop(notes);
+            println!("engine heap      {:>9.1} MB (live bytes allocated by the engine)", live_mb() - heap_before);
             if let Some(kb) = rss_kb() {
                 println!("rss: {:.1} MB", kb as f64 / 1024.0);
             }
