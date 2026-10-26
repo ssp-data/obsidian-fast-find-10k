@@ -902,4 +902,52 @@ mod tests {
         });
         eprintln!("similar_count x10 with vectors: {us30} us");
     }
+
+    fn optional_corpus() -> Engine {
+        let mut e = Engine::new();
+        for path in ["Should I Change My Writing because of AI.md", "Change Should Happen.md", "Should I Change.md", "Should Change.md"] {
+            e.upsert(path, 0.0, "");
+        }
+        e
+    }
+
+    #[test]
+    fn optional_term_not_required() {
+        let r = optional_corpus().search("should i change", &opts());
+        assert_eq!(hit(&r, "Should I Change My Writing because of AI").unwrap().tier, 1);
+        assert_eq!(hit(&r, "Change Should Happen").unwrap().tier, 1);
+        // Without `i` on the list it is required again: the note lacking it drops out of tier 1.
+        let mut e = optional_corpus();
+        e.set_config(Config { optional_terms: Vec::new(), ..Config::default() });
+        let r = e.search("should i change", &opts());
+        assert!(hit(&r, "Change Should Happen").is_none_or(|h| h.tier > 1));
+    }
+
+    #[test]
+    fn optional_term_still_scores() {
+        let r = optional_corpus().search("should i change", &SearchOptions { debug: true, ..opts() });
+        let (with, without) = (hit(&r, "Should I Change").unwrap(), hit(&r, "Should Change").unwrap());
+        assert!(with.score > without.score, "{} vs {}", with.score, without.score);
+        let terms = |h: &Hit| h.debug.as_ref().unwrap().per_term.iter().map(|t| t.0.clone()).collect::<Vec<_>>();
+        assert_eq!(terms(with), ["should", "i", "change"]);
+        assert_eq!(terms(without), ["should", "change"]);
+    }
+
+    #[test]
+    fn optional_only_query_behaves_as_today() {
+        let mut e = corpus();
+        let with = titles(&e.search("in", &opts())).iter().map(|t| t.to_string()).collect::<Vec<_>>();
+        e.set_config(Config { optional_terms: Vec::new(), ..Config::default() });
+        let without = titles(&e.search("in", &opts())).iter().map(|t| t.to_string()).collect::<Vec<_>>();
+        assert!(!with.is_empty());
+        assert_eq!(with, without);
+    }
+
+    #[test]
+    fn config_without_optional_terms_uses_the_defaults() {
+        let c: Config = serde_json::from_str(r#"{"weights":{"title":100,"alias":90,"h1":60,"h2":50,"h3":40,"tag":30,"link":20,"path":15,"body":10},"fuzzy":{"enabled":true,"loose":false},"partial":"whenFew","downrankedFolders":[],"downrankFactor":0.3,"fewThreshold":5}"#).unwrap();
+        assert_eq!(c.optional_terms, ["a", "an", "the", "of", "to", "in", "on", "i"]);
+        let c: Config = serde_json::from_str(&serde_json::to_string(&Config { optional_terms: vec!["I".into()], ..Config::default() }).unwrap()).unwrap();
+        assert_eq!(c.optional_terms, ["I"]);
+    }
 }

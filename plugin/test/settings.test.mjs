@@ -58,6 +58,19 @@ test('engine config: fuzzy, partial, folders, factor, threshold, weights', () =>
 	assert.equal(settingsToEngineConfig({ ...base, partial: 'never' }).partial, 'never');
 });
 
+test('optional words: default list, saved list wins, sent to the engine as a copy', () => {
+	assert.deepEqual(DEFAULT_SETTINGS.optionalTerms, ['a', 'an', 'the', 'of', 'to', 'in', 'on', 'i']);
+	const s = mergeSettings({ optionalTerms: ['the', 'I'] });
+	assert.deepEqual(s.optionalTerms, ['the', 'I']);
+	assert.deepEqual(mergeSettings({ optionalTerms: 'the' }).optionalTerms, DEFAULT_SETTINGS.optionalTerms);
+	const c = settingsToEngineConfig(s);
+	assert.deepEqual(c.optionalTerms, ['the', 'I']);
+	c.optionalTerms.push('x');
+	assert.deepEqual(s.optionalTerms, ['the', 'I']);
+	mergeSettings(null).optionalTerms.push('y');
+	assert.equal(DEFAULT_SETTINGS.optionalTerms.length, 8);
+});
+
 test('key specs split into modifiers and key', () => {
 	assert.deepEqual(parseKeySpec('Enter'), { modifiers: [], key: 'Enter' });
 	assert.deepEqual(parseKeySpec('Mod+Alt+Enter'), { modifiers: ['Mod', 'Alt'], key: 'Enter' });

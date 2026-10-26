@@ -152,7 +152,7 @@ Unresolved links are not cached; they come from `app.metadataCache.unresolvedLin
 
 ### 6.1 Query syntax
 
-- Whitespace-separated terms, all must match (AND), order-free.
+- Whitespace-separated terms, all must match (AND), order-free, except **optional terms**: a term whose normalized form is on the "Optional words" list (default `a an the of to in on i`) is never required. Tiers 1–3 and the partial tier are computed over the required terms only; where an optional term does hit, it adds its field weight × quality to the score (and shows in the debug `per_term`). A query of only optional terms treats them all as required.
 - `"exact phrase"` → terms must be adjacent in one field.
 - `-term` → exclude notes where term matches anywhere.
 - `#tag` → filter to notes with that tag (nested tags match parents).
@@ -291,6 +291,7 @@ Modal prefill: current editor selection if any, else empty (not the last query; 
 - Field weights (title, alias, h1, h2, h3, tag, link, path, body) as sliders with "reset to defaults".
 - Fuzzy typo tolerance: off / normal (default) / loose.
 - Show partial-match tier: only when few results (default) / always / never.
+- Optional words (never required), one per line; default `a an the of to in on i`. Applied live.
 - Semantic tier: auto when few results (default) / on demand only / never.
 - Use Smart Connections embeddings (on/off), minimum similarity shown (default 0.70).
 - Create guard on/off.
@@ -365,6 +366,7 @@ Rulings made during implementation (controller):
 - Smart case (§6.2) is deferred: fuzzy matching runs the normalized query against normalized field strings, so case bonuses are inert in v1.
 - Fuzzy hits are rejected when the matched span exceeds `needle_chars + 2×max_typos + 1` characters or the score ratio is below 0.65 (0.5 until task 23), so scattered subsequences (`airflow` → "AI rules for low budgets") never enter tier 1.
 - Fuzzy hits also need at least `needle_chars − max_typos` matched needle characters (distinct frizbee match indices) (task 23, owner feedback). frizbee's `max_typos` counts only missing needle chars, so substitutions were free: `writing` hit "Airbyte Checkpointing" (via "ointing") and "Don't use AI for everything…", `should` hit "Social Media Prescheduled Long Format". Final ratio floor 0.65 (no golden needed tuning in 0.6–0.7); transpositions such as `troubelshoot` → "Obsidian Troubleshooting" still match.
+- Optional terms (§6.1, task 23, owner feedback): `should i change` must find "Change Should Happen" at tier 1 although it has no `i`. Default list `a an the of to in on i` (stopwords and single letters; `ai`, `de`, `my` are not on it); the owner can edit it. The short-term prefix rule is unchanged (it still counts every query word). Optional units never create candidates, so `should i change` on the test vault scores 478 candidates instead of 1,533.
 - The short-term rule applies per compound part (`gen-ai` keeps `ai` exact-only in single-term queries).
 - `data engineer ai` ranks "AI for Data Engineers" first because `engineer`→`engineers` (8/9) outscores `engineer`→`engineering` (8/11); the §6.3 example assumed equal quality.
 - Structural (§6.4): the shorter-title bonus is replaced by an unmatched-title-word factor on the fields sum, `max(0.5, 1 − 0.15 × unmatched)` (step 0.15, floor 0.5), applied to tiers 1–3 with a matched alias standing in for the title, so `obsidian trouble` ranks "Obsidian Troubleshoot" above "Obsidian Trouble Tags Plugin".

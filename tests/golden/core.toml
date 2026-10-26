@@ -111,6 +111,8 @@ expect_top = "Fundamentals of Data Engineering (Joe Reis, Matt Housley)"
 query = "ai writing"
 must_not_appear = ["Airbyte Checkpointing"]
 
+# `i` is an optional term (default list `a an the of to in on i`): never required, scored when it hits.
 [[case]]
 query = "should i change"
+expect_top = "Should I Change My Writing because of AI"
 must_not_appear = ["Social Media Prescheduled Long Format"]

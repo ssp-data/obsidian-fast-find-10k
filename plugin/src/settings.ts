@@ -56,6 +56,8 @@ export interface FastFindSettings {
 	fuzzy: FuzzySetting;
 	partial: PartialMode;
 	fewThreshold: number;
+	/** Query words that are never required (stopwords, single letters), only scored. */
+	optionalTerms: string[];
 	semantic: SemanticSetting;
 	useSmartConnections: boolean;
 	minSimilarity: number;
@@ -88,6 +90,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	fuzzy: 'normal',
 	partial: 'whenFew',
 	fewThreshold: 5,
+	optionalTerms: ['a', 'an', 'the', 'of', 'to', 'in', 'on', 'i'],
 	semantic: 'auto',
 	useSmartConnections: true,
 	minSimilarity: 0.7,
@@ -122,6 +125,7 @@ export function mergeSettings(saved: unknown): FastFindSettings {
 	s.keymap = pick(DEFAULT_KEYMAP, src.keymap);
 	s.ignoredGlobs = [...s.ignoredGlobs];
 	s.downrankedFolders = [...s.downrankedFolders];
+	s.optionalTerms = [...s.optionalTerms];
 	return s;
 }
 
@@ -133,5 +137,6 @@ export function settingsToEngineConfig(s: FastFindSettings): EngineConfig {
 		downrankedFolders: [...s.downrankedFolders],
 		downrankFactor: s.downrankFactor,
 		fewThreshold: s.fewThreshold,
+		optionalTerms: [...s.optionalTerms],
 	};
 }

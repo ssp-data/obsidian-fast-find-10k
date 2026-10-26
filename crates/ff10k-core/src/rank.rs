@@ -4,8 +4,10 @@
 //! unit's best field class (Title/Alias → 1, H1–H3 → 2, anything else → 3); docs missing a unit
 //! but hitting another in Title/Alias are partial (tier 4). Within a tier the score is
 //! `(Σ fields × title factor + proximity + structural + frecency + combo) × penalty`; the title
-//! factor shrinks with each title word the query left unmatched (tiers 1–3). Hit details (badge,
-//! heading, excerpt, line) are computed only for the returned page.
+//! factor shrinks with each title word the query left unmatched (tiers 1–3). A term on
+//! `Config::optional_terms` is optional: it never makes or breaks a candidate or its tier, but
+//! adds to the score where it hits (a query of only optional terms treats them all as required).
+//! Hit details (badge, heading, excerpt, line) are computed only for the returned page.
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -67,6 +69,14 @@ pub struct Config {
     pub downranked_folders: Vec<String>,
     pub downrank_factor: f32,
     pub few_threshold: usize,
+    /// Query terms (compared normalized) that are never required, only scored when they hit.
+    #[serde(default = "default_optional_terms")]
+    pub optional_terms: Vec<String>,
+}
+
+/// Stopwords and single letters: `a an the of to in on i`.
+pub fn default_optional_terms() -> Vec<String> {
+    ["a", "an", "the", "of", "to", "in", "on", "i"].map(String::from).to_vec()
 }
 
 impl Default for Config {
@@ -78,6 +88,7 @@ impl Default for Config {
             downranked_folders: Vec::new(),
             downrank_factor: 0.3,
             few_threshold: 5,
+            optional_terms: default_optional_terms(),
         }
     }
 }
@@ -218,6 +229,8 @@ struct Unit {
     words: Vec<(String, bool)>,
     /// Sorted by (doc, field), at most one per (doc, field).
     hits: Vec<TermHit>,
+    /// Never required (candidates and tiers come from the other units); only scored.
+    optional: bool,
 }
 
 /// Per unit, the range of its `hits` belonging to one doc (None: the unit misses the doc).
@@ -342,12 +355,20 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
     let body_kept = !files_only && cfg.weights.body > 0.0;
     let body_later = body_kept && query.terms.len() + query.phrases.len() > 1;
     let scope = if body_kept && !body_later { Scope::All } else { Scope::NoBody };
+    let optional: Vec<bool> = {
+        let list: HashSet<String> = cfg.optional_terms.iter().map(|w| normalize(w.trim())).collect();
+        let marked: Vec<bool> = query.terms.iter().map(|t| list.contains(&t.norm)).collect();
+        // A query of only optional terms keeps them all required (behaves as without the list).
+        let all = query.phrases.is_empty() && marked.iter().all(|&m| m);
+        marked.into_iter().map(|m| m && !all).collect()
+    };
     let mut units = Vec::new();
-    for t in &query.terms {
+    for (t, &optional) in query.terms.iter().zip(&optional) {
         units.push(Unit {
             label: t.norm.clone(),
             words: t.parts.iter().map(|p| (p.clone(), prefix_ok(p, multi))).collect(),
             hits: match_term_scoped(index, t, multi, cfg.fuzzy, scope).into_iter().filter(keep).collect(),
+            optional,
         });
     }
     for p in &query.phrases {
@@ -355,6 +376,7 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
             label: p.join(" "),
             words: p.iter().map(|w| (w.clone(), prefix_ok(w, multi))).collect(),
             hits: phrase_hits(index, p, multi).into_iter().filter(keep).collect(),
+            optional: false,
         });
     }
     if body_later {
@@ -371,13 +393,13 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
 }
 
 /// Docs that can get a tier once Body hits are added (term units still without them, phrase
-/// units complete): every unit hits the doc somewhere (counting any Body token of a term), or
-/// some unit hits its Title/Alias (partial tier). Body hits of other docs cannot change any
-/// result, so they are never built.
+/// units complete): every required unit hits the doc somewhere (counting any Body token of a
+/// term), or some required unit hits its Title/Alias (partial tier). Body hits of other docs
+/// cannot change any result, so they are never built.
 fn tierable(index: &Index, query: &Query, units: &[Unit], multi: bool) -> DocSet {
     let mut titled = DocSet::default();
     let mut all: Option<DocSet> = None;
-    for (i, u) in units.iter().enumerate() {
+    for (i, u) in units.iter().enumerate().filter(|(_, u)| !u.optional) {
         let mut docs = query.terms.get(i).map_or_else(DocSet::default, |t| body_docs(index, t, multi));
         for h in &u.hits {
             docs.insert(h.doc);
@@ -398,6 +420,8 @@ fn tierable(index: &Index, query: &Query, units: &[Unit], multi: bool) -> DocSet
     allowed
 }
 
+/// Docs hit by a required unit, with every unit's hit range per doc (optional units only fill
+/// in docs a required unit brought in).
 fn candidates(index: &Index, units: &[Unit]) -> HashMap<DocId, Slots> {
     let n = units.len();
     let mut cands: HashMap<DocId, Slots> = HashMap::new();
@@ -405,12 +429,18 @@ fn candidates(index: &Index, units: &[Unit]) -> HashMap<DocId, Slots> {
         // Filter-only query: every doc is a candidate.
         cands.extend(index.ids().map(|id| (id, Slots::new())));
     }
-    for (ui, u) in units.iter().enumerate() {
+    let (required, optional): (Vec<_>, Vec<_>) = units.iter().enumerate().partition(|(_, u)| !u.optional);
+    for (ui, u) in required.into_iter().chain(optional) {
         let mut s = 0;
         while s < u.hits.len() {
             let doc = u.hits[s].doc;
             let e = s + u.hits[s..].iter().take_while(|h| h.doc == doc).count();
-            cands.entry(doc).or_insert_with(|| smallvec![None; n])[ui] = Some((s as u32, e as u32));
+            let slot = Some((s as u32, e as u32));
+            if !u.optional {
+                cands.entry(doc).or_insert_with(|| smallvec![None; n])[ui] = slot;
+            } else if let Some(slots) = cands.get_mut(&doc) {
+                slots[ui] = slot;
+            }
             s = e;
         }
     }
@@ -441,13 +471,20 @@ fn unit_hits(u: &Unit, slot: Option<(u32, u32)>) -> &[TermHit] {
     slot.map_or(&[], |(s, e)| &u.hits[s as usize..e as usize])
 }
 
+/// The required units with their slots.
+fn required<'u>(units: &'u [Unit], slots: &'u Slots) -> impl Iterator<Item = (&'u Unit, Option<(u32, u32)>)> + Clone {
+    units.iter().zip(slots.iter().copied()).filter(|(u, _)| !u.optional)
+}
+
+/// Tier from the required units only: 1–3 when each hits the doc, 4 when one hits its Title/Alias.
 fn tier_of(units: &[Unit], slots: &Slots) -> Option<u8> {
-    if slots.iter().all(Option::is_some) {
+    let req = required(units, slots);
+    if req.clone().all(|(_, s)| s.is_some()) {
         // Hits are sorted by field, so the first is the unit's lowest class.
-        let worst = units.iter().zip(slots).map(|(u, &s)| class(unit_hits(u, s)[0].field)).max();
+        let worst = req.map(|(u, s)| class(unit_hits(u, s)[0].field)).max();
         return Some(worst.unwrap_or(1));
     }
-    let partial = units.iter().zip(slots).any(|(u, &s)| unit_hits(u, s).iter().any(|h| class(h.field) == 1));
+    let partial = req.clone().any(|(u, s)| unit_hits(u, s).iter().any(|h| class(h.field) == 1));
     partial.then_some(4)
 }
 
@@ -482,14 +519,16 @@ fn within_window(lists: &[&[u32]], w: u32) -> bool {
     }
 }
 
+/// Over the units that hit the doc (in tiers 1–3 every required one; optional ones that miss
+/// are left out).
 fn proximity(units: &[Unit], slots: &Slots) -> f32 {
-    if units.len() < 2 {
+    let hit: Vec<(&Unit, Option<(u32, u32)>)> = units.iter().zip(slots.iter().copied()).filter(|(_, s)| s.is_some()).collect();
+    if hit.len() < 2 {
         return 0.0;
     }
-    let body: Option<Vec<&[u32]>> = units
+    let body: Option<Vec<&[u32]>> = hit
         .iter()
-        .zip(slots)
-        .map(|(u, &s)| {
+        .map(|&(u, s)| {
             unit_hits(u, s)
                 .iter()
                 .find(|h| h.field == Field::Body && !h.positions.is_empty())
@@ -499,10 +538,9 @@ fn proximity(units: &[Unit], slots: &Slots) -> f32 {
     if body.is_some_and(|lists| within_window(&lists, PROXIMITY_WINDOW)) {
         return NEAR_BONUS;
     }
-    let sections: Vec<SmallVec<[u16; 3]>> = units
+    let sections: Vec<SmallVec<[u16; 3]>> = hit
         .iter()
-        .zip(slots)
-        .map(|(u, &s)| {
+        .map(|&(u, s)| {
             unit_hits(u, s).iter().filter(|h| is_heading(h.field)).filter_map(|h| h.heading_idx).collect()
         })
         .collect();
@@ -713,7 +751,7 @@ fn ghost_scored<'a>(
     let mut cands = candidates(&gs.index, units);
     apply_filters(&gs.index, query, &mut cands);
     let mut matched: Vec<(DocId, Slots)> =
-        cands.into_iter().filter(|(_, slots)| slots.iter().all(Option::is_some)).collect();
+        cands.into_iter().filter(|(_, slots)| required(units, slots).all(|(_, s)| s.is_some())).collect();
     if matched.is_empty() {
         return Vec::new();
     }
@@ -778,13 +816,12 @@ fn recent(index: &Index, opts: &SearchOptions, extras: &Extras) -> Ranked {
 
 /// Badge: the field that set the tier (the weakest of the units' best fields); for partial hits,
 /// the best Title/Alias field.
+/// Optional units do not set the badge.
 fn badge(s: &Scored, units: &[Unit]) -> Field {
-    let firsts = units.iter().zip(&s.slots).filter_map(|(u, &sl)| unit_hits(u, sl).first().map(|h| h.field));
+    let firsts = required(units, &s.slots).filter_map(|(u, sl)| unit_hits(u, sl).first().map(|h| h.field));
     if s.tier == 4 {
-        let title_alias = units
-            .iter()
-            .zip(&s.slots)
-            .flat_map(|(u, &sl)| unit_hits(u, sl))
+        let title_alias = required(units, &s.slots)
+            .flat_map(|(u, sl)| unit_hits(u, sl))
             .map(|h| h.field)
             .filter(|f| class(*f) == 1);
         return title_alias.min_by_key(|f| *f as u8).unwrap_or(Field::Title);

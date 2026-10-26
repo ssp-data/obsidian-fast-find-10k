@@ -25,6 +25,8 @@ export interface EngineConfig {
 	downrankedFolders: string[];
 	downrankFactor: number;
 	fewThreshold: number;
+	/** Query words never required, only scored when they hit (compared normalized). */
+	optionalTerms: string[];
 }
 
 export interface SearchOptions {

@@ -133,6 +133,15 @@ export class FastFindSettingTab extends PluginSettingTab {
 						this.saveRanking();
 					}),
 			);
+		new Setting(el)
+			.setName('Optional words (never required)')
+			.setDesc('One per line. A query word on this list need not match; where it does, it still adds to the score. Default: a an the of to in on i.')
+			.addTextArea((t) =>
+				t.setValue(this.s.optionalTerms.join('\n')).onChange((v) => {
+					this.s.optionalTerms = lines(v);
+					this.saveRanking();
+				}),
+			);
 	}
 
 	private semantic(el: HTMLElement): void {

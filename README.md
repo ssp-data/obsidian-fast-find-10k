@@ -61,7 +61,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 ## Settings
 
 - **Indexing**: ignored folders/globs (never indexed; Obsidian "Excluded files" are always honoured), downranked folders (still searchable, score × 0.3), rebuild index.
-- **Ranking**: field weights (title 100, alias 90, h1 60, h2 50, h3 40, tag 30, link 20, path 15, body 10; a weight of 0 turns the field off), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never).
+- **Ranking**: field weights (title 100, alias 90, h1 60, h2 50, h3 40, tag 30, link 20, path 15, body 10; a weight of 0 turns the field off), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never), optional words that a query never requires (default `a an the of to in on i`; they still add to the score where they match).
 - **Semantic**: use Smart Connections embeddings, minimum similarity shown, semantic tier (auto / on demand / never).
 - **Behaviour**: create guard, preview open by default.
 - **Keys**: every modal binding.
@@ -69,7 +69,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 
 ## How ranking works
 
-Each query word (and each quoted phrase) must match. A note's **tier** comes from the weakest field its words matched, and a lower tier never ranks above a higher one:
+Each query word (and each quoted phrase) must match, except optional words (`a an the of to in on i` by default), which only add to the score. A note's **tier** comes from the weakest field its words matched, and a lower tier never ranks above a higher one:
 
 1. **title · alias**: every word in the title or an alias (unresolved link targets, "ghosts", also appear here and can be created with Shift+Enter)
 2. **headings**: every word in a title, alias or H1–H3
