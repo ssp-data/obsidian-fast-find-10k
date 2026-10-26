@@ -30,6 +30,10 @@ criterion = "0.5"
 name = "golden"
 required-features = ["golden"]
 
+[[test]]
+name = "typo_recall"
+required-features = ["golden"]
+
 [[bench]]
 name = "engine"
 harness = false

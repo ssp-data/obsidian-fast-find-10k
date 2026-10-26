@@ -1,7 +1,8 @@
 # Golden queries against fixtures/vault (spec §12).
 # A name matches a hit when it equals the hit's title or the hit's path ends with it.
 # expect_in_top = within the first 5 hits; expect_similar_count = exact, hit anywhere in the page;
-# must_not_appear = not anywhere in the returned page.
+# must_not_appear = not anywhere in the returned page; expect_in_top3 = within the first 3 hits;
+# expect_tier = the tier every hit named in expect_top / expect_in_top / expect_in_top3 must have.
 
 [[case]]
 query = "obsidian trouble"
@@ -118,3 +119,17 @@ must_not_appear = ["Airbyte Checkpointing", "Don't use AI for everything, you st
 query = "should i change"
 expect_in_top = ["Should I Change My Writing because of AI", "Change Should Happen"]
 must_not_appear = ["Social Media Prescheduled Long Format"]
+
+# Fuzzy title match must not depend on later title words: frizbee's best alignment of `obsidain`
+# borrows the `i`/`n` of "troubleshooting" (0 typos, span too wide) and was rejected, dropping the
+# title to tier 4; the retry over per-token windows finds the local 1-typo alignment (final review).
+[[case]]
+query = "obsidain troubleshooting"
+expect_top = "Obsidian Troubleshooting"
+expect_tier = 1
+
+# The fixture title has a no-break space after "Obsidian".
+[[case]]
+query = "obsidina search"
+expect_in_top3 = ["Obsidian\u00A0Search (lots of files)"]
+expect_tier = 1

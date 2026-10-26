@@ -279,6 +279,82 @@ fn byte_ranges(s: &str, indices: &[u32]) -> (SmallVec<[(u32, u32); 4]>, usize) {
     (merge(r), chars)
 }
 
+/// Acceptance rules for one fuzzy alignment (see `match_term`).
+struct FuzzyRules {
+    self_score: f32,
+    typos: usize,
+    needle_chars: usize,
+    max_span: usize,
+}
+
+impl FuzzyRules {
+    /// `score / self_score` and the char ranges of an alignment that passes; `None` for a
+    /// scattered subsequence or a substitution-heavy alignment: a weak score, too few needle
+    /// chars matched, or a match spread too wide.
+    fn judge(&self, s: &str, score: u16, indices: &[u32]) -> Option<(f32, SmallVec<[(u32, u32); 4]>)> {
+        let ratio = score as f32 / self.self_score;
+        let (char_ranges, matched_chars) = byte_ranges(s, indices);
+        let span = match (char_ranges.first(), char_ranges.last()) {
+            (Some(a), Some(b)) => s[a.0 as usize..b.1 as usize].chars().count(),
+            _ => return None,
+        };
+        if ratio < MIN_FUZZY_RATIO || matched_chars + self.typos < self.needle_chars || span > self.max_span {
+            return None;
+        }
+        Some((ratio, char_ranges))
+    }
+
+    /// Whether some window of a string whose best whole-string score is `score` can reach the
+    /// ratio cut. A window's alignment is an alignment of the whole string; in the window it can
+    /// gain at most frizbee's prefix bonus (12, first haystack char) and exact-match bonus (8).
+    fn window_can_pass(&self, score: u16) -> bool {
+        const WINDOW_BONUS_MAX: f32 = 20.0;
+        score as f32 + WINDOW_BONUS_MAX >= MIN_FUZZY_RATIO * self.self_score
+    }
+
+    /// The best passing alignment over windows of `s`: one per token start, `max_span` chars
+    /// long. Char ranges are offset back into `s`.
+    fn best_window(&self, m: &mut Matcher, s: &str) -> Option<(f32, SmallVec<[(u32, u32); 4]>)> {
+        let chars: Vec<(usize, char)> = s.char_indices().collect();
+        let mut starts: Vec<usize> = Vec::new();
+        let mut windows: Vec<&str> = Vec::new();
+        for (i, &(b, c)) in chars.iter().enumerate() {
+            let at_start = c.is_alphanumeric() && (i == 0 || !chars[i - 1].1.is_alphanumeric());
+            if !at_start {
+                continue;
+            }
+            let end = chars.get(i + self.max_span).map_or(s.len(), |x| x.0);
+            if b == 0 && end == s.len() {
+                continue; // the whole string, already judged
+            }
+            starts.push(b);
+            windows.push(&s[b..end]);
+        }
+        // Scores first (cheap); indices only for the windows whose score can pass.
+        let min_score = MIN_FUZZY_RATIO * self.self_score;
+        let keep: Vec<usize> =
+            m.match_list(&windows).iter().filter(|r| r.score as f32 >= min_score).map(|r| r.index as usize).collect();
+        if keep.is_empty() {
+            return None;
+        }
+        let kept: Vec<&str> = keep.iter().map(|&i| windows[i]).collect();
+        let mut best: Option<(f32, SmallVec<[(u32, u32); 4]>)> = None;
+        for r in m.match_list_indices(&kept) {
+            if r.score == 0 {
+                continue;
+            }
+            let i = keep[r.index as usize];
+            let Some((ratio, ranges)) = self.judge(windows[i], r.score, &r.indices) else { continue };
+            if best.as_ref().is_some_and(|b| b.0 >= ratio) {
+                continue;
+            }
+            let off = starts[i] as u32;
+            best = Some((ratio, ranges.iter().map(|&(a, b)| (a + off, b + off)).collect()));
+        }
+        best
+    }
+}
+
 fn typo_budget(len: usize, fuzzy: FuzzyLevel) -> Option<u16> {
     if !fuzzy.enabled || len < 6 {
         return None;
@@ -295,7 +371,9 @@ fn typo_budget(len: usize, fuzzy: FuzzyLevel) -> Option<u16> {
 /// rule on their own length. Fuzzy hits need `score / self_score ≥ 0.65`, at least
 /// `needle_chars − max_typos` matched needle chars (frizbee's typo budget only counts missing
 /// chars, so substitutions would otherwise be free) and a matched span of at most
-/// `needle_chars + 2 × max_typos + 1` chars.
+/// `needle_chars + 2 × max_typos + 1` chars. A string whose best alignment fails these is
+/// retried on one window per token start (`max_span` chars), so a word's match does not depend
+/// on the words around it.
 pub fn match_term(index: &Index, term: &Term, multi_term: bool, fuzzy: FuzzyLevel) -> Vec<TermHit> {
     match_term_scoped(index, term, multi_term, fuzzy, Scope::All)
 }
@@ -391,22 +469,22 @@ pub fn match_term_scoped(
             let strings = index.field_strings(field);
             let hay: Vec<&str> = strings.iter().map(|e| e.2.as_str()).collect();
             let mut best: HashMap<DocId, TermHit> = HashMap::new();
+            let rules = FuzzyRules { self_score: *self_score, typos: *typos as usize, needle_chars, max_span };
             for r in m.match_list_indices(&hay) {
                 let (doc, hidx, s) = &strings[r.index as usize];
                 if r.score == 0 || r.exact || matched.contains(doc) {
                     continue;
                 }
-                // Reject scattered subsequences and substitution-heavy alignments: a weak score,
-                // too few needle chars matched, or a match spread too wide.
-                let ratio = r.score as f32 / *self_score;
-                let (char_ranges, matched_chars) = byte_ranges(s, &r.indices);
-                let span = match (char_ranges.first(), char_ranges.last()) {
-                    (Some(a), Some(b)) => s[a.0 as usize..b.1 as usize].chars().count(),
-                    _ => continue,
-                };
-                if ratio < MIN_FUZZY_RATIO || matched_chars + (*typos as usize) < needle_chars || span > max_span {
+                // A rejected whole-string alignment says little about the words in it: frizbee's
+                // best alignment may borrow chars from later words (0 typos, too wide), and a word
+                // that does not start the string lacks the start bonus (ratio below the cut).
+                // Retry on one window per token start and keep the best window that passes.
+                let Some((ratio, char_ranges)) = rules
+                    .judge(s, r.score, &r.indices)
+                    .or_else(|| rules.window_can_pass(r.score).then(|| rules.best_window(m, s)).flatten())
+                else {
                     continue;
-                }
+                };
                 let quality = 0.9 * ratio;
                 if best.get(doc).is_some_and(|h| h.quality >= quality) {
                     continue;
@@ -640,6 +718,32 @@ mod tests {
         let hits = match_term(&ix, &term("troubelshoot"), false, NORMAL);
         assert_eq!(hits.len(), 1);
         assert_eq!((hits[0].field, hits[0].kind), (Field::Title, MatchKind::Fuzzy));
+    }
+
+    /// frizbee's best alignment of `obsidain` in "obsidian troubleshooting" borrows the `i`, `n`
+    /// of "troubleshooting" (0 typos, span too wide); the local 1-typo alignment on "obsidian"
+    /// must still be found, and its ranges must point into the full title.
+    #[test]
+    fn fuzzy_retries_windows_when_best_alignment_is_too_wide() {
+        let ix = ix_of(&[
+            ("Obsidian Troubleshooting.md", ""),
+            ("Obsidian Search (lots of files).md", ""),
+            ("Obsidian Notes.md", ""),
+        ]);
+        let hits = match_term(&ix, &term("obsidain"), false, NORMAL);
+        assert_eq!(titles(&ix, &hits), ["Obsidian Notes", "Obsidian Search (lots of files)", "Obsidian Troubleshooting"]);
+        assert!(hits.iter().all(|h| (h.field, h.kind) == (Field::Title, MatchKind::Fuzzy)));
+        let h = hits.iter().find(|h| ix.get(h.doc).unwrap().title == "Obsidian Troubleshooting").unwrap();
+        let (s, e) = (h.char_ranges[0].0, h.char_ranges.last().unwrap().1);
+        assert!(s == 0 && e <= 8, "{:?}", h.char_ranges);
+        let hits = match_term(&ix, &term("obsidina"), false, NORMAL);
+        assert!(titles(&ix, &hits).contains(&"Obsidian Search (lots of files)".to_string()), "{:?}", titles(&ix, &hits));
+        // A hit found in a later window is offset back into the full string.
+        let ix = ix_of(&[("Notes on Obsidian Troubleshooting.md", "")]);
+        let hits = match_term(&ix, &term("obsidain"), false, NORMAL);
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        let (s, e) = (hits[0].char_ranges[0].0, hits[0].char_ranges.last().unwrap().1);
+        assert!(s >= 9 && e <= 17, "{:?}", hits[0].char_ranges);
     }
 
     #[test]

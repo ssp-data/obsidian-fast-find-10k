@@ -40,6 +40,10 @@ struct Case {
     #[serde(default)]
     expect_in_top: Vec<String>,
     #[serde(default)]
+    expect_in_top3: Vec<String>,
+    /// Tier every hit named in `expect_top` / `expect_in_top` / `expect_in_top3` must have.
+    expect_tier: Option<u8>,
+    #[serde(default)]
     must_not_top3: Vec<String>,
     /// Names that must not be anywhere in the returned page.
     #[serde(default)]
@@ -202,6 +206,20 @@ fn run_case(engine: &Engine, case: &Case) -> Vec<Failure> {
             out.push(fail(format!("{name:?} in top {TOP_N}")));
         }
     }
+    for name in &case.expect_in_top3 {
+        if !hits.iter().take(3).any(|h| matches(h, name)) {
+            out.push(fail(format!("{name:?} in top 3")));
+        }
+    }
+    if let Some(tier) = case.expect_tier {
+        for name in case.expect_top.iter().chain(&case.expect_in_top).chain(&case.expect_in_top3) {
+            match hits.iter().find(|h| matches(h, name)) {
+                Some(h) if h.tier == tier => {}
+                Some(h) => out.push(fail(format!("tier({name:?}) = {tier}, was {}", h.tier))),
+                None => out.push(fail(format!("tier({name:?}) = {tier}, but no such hit"))),
+            }
+        }
+    }
     for name in case.must_not_top3.iter().chain(&case.must_not_appear) {
         if !indexed(engine, name) {
             out.push(fail(format!("{name:?} to exist, but no indexed note has that title or path")));
@@ -244,6 +262,35 @@ mod tests {
         let (engine, stats) = load_vault_with(&dir, &|p| p.starts_with("skip/")).unwrap();
         assert_eq!(engine.doc_count(), 1);
         assert_eq!(stats, VaultStats { docs: 1, bytes: 5 });
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tier_and_top3_keys() {
+        let dir = std::env::temp_dir().join(format!("ff10k-tier-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Airbyte State.md"), "x").unwrap();
+        std::fs::write(dir.join("Other.md"), "airbyte state").unwrap();
+        let golden = dir.join("g.toml");
+        std::fs::write(
+            &golden,
+            r#"
+[[case]]
+query = "airbyte state"
+expect_top = "Airbyte State"
+expect_in_top3 = ["Other"]
+expect_tier = 1
+
+[[case]]
+query = "airbyte state"
+expect_in_top3 = ["Missing"]
+"#,
+        )
+        .unwrap();
+        let failures = run_golden(&dir, &golden);
+        let expected: Vec<&str> = failures.iter().map(|f| f.expected.as_str()).collect();
+        assert_eq!(expected, ["tier(\"Other\") = 1, was 3", "\"Missing\" in top 3"], "{expected:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

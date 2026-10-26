@@ -92,6 +92,7 @@ On a 9,385-note / 27 MB vault: warm start about 1.2–1.4 s to fully indexed (se
 - Build: `cargo build --release` (CLI binary: `target/release/ff10k`)
 - Test: `cargo test --workspace`; plugin: `cd plugin && npm test`
 - Golden: `cargo test -p ff10k-core --features golden --test golden`, or `ff10k golden <vault> <golden.toml>` (exit 1 on failures)
+- Typo recall: `cargo test -p ff10k-core --features golden --test typo_recall -- --nocapture` (one typo in a title word must keep the note in tier 1)
 - Benches: `cargo bench -p ff10k-core` (criterion), `ff10k bench <vault>` (p50/p95 in microseconds, 200 runs per query), `ff10k profile <vault>` (ingest time per phase, engine heap)
 
 ### CLI (`ff10k`)

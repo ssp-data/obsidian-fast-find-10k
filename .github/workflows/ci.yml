@@ -29,6 +29,9 @@ jobs:
       - name: Golden queries
         run: cargo test -p ff10k-core --features golden --test golden
 
+      - name: Typo recall
+        run: cargo test -p ff10k-core --features golden --test typo_recall -- --nocapture
+
       - name: Build wasm
         run: bash scripts/build-wasm.sh
 
