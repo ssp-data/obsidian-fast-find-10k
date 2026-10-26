@@ -117,12 +117,40 @@ function pick<T extends object>(defaults: T, saved: unknown): T {
 	return out;
 }
 
+const FUZZY_VALUES: readonly FuzzySetting[] = ['off', 'normal', 'loose'];
+const PARTIAL_VALUES: readonly PartialMode[] = ['whenFew', 'always', 'never'];
+const SEMANTIC_VALUES: readonly SemanticSetting[] = ['auto', 'onDemand', 'never'];
+
+/** `v` when it is one of `allowed`, else `fallback`. */
+function oneOf<T extends string>(v: T, allowed: readonly T[], fallback: T): T {
+	return allowed.includes(v) ? v : fallback;
+}
+
+/** `v` clamped to `[lo, hi]` (rounded when `int`); `fallback` when not finite. */
+function clamp(v: number, lo: number, hi: number, fallback: number, int = false): number {
+	if (!Number.isFinite(v)) return fallback;
+	const c = Math.min(hi, Math.max(lo, v));
+	return int ? Math.round(c) : c;
+}
+
 /** Saved plugin data merged over the defaults, deep for `weights` and `keymap`: a key missing
- * from the saved data keeps its default; unknown or mistyped keys are dropped. */
+ * from the saved data keeps its default; unknown or mistyped keys are dropped. Enum values
+ * outside their set fall back to the default and numbers are clamped to the ranges the settings
+ * tab offers, so a hand-edited data.json cannot make the engine reject its config. */
 export function mergeSettings(saved: unknown): FastFindSettings {
 	const s = pick(DEFAULT_SETTINGS, saved);
 	const src = (typeof saved === 'object' && saved !== null ? saved : {}) as Record<string, unknown>;
+	const d = DEFAULT_SETTINGS;
 	s.weights = pick(DEFAULT_WEIGHTS, src.weights);
+	for (const k of Object.keys(DEFAULT_WEIGHTS) as (keyof Weights)[]) {
+		s.weights[k] = clamp(s.weights[k], 0, 150, DEFAULT_WEIGHTS[k], true);
+	}
+	s.fuzzy = oneOf(s.fuzzy, FUZZY_VALUES, d.fuzzy);
+	s.partial = oneOf(s.partial, PARTIAL_VALUES, d.partial);
+	s.semantic = oneOf(s.semantic, SEMANTIC_VALUES, d.semantic);
+	s.fewThreshold = clamp(s.fewThreshold, 1, 50, d.fewThreshold, true);
+	s.minSimilarity = clamp(s.minSimilarity, 0.5, 0.95, d.minSimilarity);
+	s.downrankFactor = clamp(s.downrankFactor, 0, 1, d.downrankFactor);
 	s.keymap = pick(DEFAULT_KEYMAP, src.keymap);
 	s.ignoredGlobs = [...s.ignoredGlobs];
 	s.downrankedFolders = [...s.downrankedFolders];

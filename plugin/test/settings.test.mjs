@@ -21,6 +21,54 @@ test('merge: nothing saved gives the defaults (fresh copies)', () => {
 	assert.equal(DEFAULT_SETTINGS.keymap.open, 'Enter');
 });
 
+test('merge: enum values outside their allowed set fall back to the default', () => {
+	const s = mergeSettings({ fuzzy: 'sloppy', partial: 'sometimes', semantic: 'maybe' });
+	assert.equal(s.fuzzy, 'normal');
+	assert.equal(s.partial, 'whenFew');
+	assert.equal(s.semantic, 'auto');
+	const ok = mergeSettings({ fuzzy: 'off', partial: 'never', semantic: 'onDemand' });
+	assert.deepEqual([ok.fuzzy, ok.partial, ok.semantic], ['off', 'never', 'onDemand']);
+});
+
+test('merge: weights are clamped to integers 0-150', () => {
+	const s = mergeSettings({ weights: { title: 400, alias: -5, h1: 33.6, h2: NaN, body: Infinity } });
+	assert.equal(s.weights.title, 150);
+	assert.equal(s.weights.alias, 0);
+	assert.equal(s.weights.h1, 34);
+	assert.equal(s.weights.h2, 50); // not finite: default
+	assert.equal(s.weights.body, 10);
+});
+
+test('merge: fewThreshold is clamped to an integer 1-50', () => {
+	assert.equal(mergeSettings({ fewThreshold: 0 }).fewThreshold, 1);
+	assert.equal(mergeSettings({ fewThreshold: -3 }).fewThreshold, 1);
+	assert.equal(mergeSettings({ fewThreshold: 500 }).fewThreshold, 50);
+	assert.equal(mergeSettings({ fewThreshold: 7.4 }).fewThreshold, 7);
+	assert.equal(mergeSettings({ fewThreshold: NaN }).fewThreshold, 5);
+});
+
+test('merge: minSimilarity is clamped to 0.5-0.95', () => {
+	assert.equal(mergeSettings({ minSimilarity: 0.1 }).minSimilarity, 0.5);
+	assert.equal(mergeSettings({ minSimilarity: 2 }).minSimilarity, 0.95);
+	assert.equal(mergeSettings({ minSimilarity: 0.8 }).minSimilarity, 0.8);
+	assert.equal(mergeSettings({ minSimilarity: NaN }).minSimilarity, 0.7);
+});
+
+test('merge: downrankFactor is clamped to 0-1', () => {
+	assert.equal(mergeSettings({ downrankFactor: -1 }).downrankFactor, 0);
+	assert.equal(mergeSettings({ downrankFactor: 3 }).downrankFactor, 1);
+	assert.equal(mergeSettings({ downrankFactor: 0.5 }).downrankFactor, 0.5);
+	assert.equal(mergeSettings({ downrankFactor: NaN }).downrankFactor, 0.3);
+});
+
+test('merge: a hand-edited data.json always maps to an engine config the engine accepts', () => {
+	const c = settingsToEngineConfig(mergeSettings({ fewThreshold: -2.5, weights: { title: 1e9 }, partial: 'x', downrankFactor: 9 }));
+	assert.ok(Number.isInteger(c.fewThreshold) && c.fewThreshold >= 1);
+	assert.ok(['whenFew', 'always', 'never'].includes(c.partial));
+	assert.equal(c.weights.title, 150);
+	assert.equal(c.downrankFactor, 1);
+});
+
 test('merge: a missing weight or key keeps its default, saved ones win', () => {
 	const s = mergeSettings({ weights: { body: 0, title: 120 }, keymap: { open: 'Ctrl+O' }, fuzzy: 'loose', lastQuery: 'abc' });
 	assert.equal(s.weights.body, 0);
