@@ -1,5 +1,5 @@
 // NoteCache against a stubbed `indexedDB` (Node has none): open failure recovery and the
-// in-memory fallback.
+// in-memory fallback, and streamAll with a throwing callback or an aborted transaction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import esbuild from 'esbuild';
@@ -117,4 +117,37 @@ test('open: when the reopen fails too, an in-memory no-op cache keeps the plugin
 	} finally {
 		w.restore();
 	}
+});
+
+test('streamAll: a throwing callback rejects instead of hanging', async () => {
+	const rows = Array.from({ length: 5 }, (_, i) => ({ path: `${i}.md`, mtime: 1, size: 1, text: '' }));
+	stubIndexedDb([succeed(fakeDb(rows))]);
+	const cache = await NoteCache.open('app3');
+	let calls = 0;
+	const p = cache.streamAll(2, () => {
+		calls++;
+		throw new Error('boom');
+	});
+	const result = await Promise.race([p.then(() => 'resolved', (e) => e.message), new Promise((r) => setTimeout(() => r('hung'), 500))]);
+	assert.equal(result, 'boom');
+	assert.equal(calls, 1);
+});
+
+test('streamAll: an aborted transaction rejects', async () => {
+	const db = fakeDb([{ path: 'a.md', mtime: 1, size: 1, text: '' }]);
+	const orig = db.transaction;
+	db.transaction = function (...a) {
+		const tx = orig.apply(this, a);
+		const os = tx.objectStore;
+		tx.objectStore = (name) => {
+			const s = os(name);
+			if (name === 'notes') s.openCursor = () => (tx.abort(), request(() => {}));
+			return s;
+		};
+		return tx;
+	};
+	stubIndexedDb([succeed(db)]);
+	const cache = await NoteCache.open('app4');
+	const result = await Promise.race([cache.streamAll(2, () => {}).then(() => 'resolved', () => 'rejected'), new Promise((r) => setTimeout(() => r('hung'), 500))]);
+	assert.equal(result, 'rejected');
 });

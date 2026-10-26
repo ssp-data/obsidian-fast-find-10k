@@ -119,7 +119,8 @@ export class NoteCache {
 		return meta;
 	}
 
-	/** Walks every note row with a cursor, handing them out `batch` at a time. */
+	/** Walks every note row with a cursor, handing them out `batch` at a time. Rejects (and
+	 * aborts the walk) when `cb` throws or the transaction fails. */
 	streamAll(batch: number, cb: (rows: NoteRow[]) => void): Promise<void> {
 		const db = this.db;
 		if (!db) return Promise.resolve();
@@ -127,11 +128,37 @@ export class NoteCache {
 			const tx = db.transaction(NOTES);
 			const cursorReq = tx.objectStore(NOTES).openCursor();
 			let rows: NoteRow[] = [];
-			cursorReq.onerror = () => reject(cursorReq.error);
+			let settled = false;
+			const fail = (e: unknown) => {
+				if (settled) return;
+				settled = true;
+				reject(e);
+			};
+			/** Hands out `rows`; false (after aborting) when `cb` threw. */
+			const emit = (): boolean => {
+				try {
+					cb(rows);
+				} catch (e) {
+					fail(e);
+					try {
+						tx.abort();
+					} catch {
+						// already finished
+					}
+					return false;
+				}
+				rows = [];
+				return true;
+			};
+			tx.onabort = () => fail(tx.error ?? new Error('transaction aborted'));
+			tx.onerror = () => fail(tx.error);
+			cursorReq.onerror = () => fail(cursorReq.error);
 			cursorReq.onsuccess = () => {
+				if (settled) return;
 				const cursor = cursorReq.result;
 				if (!cursor) {
-					if (rows.length) cb(rows);
+					if (rows.length && !emit()) return;
+					settled = true;
 					resolve();
 					return;
 				}
@@ -140,8 +167,7 @@ export class NoteCache {
 					cursor.continue();
 					return;
 				}
-				cb(rows);
-				rows = [];
+				if (!emit()) return;
 				// Yield a microtask between batches; the transaction stays active through it.
 				queueMicrotask(() => cursor.continue());
 			};
