@@ -371,3 +371,35 @@ Observed on the test vault, 2026-10-26:
 | `search-resume` with preview off by default | input `hawaiian goddess`, preview shown, `content \| partial` 16 rows; plain `search` → empty input, preview hidden |
 | open all, `obsidian trouble tags` (23 notes) | Notice `Fast Find 10K: Open all works for 10 or fewer results (23 shown)`, modal stays; footer hint hidden |
 | open all, `quickshell` (8 notes, hint shown) | 8 new tabs in result order, active leaf unchanged, modal closed, each note +1 access; tabs closed after |
+
+## Performance pass (task 22)
+
+Numbers, method and before/after tables: [perf.md](perf.md). Native measurements go through
+`ff10k profile <vault>` (ingest split, engine heap) and `ff10k bench <vault>`, pinned to a fast
+core (`taskset -c 2`; this laptop mixes Zen 5 and Zen 5c cores). Worker memory in Obsidian:
+
+```bash
+o eval code="const w=app.plugins.plugins['fast-find-10k'].engine.worker; w.addEventListener('message', ev=>{ if(ev.data.t==='stats' && ev.data.id===999999) window.__mem=ev.data }); w.postMessage({t:'stats', id:999999}); 'sent'"
+o eval code="JSON.stringify(window.__mem)"          # wasmBytes = wasm linear memory (peak heap)
+# engine time of a few queries (worker elapsedUs, includes JSON and the UTF-16 range rewrite)
+o eval code="const e=app.plugins.plugins['fast-find-10k'].engine; (async()=>{const out=[]; for (const q of ['data engineer ai','ai','obsidian troubelshoot']) { const r=await e.search(q,'all',50,false); out.push(q+':'+(r.elapsedUs/1000).toFixed(1)); } window.__t=out.join(' | ')})(); 'ok'"
+o eval code="window.__t"
+# rebuild, end to end
+o eval code="window.__rb0=performance.now(); app.plugins.plugins['fast-find-10k'].indexer.rebuild().then(()=>window.__rb=Math.round(performance.now()-window.__rb0)); 'sent'"
+o eval code="window.__rb"
+```
+
+Observed on the test vault, 2026-10-26 (9,385 notes, Smart Connections vectors and 5,000 ghosts
+loaded):
+
+| Check | Result |
+|---|---|
+| plugin reload ×3 | `indexed 9385 docs in 1245 / 1215 / 1373 ms (warm: 9385 from cache, 0 re-read)` (was ~3,580) |
+| Rebuild index (`indexer.rebuild()`) | 1,781 ms end to end; console `indexed 9385 docs in 1344 ms (warm: 0 from cache, 9385 re-read)` (was 7,619) |
+| worker memory | `wasmBytes` 164,036,608 (was 181,534,720) |
+| first query after reload, `data engineer ai` | 27 ms (was 59–68); repeated 13.5–15.7 ms |
+| `ai` / `obsidian troubelshoot` / `path:resources` | 7.8 / 8.1 / 7.5 ms |
+| typing `data engineerin` at 60 ms/char | 16/16 painted; engine 3.6–18.1 ms (median ≈ 10), render 2.8–5.3 ms |
+| `obsidian trouble` | top hit `Obsidian Troubleshoot` |
+| `dev:errors` | nothing from fast-find-10k |
+| `main.js` | 1,427,984 bytes |
