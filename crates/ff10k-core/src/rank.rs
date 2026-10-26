@@ -7,12 +7,14 @@
 //! heading, excerpt, line) are computed only for the returned page.
 
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 
 use crate::doc::{Doc, Field, Weights};
+use crate::frecency::frecency_score;
+use crate::markdown::extract;
 use crate::index::{DocId, Index};
 use crate::matcher::{match_term, FuzzyLevel, MatchKind, TermHit};
 use crate::normalize::{normalize, strip_symbols};
@@ -27,6 +29,11 @@ const SHORT_TITLE_BONUS: f32 = 10.0;
 const BACKLINK_BONUS: f32 = 2.0;
 const SHORT_NOTE_WORDS: u32 = 20;
 const SHORT_NOTE_FACTOR: f32 = 0.8;
+const FRECENCY_WEIGHT: f32 = 20.0;
+const COMBO_BONUS: f32 = 1000.0;
+const COMBO_MIN_COUNT: u32 = 3;
+/// Empty query: size of the "recent" list.
+const RECENT_LIMIT: usize = 20;
 /// Excerpt: bytes of context on each side of the first body match.
 const EXCERPT_RADIUS: usize = 60;
 const NO_FUZZY: FuzzyLevel = FuzzyLevel { enabled: false, loose: false };
@@ -131,7 +138,7 @@ pub struct Hit {
     pub debug: Option<DebugInfo>,
 }
 
-/// An unresolved link target (filled by a later task).
+/// An unresolved link target.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Ghost {
@@ -139,19 +146,50 @@ pub struct Ghost {
     pub refs: u32,
 }
 
-/// Per-search lookups owned by the engine. Frecency and combo are hooks returning 0 for now.
+/// Ghosts plus a private index of empty ghost docs, so they match through the normal matcher.
+/// Ghost `i` is `DocId` `i` (ids are handed out sequentially into a fresh index).
+#[derive(Default)]
+pub struct GhostSet {
+    ghosts: Vec<Ghost>,
+    index: Index,
+}
+
+impl GhostSet {
+    /// Duplicate and empty targets are dropped (first wins).
+    pub fn new(ghosts: Vec<Ghost>) -> Self {
+        let mut set = GhostSet::default();
+        let mut seen = HashSet::new();
+        for g in ghosts {
+            let target = g.target.trim();
+            if target.is_empty() || !seen.insert(target.to_string()) {
+                continue;
+            }
+            let id = set.index.upsert(extract(&format!("\u{0}ghost/{target}.md"), "", 0.0));
+            debug_assert_eq!(id as usize, set.ghosts.len());
+            set.ghosts.push(Ghost { target: target.to_string(), refs: g.refs });
+        }
+        set
+    }
+}
+
+/// Per-search lookups owned by the engine; all keyed by note path.
 #[derive(Default)]
 pub struct Extras<'a> {
-    pub ghosts: &'a [Ghost],
+    pub ghosts: Option<&'a GhostSet>,
+    pub access: Option<&'a HashMap<String, VecDeque<f64>>>,
+    /// normalized query -> path -> number of opens.
+    pub combos: Option<&'a HashMap<String, HashMap<String, u32>>>,
 }
 
 impl Extras<'_> {
-    pub fn frecency(&self, _path: &str) -> f32 {
-        0.0
+    pub fn frecency(&self, path: &str, now_secs: f64) -> f32 {
+        let Some(ts) = self.access.and_then(|a| a.get(path)) else { return 0.0 };
+        let ts: Vec<f64> = ts.iter().copied().collect();
+        frecency_score(&ts, now_secs)
     }
 
-    pub fn combo(&self, _query: &str, _path: &str) -> f32 {
-        0.0
+    pub fn combo_count(&self, query: &str, path: &str) -> u32 {
+        self.combos.and_then(|c| c.get(query)?.get(path)).copied().unwrap_or(0)
     }
 }
 
@@ -178,8 +216,9 @@ struct Scored<'a> {
     tier: u8,
     score: f32,
     slots: Slots,
-    /// fields, proximity, structural, penalty factor, frecency, combo.
+    /// fields, proximity, structural, penalty factor, frecency, combo (the last two as added to the score).
     parts: [f32; 6],
+    ghost: Option<&'a Ghost>,
 }
 
 fn class(f: Field) -> u8 {
@@ -441,6 +480,7 @@ fn score<'a>(
     folders: &[String],
     query: &Query,
     extras: &Extras,
+    now_secs: f64,
 ) -> Scored<'a> {
     let w = &cfg.weights;
     let fields: f32 = units
@@ -464,14 +504,15 @@ fn score<'a>(
     if doc.word_count < SHORT_NOTE_WORDS && !exact_title {
         penalty *= SHORT_NOTE_FACTOR;
     }
-    let frecency = extras.frecency(&doc.path);
-    let combo = extras.combo(&query.normalized, &doc.path);
+    let frecency = extras.frecency(&doc.path, now_secs) * FRECENCY_WEIGHT;
+    let combo = if extras.combo_count(&query.normalized, &doc.path) >= COMBO_MIN_COUNT { COMBO_BONUS } else { 0.0 };
     Scored {
         doc,
         tier,
         score: (fields + prox + structural + frecency + combo) * penalty,
         slots,
         parts: [fields, prox, structural, penalty, frecency, combo],
+        ghost: None,
     }
 }
 
@@ -479,11 +520,15 @@ fn cmp_scored(a: &Scored, b: &Scored) -> Ordering {
     a.tier
         .cmp(&b.tier)
         .then(b.score.total_cmp(&a.score))
+        .then(a.ghost.is_some().cmp(&b.ghost.is_some()))
         .then(b.doc.mtime.total_cmp(&a.doc.mtime))
         .then_with(|| a.doc.path.cmp(&b.doc.path))
 }
 
 pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, extras: &Extras) -> Ranked {
+    if query.is_empty() {
+        return recent(index, opts, extras);
+    }
     let units = build_units(index, query, cfg, opts.mode == Mode::FilesOnly);
     if units.is_empty() && !query.has_filters() {
         return Ranked { hits: Vec::new(), candidates: 0 };
@@ -503,9 +548,16 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
         .filter_map(|(id, slots)| {
             let doc = index.get(id)?;
             let tier = tier_of(&units, &slots)?;
-            Some(score(index, id, doc, tier, slots, &units, n_words, cfg, &folders, query, extras))
+            Some(score(index, id, doc, tier, slots, &units, n_words, cfg, &folders, query, extras, opts.now_secs))
         })
         .collect();
+    // Ghosts are tier-1 candidates; `ghost_units` index into the ghost set's private index.
+    let mut ghost_units: Vec<Unit> = Vec::new();
+    if let Some(gs) = extras.ghosts.filter(|_| ghosts_apply(query, &units)) {
+        ghost_units = build_units(&gs.index, query, cfg, true);
+        let ctx = (cfg, &folders[..], query, extras, opts.now_secs);
+        scored.extend(ghost_scored(index, gs, &ghost_units, n_words, ctx));
+    }
     let total = scored.len();
 
     let show_partial = match cfg.partial {
@@ -525,7 +577,94 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
         scored.truncate(opts.limit);
     }
     scored.sort_by(cmp_scored);
-    let hits = scored.iter().map(|s| page_hit(s, &units, cfg, opts)).collect();
+    let hits = scored
+        .iter()
+        .map(|s| page_hit(s, if s.ghost.is_some() { &ghost_units } else { &units }, cfg, opts))
+        .collect();
+    Ranked { hits, candidates: total }
+}
+
+/// Ghosts take part in plain term/phrase queries only: tag and path filters never match them.
+fn ghosts_apply(query: &Query, units: &[Unit]) -> bool {
+    !units.is_empty() && query.tags.is_empty() && query.paths.is_empty()
+}
+
+/// Normalized keys under which an existing note would resolve a link to `target`.
+fn ghost_keys(target: &str) -> (String, String) {
+    (normalize(&strip_symbols(target)), normalize(&strip_symbols(&format!("{target}.md"))))
+}
+
+/// Ghost candidates that match every unit in Title (tier 1) and have no real note of that name.
+fn ghost_scored<'a>(
+    index: &Index,
+    gs: &'a GhostSet,
+    units: &[Unit],
+    n_words: usize,
+    (cfg, folders, query, extras, now_secs): (&Config, &[String], &Query, &Extras, f64),
+) -> Vec<Scored<'a>> {
+    let mut cands = candidates(&gs.index, units);
+    apply_filters(&gs.index, query, &mut cands);
+    let mut matched: Vec<(DocId, Slots)> =
+        cands.into_iter().filter(|(_, slots)| slots.iter().all(Option::is_some)).collect();
+    if matched.is_empty() {
+        return Vec::new();
+    }
+    // Suppress ghosts whose target now exists as a note (by title or by path without `.md`).
+    let keys: Vec<(String, String)> =
+        matched.iter().map(|(id, _)| ghost_keys(&gs.ghosts[*id as usize].target)).collect();
+    let wanted: HashSet<&str> = keys.iter().flat_map(|(t, p)| [t.as_str(), p.as_str()]).collect();
+    let mut found: HashSet<&str> = HashSet::new();
+    found.extend(index.field_strings(Field::Title).iter().map(|(_, _, t)| t.as_str()).filter(|t| wanted.contains(t)));
+    found.extend(index.ids().filter_map(|id| index.path_norm(id)).filter(|p| wanted.contains(p)));
+    let mut i = 0;
+    matched.retain(|_| {
+        let (t, p) = &keys[i];
+        i += 1;
+        !(found.contains(t.as_str()) || found.contains(p.as_str()))
+    });
+    matched
+        .into_iter()
+        .filter_map(|(id, slots)| {
+            let doc = gs.index.get(id)?;
+            let tier = tier_of(units, &slots).filter(|&t| t == 1)?;
+            let mut sc = score(&gs.index, id, doc, tier, slots, units, n_words, cfg, folders, query, extras, now_secs);
+            sc.ghost = gs.ghosts.get(id as usize);
+            Some(sc)
+        })
+        .collect()
+}
+
+/// Empty query: the most recently used notes (frecency, then mtime), then the newest others.
+fn recent(index: &Index, opts: &SearchOptions, extras: &Extras) -> Ranked {
+    let mut docs: Vec<(&Doc, f32)> = index
+        .ids()
+        .filter_map(|id| index.get(id))
+        .map(|d| (d, extras.frecency(&d.path, opts.now_secs)))
+        .collect();
+    docs.sort_by(|a, b| {
+        b.1.total_cmp(&a.1).then(b.0.mtime.total_cmp(&a.0.mtime)).then_with(|| a.0.path.cmp(&b.0.path))
+    });
+    let total = docs.len();
+    let hits = docs
+        .into_iter()
+        .take(RECENT_LIMIT.min(opts.limit))
+        .map(|(d, f)| Hit {
+            path: d.path.clone(),
+            title: d.title.clone(),
+            tier: 0,
+            score: f,
+            badge: Field::Title,
+            title_norm: normalize(&strip_symbols(&d.title)),
+            title_ranges: Vec::new(),
+            heading: None,
+            excerpt: None,
+            line: None,
+            is_ghost: false,
+            ghost_refs: 0,
+            similar_count: 0,
+            debug: None,
+        })
+        .collect();
     Ranked { hits, candidates: total }
 }
 
@@ -663,8 +802,8 @@ fn page_hit(s: &Scored, units: &[Unit], cfg: &Config, opts: &SearchOptions) -> H
         DebugInfo { per_term, components: components.iter().map(|(k, v)| (k.to_string(), *v)).collect() }
     });
     Hit {
-        path: s.doc.path.clone(),
-        title: s.doc.title.clone(),
+        path: s.ghost.map_or_else(|| s.doc.path.clone(), |g| g.target.clone()),
+        title: s.ghost.map_or_else(|| s.doc.title.clone(), |g| g.target.clone()),
         tier: s.tier,
         score: s.score,
         badge,
@@ -673,8 +812,8 @@ fn page_hit(s: &Scored, units: &[Unit], cfg: &Config, opts: &SearchOptions) -> H
         heading,
         excerpt: context.map(|c| c.0),
         line,
-        is_ghost: false,
-        ghost_refs: 0,
+        is_ghost: s.ghost.is_some(),
+        ghost_refs: s.ghost.map_or(0, |g| g.refs),
         similar_count: 0,
         debug,
     }

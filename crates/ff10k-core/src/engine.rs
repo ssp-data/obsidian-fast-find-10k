@@ -1,11 +1,13 @@
-//! Engine: thin facade over the index, the ranking config and the (later) frecency/ghost state.
+//! Engine: thin facade over the index, the ranking config and the frecency/combo/ghost state.
+
+use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
 use crate::index::Index;
 use crate::markdown::extract;
 use crate::query::Query;
-use crate::rank::{rank, Extras};
+use crate::rank::{rank, Extras, GhostSet};
 pub use crate::rank::{
     Config, DebugInfo, Excerpt, Ghost, HeadingHit, Hit, Mode, PartialMode, SearchOptions,
 };
@@ -23,8 +25,15 @@ pub struct SearchResponse {
 pub struct Engine {
     index: Index,
     config: Config,
-    ghosts: Vec<Ghost>,
+    ghosts: GhostSet,
+    /// Access timestamps (seconds, ascending) per note path, newest last.
+    access: HashMap<String, VecDeque<f64>>,
+    /// normalized query -> note path -> times opened from that query.
+    combos: HashMap<String, HashMap<String, u32>>,
 }
+
+/// Most access timestamps kept per path.
+const MAX_ACCESS: usize = 128;
 
 impl Engine {
     pub fn new() -> Self {
@@ -35,9 +44,30 @@ impl Engine {
         self.config = c;
     }
 
-    /// Unresolved link targets; stored for ranking (used from Task 9 on).
+    /// Replaces the unresolved link targets shown as ghost hits.
     pub fn set_ghosts(&mut self, ghosts: Vec<Ghost>) {
-        self.ghosts = ghosts;
+        self.ghosts = GhostSet::new(ghosts);
+    }
+
+    /// Replaces the access history of a path; keeps the newest 128 timestamps.
+    pub fn set_access(&mut self, path: &str, mut timestamps_secs: Vec<f64>) {
+        timestamps_secs.retain(|t| t.is_finite());
+        timestamps_secs.sort_by(f64::total_cmp);
+        let from = timestamps_secs.len().saturating_sub(MAX_ACCESS);
+        self.access.insert(path.to_string(), timestamps_secs.split_off(from).into());
+    }
+
+    pub fn record_access(&mut self, path: &str, now_secs: f64) {
+        let ts = self.access.entry(path.to_string()).or_default();
+        ts.push_back(now_secs);
+        if ts.len() > MAX_ACCESS {
+            ts.pop_front();
+        }
+    }
+
+    /// Counts one open of `path` from the query with this normalized form (the combo key).
+    pub fn record_query_open(&mut self, normalized_query: &str, path: &str) {
+        *self.combos.entry(normalized_query.to_string()).or_default().entry(path.to_string()).or_insert(0) += 1;
     }
 
     pub fn upsert(&mut self, path: &str, mtime: f64, text: &str) {
@@ -49,7 +79,18 @@ impl Engine {
     }
 
     pub fn rename(&mut self, old: &str, new: &str) -> bool {
-        self.index.rename(old, new)
+        let renamed = self.index.rename(old, new);
+        if renamed && old != new {
+            if let Some(ts) = self.access.remove(old) {
+                self.access.insert(new.to_string(), ts);
+            }
+            for paths in self.combos.values_mut() {
+                if let Some(n) = paths.remove(old) {
+                    paths.insert(new.to_string(), n);
+                }
+            }
+        }
+        renamed
     }
 
     pub fn doc_count(&self) -> usize {
@@ -65,12 +106,9 @@ impl Engine {
         #[cfg(not(target_arch = "wasm32"))]
         let start = std::time::Instant::now();
         let query = Query::parse(raw_query);
-        let (hits, candidates) = if query.is_empty() {
-            (Vec::new(), 0)
-        } else {
-            let ranked = rank(&self.index, &query, &self.config, opts, &Extras { ghosts: &self.ghosts });
-            (ranked.hits, ranked.candidates)
-        };
+        let extras = Extras { ghosts: Some(&self.ghosts), access: Some(&self.access), combos: Some(&self.combos) };
+        let ranked = rank(&self.index, &query, &self.config, opts, &extras);
+        let (hits, candidates) = (ranked.hits, ranked.candidates);
         #[cfg(not(target_arch = "wasm32"))]
         let elapsed_us = start.elapsed().as_micros() as u64;
         #[cfg(target_arch = "wasm32")]
@@ -234,8 +272,9 @@ mod tests {
     fn does_not_panic_on_syntax_only_queries() {
         let e = corpus();
         for q in ["#", "path:", "\"\"", "-", "   "] {
+            // Empty after parsing: the recent list (tier 0), never an error.
             let r = e.search(q, &opts());
-            assert!(r.hits.is_empty(), "{q:?}");
+            assert!(r.hits.iter().all(|h| h.tier == 0), "{q:?}");
             assert_eq!(r.total_docs, 8);
         }
     }
@@ -277,6 +316,146 @@ mod tests {
         e.upsert("Pandas notes.md", 0.0, "using ai with dataframes");
         let r = e.search("pandas -ai", &opts());
         assert_eq!(titles(&r), ["Pandas tips"]);
+    }
+
+    const NOW: f64 = 100_000_000.0;
+
+    fn now_opts() -> SearchOptions {
+        SearchOptions { now_secs: NOW, ..opts() }
+    }
+
+    #[test]
+    fn recent_note_wins_tie() {
+        let mut e = Engine::new();
+        e.upsert("Meeting Notes A.md", 5.0, "");
+        e.upsert("Meeting Notes B.md", 5.0, "");
+        e.record_access("Meeting Notes B.md", NOW);
+        let r = e.search("meeting notes", &now_opts());
+        assert_eq!(r.hits[0].title, "Meeting Notes B");
+        assert!(r.hits[0].score > r.hits[1].score);
+        let r = e.search("meeting notes", &SearchOptions { debug: true, ..now_opts() });
+        let comp = |h: &Hit, k: &str| h.debug.as_ref().unwrap().components.iter().find(|c| c.0 == k).unwrap().1;
+        assert!((comp(&r.hits[0], "frecency") - 20.0).abs() < 0.01);
+        assert_eq!(comp(&r.hits[1], "frecency"), 0.0);
+    }
+
+    #[test]
+    fn combo_sticks() {
+        let mut e = Engine::new();
+        e.upsert("de.md", 0.0, "");
+        e.upsert("x/Data Engineering.md", 0.0, "---\naliases: [DE]\n---\n");
+        assert_eq!(e.search("de", &now_opts()).hits[0].path, "de.md");
+        let key = Query::parse("de").normalized;
+        for _ in 0..2 {
+            e.record_query_open(&key, "x/Data Engineering.md");
+        }
+        assert_eq!(e.search("de", &now_opts()).hits[0].path, "de.md");
+        e.record_query_open(&key, "x/Data Engineering.md");
+        let r = e.search("de", &SearchOptions { debug: true, ..now_opts() });
+        assert_eq!(r.hits[0].path, "x/Data Engineering.md");
+        let combo = r.hits[0].debug.as_ref().unwrap().components.iter().find(|c| c.0 == "combo").unwrap().1;
+        assert_eq!(combo, 1000.0);
+    }
+
+    #[test]
+    fn rename_keeps_frecency_and_combo() {
+        let mut e = Engine::new();
+        e.upsert("de.md", 0.0, "");
+        e.upsert("Data Engineering.md", 0.0, "---\naliases: [DE]\n---\n");
+        for _ in 0..3 {
+            e.record_query_open("de", "Data Engineering.md");
+        }
+        e.record_access("Data Engineering.md", NOW);
+        assert!(e.rename("Data Engineering.md", "Notes/Data Engineering.md"));
+        let r = e.search("de", &SearchOptions { debug: true, ..now_opts() });
+        assert_eq!(r.hits[0].path, "Notes/Data Engineering.md");
+        let comps = &r.hits[0].debug.as_ref().unwrap().components;
+        assert!(comps.iter().any(|c| c.0 == "combo" && c.1 == 1000.0));
+        assert!(comps.iter().any(|c| c.0 == "frecency" && c.1 > 19.0));
+    }
+
+    #[test]
+    fn access_history_capped_at_128() {
+        let mut e = Engine::new();
+        e.set_access("a.md", (0..200).map(|i| i as f64).collect());
+        assert_eq!(e.access["a.md"].len(), 128);
+        assert_eq!(e.access["a.md"][0], 72.0);
+        for i in 0..200 {
+            e.record_access("b.md", i as f64);
+        }
+        assert_eq!(e.access["b.md"].len(), 128);
+        assert_eq!(e.access["b.md"][0], 72.0);
+    }
+
+    #[test]
+    fn empty_query_returns_recent() {
+        let mut e = Engine::new();
+        for i in 0..30 {
+            e.upsert(&format!("Note {i}.md"), i as f64, "");
+        }
+        e.set_ghosts(vec![Ghost { target: "Ghosty".into(), refs: 1 }]);
+        e.record_access("Note 3.md", NOW - 86_400.0);
+        e.record_access("Note 4.md", NOW);
+        let r = e.search("", &now_opts());
+        assert_eq!(r.hits.len(), 20);
+        assert!(r.hits.iter().all(|h| h.tier == 0 && !h.is_ghost && h.badge == Field::Title && h.excerpt.is_none()));
+        let t = titles(&r);
+        assert_eq!(&t[..4], ["Note 4", "Note 3", "Note 29", "Note 28"]);
+        let r = e.search("", &SearchOptions { limit: 5, ..now_opts() });
+        assert_eq!(r.hits.len(), 5);
+        // Filter-only queries keep the regular behaviour.
+        assert!(e.search("-note", &opts()).hits.is_empty());
+    }
+
+    #[test]
+    fn ghosts_appear_in_tier1() {
+        let mut e = corpus();
+        e.set_ghosts(vec![Ghost { target: "AI Data Engineer Workflows".into(), refs: 2 }]);
+        let r = e.search("ai data engineer", &opts());
+        let g = r.hits.iter().find(|h| h.is_ghost).unwrap();
+        assert_eq!((g.ghost_refs, g.tier, g.badge), (2, 1, Field::Title));
+        assert_eq!((g.path.as_str(), g.title.as_str()), ("AI Data Engineer Workflows", "AI Data Engineer Workflows"));
+        assert!(!g.title_ranges.is_empty());
+        // Real tier-1 docs with a higher score come first; ghosts never rank above equal real docs.
+        let files = SearchOptions { mode: Mode::FilesOnly, ..opts() };
+        assert!(e.search("ai data engineer", &files).hits.iter().any(|h| h.is_ghost));
+        // Filters and excludes.
+        assert!(!e.search("ai data engineer -workflows", &opts()).hits.iter().any(|h| h.is_ghost));
+        assert!(!e.search("ai data engineer #tag", &opts()).hits.iter().any(|h| h.is_ghost));
+        assert!(!e.search("ai data engineer path:ai", &opts()).hits.iter().any(|h| h.is_ghost));
+        // Typo, and the short-term rule.
+        assert!(e.search("workflos", &opts()).hits.iter().any(|h| h.is_ghost));
+        e.set_ghosts(vec![Ghost { target: "Airflow Ghost".into(), refs: 1 }]);
+        assert!(!e.search("ai", &opts()).hits.iter().any(|h| h.is_ghost));
+        e.set_ghosts(Vec::new());
+        assert!(e.search("airflow ghost", &opts()).hits.iter().all(|h| !h.is_ghost));
+    }
+
+    #[test]
+    fn ghost_sorts_after_equal_real_doc() {
+        let mut e = Engine::new();
+        e.set_ghosts(vec![Ghost { target: "Kafka Tips Aaa".into(), refs: 1 }]);
+        e.upsert("Kafka Tips Zzz.md", 0.0, "");
+        let r = e.search("kafka tips", &opts());
+        assert_eq!(r.hits.len(), 2);
+        assert_eq!(r.hits[0].score, r.hits[1].score);
+        assert_eq!((r.hits[0].is_ghost, r.hits[1].is_ghost), (false, true));
+    }
+
+    #[test]
+    fn ghost_removed_when_note_created() {
+        let mut e = corpus();
+        e.set_ghosts(vec![Ghost { target: "AI Data Engineer Workflows".into(), refs: 2 }]);
+        assert!(e.search("ai data engineer", &opts()).hits.iter().any(|h| h.is_ghost));
+        e.upsert("AI Data Engineer Workflows.md", 0.0, "");
+        let r = e.search("ai data engineer", &opts());
+        assert!(!r.hits.iter().any(|h| h.is_ghost));
+        assert!(r.hits.iter().any(|h| h.title == "AI Data Engineer Workflows"));
+        // Resolved by path (folder note) as well.
+        e.set_ghosts(vec![Ghost { target: "Projects/Roadmap Q3".into(), refs: 1 }]);
+        assert!(e.search("roadmap", &opts()).hits.iter().any(|h| h.is_ghost));
+        e.upsert("Projects/Roadmap Q3.md", 0.0, "");
+        assert!(!e.search("roadmap", &opts()).hits.iter().any(|h| h.is_ghost));
     }
 
     #[test]
