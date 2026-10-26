@@ -1,4 +1,7 @@
 //! wasm-bindgen wrapper over `ff10k_core::Engine`. Structured data crosses the boundary as JSON strings.
+//!
+//! Error convention: methods returning `Result` throw a plain string; `search` returns
+//! `{"error": ...}` JSON because it must always return a String.
 
 use ff10k_core::engine::Engine;
 use ff10k_core::rank::{Config, Ghost, SearchOptions};
@@ -52,16 +55,13 @@ impl WasmEngine {
         self.inner.upsert(path, mtime, text);
     }
 
-    /// `[{path, mtime, text}]`; returns the number of docs applied (0 on invalid JSON).
-    pub fn upsert_batch(&mut self, json: &str) -> u32 {
-        let docs: Vec<Doc> = match serde_json::from_str(json) {
-            Ok(d) => d,
-            Err(_) => return 0,
-        };
+    /// `[{path, mtime, text}]`; returns the number of docs applied; throws on invalid JSON.
+    pub fn upsert_batch(&mut self, json: &str) -> Result<u32, JsValue> {
+        let docs: Vec<Doc> = serde_json::from_str(json).map_err(js_err)?;
         for d in &docs {
             self.inner.upsert(&d.path, d.mtime, &d.text);
         }
-        docs.len() as u32
+        Ok(docs.len() as u32)
     }
 
     pub fn remove(&mut self, path: &str) -> bool {
@@ -88,10 +88,10 @@ impl WasmEngine {
         }
     }
 
-    pub fn set_access(&mut self, path: &str, ts_json: &str) {
-        if let Ok(ts) = serde_json::from_str::<Vec<f64>>(ts_json) {
-            self.inner.set_access(path, ts);
-        }
+    pub fn set_access(&mut self, path: &str, ts_json: &str) -> Result<(), JsValue> {
+        let ts: Vec<f64> = serde_json::from_str(ts_json).map_err(js_err)?;
+        self.inner.set_access(path, ts);
+        Ok(())
     }
 
     pub fn record_access(&mut self, path: &str, now: f64) {
@@ -102,10 +102,10 @@ impl WasmEngine {
         self.inner.record_query_open(q, path);
     }
 
-    pub fn set_ghosts(&mut self, json: &str) {
-        if let Ok(g) = serde_json::from_str::<Vec<Ghost>>(json) {
-            self.inner.set_ghosts(g);
-        }
+    pub fn set_ghosts(&mut self, json: &str) -> Result<(), JsValue> {
+        let g: Vec<Ghost> = serde_json::from_str(json).map_err(js_err)?;
+        self.inner.set_ghosts(g);
+        Ok(())
     }
 
     pub fn similar(&self, path: &str, limit: u32, min_score: f32) -> String {
@@ -120,7 +120,7 @@ impl WasmEngine {
         let paths: Vec<String> = serde_json::from_str(paths_json).map_err(js_err)?;
         self.inner
             .set_vectors(dims as usize, paths, data.to_vec())
-            .map_err(|e| js_err(to_json(&e)))
+            .map_err(|e| js_err(format!("{e:?}")))
     }
 
     pub fn clear_vectors(&mut self) {
