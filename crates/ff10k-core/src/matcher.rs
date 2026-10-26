@@ -233,17 +233,21 @@ fn typo_budget(len: usize, fuzzy: FuzzyLevel) -> Option<u16> {
 ///
 /// Allowed kinds by the char length of `term.parts[0]`: ≤ 3 → Exact (plus Prefix when
 /// `multi_term`); 4–5 → Exact|Prefix; ≥ 6 → Exact|Prefix|Fuzzy. Quality: Exact 1.0, Prefix
-/// `term_len / token_len`, Fuzzy `0.9 × score / self_score`.
+/// `term_len / token_len`, Fuzzy `0.9 × score / self_score`. Compound parts apply the short-term
+/// rule on their own length. Fuzzy hits need `score / self_score ≥ 0.5` and a matched span of at
+/// most `needle_chars + 2 × max_typos + 1` chars.
 pub fn match_term(index: &Index, term: &Term, multi_term: bool, fuzzy: FuzzyLevel) -> Vec<TermHit> {
     let Some(full) = term.parts.first() else { return Vec::new() };
     let len = full.chars().count();
-    let allow_prefix = len >= 4 || multi_term;
+    // Short-term rule, applied to each part on its own length.
+    let allow_prefix = |p: &str| multi_term || p.chars().count() >= 4;
+    let needle_chars = term.norm.chars().count();
 
     let mut matcher = typo_budget(len, fuzzy).map(|typos| {
         let config = Config { max_typos: Some(typos), sort: SortStrategy::Unsorted, ..Default::default() };
         let mut m = Matcher::new(term.norm.as_str(), &config);
         let self_score = m.match_list(&[term.norm.as_str()]).first().map_or(0, |x| x.score);
-        (m, self_score as f32)
+        (m, self_score as f32, typos)
     });
     if matcher.as_ref().is_some_and(|m| m.1 <= 0.0) {
         matcher = None;
@@ -252,14 +256,14 @@ pub fn match_term(index: &Index, term: &Term, multi_term: bool, fuzzy: FuzzyLeve
     let mut out = Vec::new();
     for field in FIELDS {
         let mut hits: HashMap<DocId, Acc> = HashMap::new();
-        match_token(index, field, full, allow_prefix, &mut hits);
+        match_token(index, field, full, allow_prefix(full), &mut hits);
 
         if term.parts.len() > 1 {
             let mut parts: Vec<HashMap<DocId, Acc>> = term.parts[1..]
                 .iter()
                 .map(|p| {
                     let mut m = HashMap::new();
-                    match_token(index, field, p, allow_prefix, &mut m);
+                    match_token(index, field, p, allow_prefix(p), &mut m);
                     m
                 })
                 .collect();
@@ -289,7 +293,8 @@ pub fn match_term(index: &Index, term: &Term, multi_term: bool, fuzzy: FuzzyLeve
             if fuzzy_here.is_some() { hits.keys().copied().collect() } else { HashSet::new() };
         out.extend(hits.into_iter().map(|(doc, acc)| finish(index, field, doc, acc)));
 
-        if let Some((m, self_score)) = fuzzy_here {
+        if let Some((m, self_score, typos)) = fuzzy_here {
+            let max_span = needle_chars + 2 * *typos as usize + 1;
             let strings = index.field_strings(field);
             let hay: Vec<&str> = strings.iter().map(|e| e.2.as_str()).collect();
             let mut best: HashMap<DocId, TermHit> = HashMap::new();
@@ -298,7 +303,17 @@ pub fn match_term(index: &Index, term: &Term, multi_term: bool, fuzzy: FuzzyLeve
                 if r.score == 0 || r.exact || matched.contains(doc) {
                     continue;
                 }
-                let quality = 0.9 * r.score as f32 / *self_score;
+                // Reject scattered subsequences: a weak score or a match spread too wide.
+                let ratio = r.score as f32 / *self_score;
+                let char_ranges = byte_ranges(s, &r.indices);
+                let span = match (char_ranges.first(), char_ranges.last()) {
+                    (Some(a), Some(b)) => s[a.0 as usize..b.1 as usize].chars().count(),
+                    _ => continue,
+                };
+                if ratio < 0.5 || span > max_span {
+                    continue;
+                }
+                let quality = 0.9 * ratio;
                 if best.get(doc).is_some_and(|h| h.quality >= quality) {
                     continue;
                 }
@@ -311,7 +326,7 @@ pub fn match_term(index: &Index, term: &Term, multi_term: bool, fuzzy: FuzzyLeve
                         quality,
                         positions: SmallVec::new(),
                         heading_idx: is_heading(field).then_some(*hidx),
-                        char_ranges: byte_ranges(s, &r.indices),
+                        char_ranges,
                     },
                 );
             }
@@ -440,6 +455,38 @@ mod tests {
         assert_eq!(h.positions.as_slice(), &[2, 3]);
         // No single field of one doc holds both "data" and "airflow".
         assert!(match_term(&ix, &term("data-airflow"), false, NORMAL).is_empty());
+    }
+
+    fn ix_of(docs: &[(&str, &str)]) -> Index {
+        let mut ix = Index::new();
+        for (path, text) in docs {
+            ix.upsert(extract(path, text, 0.0));
+        }
+        ix
+    }
+
+    #[test]
+    fn compound_short_part_is_exact_only() {
+        let ix = ix_of(&[("General Airflow.md", ""), ("Airflow Basics.md", "")]);
+        assert!(match_term(&ix, &term("gen-ai"), false, NORMAL).is_empty());
+        let multi = Query::parse("gen-ai x").terms.remove(0);
+        let hits = match_term(&ix, &multi, true, NORMAL);
+        assert_eq!(titles(&ix, &hits), ["General Airflow"]);
+    }
+
+    #[test]
+    fn fuzzy_rejects_scattered_subsequence() {
+        let ix = ix_of(&[("AI rules for low budgets.md", ""), ("Gene editing in nature.md", "")]);
+        assert!(match_term(&ix, &term("airflow"), false, NORMAL).is_empty());
+        assert!(match_term(&ix, &term("engine"), false, NORMAL).is_empty());
+    }
+
+    #[test]
+    fn fuzzy_keeps_real_typo() {
+        let ix = ix_of(&[("Obsidian Troubleshooting.md", "")]);
+        let hits = match_term(&ix, &term("troubelshoot"), false, NORMAL);
+        assert_eq!(hits.len(), 1);
+        assert_eq!((hits[0].field, hits[0].kind), (Field::Title, MatchKind::Fuzzy));
     }
 
     #[test]
