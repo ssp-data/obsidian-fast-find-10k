@@ -9,20 +9,6 @@ import type { EngineClient } from './engine-client';
 export const MODAL_OPEN_WINDOW_MS = 500;
 const MAX_TIMESTAMPS = 128;
 
-/** Combo key: lower-cased, diacritics folded, whitespace collapsed. Matches the engine's
- * `Query::normalized` for plain word queries (not for quotes, `-x`, `#tag`, `path:` filters). */
-export function normalizeQuery(q: string): string {
-	return q
-		.normalize('NFKC')
-		.toLowerCase()
-		.normalize('NFD')
-		.replace(/\p{Mn}/gu, '')
-		.normalize('NFC')
-		.split(/\s+/)
-		.filter(Boolean)
-		.join(' ');
-}
-
 export class FrecencyTracker {
 	/** Access timestamps (seconds, ascending) per path, mirrored from the cache. */
 	private readonly access = new Map<string, number[]>();
@@ -32,18 +18,19 @@ export class FrecencyTracker {
 
 	constructor(
 		private readonly app: App,
-		private readonly engine: Pick<EngineClient, 'setAccess' | 'track'>,
-		private readonly cache: Pick<NoteCache, 'getAccess' | 'putAccess' | 'bumpQuery' | 'clearAccess'>,
+		private readonly engine: Pick<EngineClient, 'setAccess' | 'setCombos' | 'clearFrecency' | 'normalizeQuery' | 'track'>,
+		private readonly cache: Pick<NoteCache, 'getAccess' | 'getQueries' | 'putAccess' | 'bumpQuery' | 'clearAccess'>,
 		private readonly isExcluded: (path: string) => boolean,
 		private readonly now: () => number = Date.now,
 	) {}
 
-	/** Loads the access store into the engine, then starts listening to `file-open`. */
+	/** Loads the access and combo stores into the engine, then starts listening to `file-open`. */
 	async start(): Promise<void> {
-		const entries = await this.cache.getAccess();
+		const [entries, combos] = await Promise.all([this.cache.getAccess(), this.cache.getQueries()]);
 		if (this.disposed) return;
 		for (const e of entries) this.access.set(e.path, e.ts);
 		this.engine.setAccess(entries);
+		this.engine.setCombos(combos);
 		this.ref = this.app.workspace.on('file-open', (file) => {
 			if (file instanceof TFile) void this.recordFileOpen(file.path).catch((e: unknown) => console.error('[ff10k] frecency', e));
 		});
@@ -63,19 +50,19 @@ export class FrecencyTracker {
 		await this.record(path);
 	}
 
-	/** Called by the modal before it opens `path`: one access plus one combo count for the query. */
+	/** Called by the modal before it opens `path`: one access plus one combo count for the query
+	 * (keyed by the engine's normalized form; none when that is empty or the engine is gone). */
 	async noteModalOpen(path: string, rawQuery: string): Promise<void> {
 		this.lastModalOpen = { path, at: this.now() };
-		const q = normalizeQuery(rawQuery);
+		const q = rawQuery.trim() ? await this.engine.normalizeQuery(rawQuery).catch(() => '') : '';
 		await this.record(path, q || undefined);
 		if (q) await this.cache.bumpQuery(q, path);
 	}
 
-	/** Forgets every access and combo count (engine combos stay until the next reload). */
+	/** Forgets every access and combo count, in the engine and in the cache. */
 	async clear(): Promise<void> {
-		const paths = [...this.access.keys()];
 		this.access.clear();
-		this.engine.setAccess(paths.map((path) => ({ path, ts: [] })));
+		this.engine.clearFrecency();
 		await this.cache.clearAccess();
 	}
 

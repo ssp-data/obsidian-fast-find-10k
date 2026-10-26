@@ -4,6 +4,7 @@
 //! `{"error": ...}` JSON because it must always return a String.
 
 use ff10k_core::engine::Engine;
+use ff10k_core::query::Query;
 use ff10k_core::rank::{Config, Ghost, SearchOptions};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -11,6 +12,12 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
+}
+
+/// The combo key of a raw query: `Query::parse(raw).normalized` (terms only, no filters).
+#[wasm_bindgen]
+pub fn normalize_query(raw: &str) -> String {
+    Query::parse(raw).normalized
 }
 
 #[derive(Deserialize)]
@@ -100,6 +107,10 @@ impl WasmEngine {
 
     pub fn record_query_open(&mut self, q: &str, path: &str) {
         self.inner.record_query_open(q, path);
+    }
+
+    pub fn clear_frecency(&mut self) {
+        self.inner.clear_frecency();
     }
 
     pub fn set_ghosts(&mut self, json: &str) -> Result<(), JsValue> {

@@ -78,6 +78,12 @@ impl Engine {
         }
     }
 
+    /// Forgets every access timestamp and combo count ("Clear frecency").
+    pub fn clear_frecency(&mut self) {
+        self.access.clear();
+        self.combos.clear();
+    }
+
     /// Counts one open of `path` from the query with this normalized form (the combo key).
     pub fn record_query_open(&mut self, normalized_query: &str, path: &str) {
         *self.combos.entry(normalized_query.to_string()).or_default().entry(path.to_string()).or_insert(0) += 1;
@@ -472,6 +478,26 @@ mod tests {
         assert_eq!(r.hits[0].path, "x/Data Engineering.md");
         let combo = r.hits[0].debug.as_ref().unwrap().components.iter().find(|c| c.0 == "combo").unwrap().1;
         assert_eq!(combo, 1000.0);
+    }
+
+    #[test]
+    fn clear_frecency_drops_access_and_combos() {
+        let mut e = Engine::new();
+        e.upsert("de.md", 0.0, "");
+        e.upsert("x/Data Engineering.md", 0.0, "---\naliases: [DE]\n---\n");
+        let key = Query::parse("de").normalized;
+        for _ in 0..3 {
+            e.record_query_open(&key, "x/Data Engineering.md");
+        }
+        e.record_access("de.md", now_opts().now_secs);
+        e.clear_frecency();
+        let r = e.search("de", &SearchOptions { debug: true, ..now_opts() });
+        assert_eq!(r.hits[0].path, "de.md");
+        for h in &r.hits {
+            let c = &h.debug.as_ref().unwrap().components;
+            assert_eq!(c.iter().find(|c| c.0 == "combo").unwrap().1, 0.0);
+            assert_eq!(c.iter().find(|c| c.0 == "frecency").unwrap().1, 0.0);
+        }
     }
 
     #[test]

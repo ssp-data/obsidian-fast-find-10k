@@ -251,3 +251,18 @@ Observed on the test vault, 2026-10-26 (6,097 ghost targets → capped to 5,000;
 
 All notes and folders created for these checks were deleted afterwards and the new-note location
 restored (`root`).
+
+Review fixes (task 19), 2026-10-26:
+
+| Check | Result |
+|---|---|
+| plugin reload, `why you need an orchestrator` | `combo 1000.00` (the `queries` store is loaded into the engine on start) |
+| ghost `ff10k-g/sub/Ghost Folder Note`, Shift+Enter | `ff10k-g/sub/Ghost Folder Note.md` created (folders made), the link resolves |
+| ghost `ff10kdotnote2.md` | `ff10kdotnote2.md` (no `.md.md`) |
+| ghost `../evil` | Notice `cannot create a note for the link "../evil"`, nothing created |
+| Alt+Enter, active note in reading mode | Notice `switch to editing mode to insert a link`, modal stays, file unchanged |
+| Alt+Enter, same note in editing mode | `[[Showcase]]` inserted at the cursor |
+| `frecency.clear()` | 0 access, 0 queries rows; debug `frecency 0.00 · combo 0.00` |
+
+Ghosts set by hand for a check (`engine.setGhosts([...])`) last until the next metadata
+`resolved` refresh. A test ghost with 1 ref can fall outside the 5,000 cap on this vault.

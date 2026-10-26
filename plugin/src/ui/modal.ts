@@ -1,7 +1,7 @@
 // The search modal: query input, tiered results, data-driven keys, open/create/link actions.
 
 import { type App, Modal, type Modifier, Notice, Platform, Scope } from 'obsidian';
-import { createNote, insertLink, open, type OpenWhere, sanitizeName } from '../actions';
+import { createGhostNote, createNote, ghostNotePath, insertLink, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
 import type { Hit, Mode, SearchResponse } from '../protocol';
 import type { Keymap } from '../settings';
@@ -71,8 +71,9 @@ export class FastFindModal extends Modal {
 	private paintFrame = 0;
 	/** Pushed while keyboard focus is in the similar panel. */
 	private similarScope: Scope | null = null;
-	/** Create guard ("Already have?") in progress for this note name. */
-	private guard: { name: string } | null = null;
+	/** Create guard ("Already have?") in progress: the note name, and the link target when the
+	 * note is created for a ghost (its path comes from the target). */
+	private guard: { name: string; ghost: string | null } | null = null;
 	/** Bumped per create request; a slower guard lookup that lost the race is dropped. */
 	private createSeq = 0;
 
@@ -376,24 +377,25 @@ export class FastFindModal extends Modal {
 		if (file) this.close();
 	}
 
-	/** Shift+Enter: name = the selected ghost's target, else the query. With the guard on and
+	/** Shift+Enter: the selected ghost's link target, else the query. With the guard on and
 	 * existing notes close to the name, shows them first ("Already have?"); else creates now. */
 	private async startCreate(where: OpenWhere): Promise<void> {
 		if (this.guard) return this.confirmCreate(where);
 		const hit = this.state.hits[this.state.selected];
 		const query = this.inputEl.value;
-		const name = sanitizeName(hit?.isGhost ? hit.title : query);
+		const ghost = hit?.isGhost ? hit.title : null;
+		const name = ghost === null ? sanitizeName(query) : (ghostNotePath(ghost)?.split('/').pop()?.slice(0, -'.md'.length) ?? '');
 		if (!name) {
-			new Notice('Fast Find 10K: type a name to create a note');
+			new Notice(ghost === null ? 'Fast Find 10K: type a name to create a note' : `Fast Find 10K: cannot create a note for the link "${ghost}"`);
 			return;
 		}
 		this.leaveSimilar();
 		const seq = ++this.createSeq;
 		const candidates = this.plugin.settings.createGuard ? await this.guardCandidates(name) : [];
 		if (candidates === null || this.closed || seq !== this.createSeq || this.inputEl.value !== query) return;
-		if (candidates.length === 0) return this.create(name, where);
+		if (candidates.length === 0) return this.create(name, ghost, where);
 		cancelAnimationFrame(this.paintFrame);
-		this.guard = { name };
+		this.guard = { name, ghost };
 		this.modalEl.removeClass('ff10k-preview-hidden');
 		this.similar.showGuard(candidates);
 		this.enterSimilar(this.plugin.settings.keymap, true);
@@ -416,11 +418,11 @@ export class FastFindModal extends Modal {
 	}
 
 	private async confirmCreate(where: OpenWhere): Promise<void> {
-		if (this.guard) await this.create(this.guard.name, where);
+		if (this.guard) await this.create(this.guard.name, this.guard.ghost, where);
 	}
 
-	private async create(name: string, where: OpenWhere): Promise<void> {
-		const file = await createNote(this.app, name, where);
+	private async create(name: string, ghost: string | null, where: OpenWhere): Promise<void> {
+		const file = ghost === null ? await createNote(this.app, name, where) : await createGhostNote(this.app, ghost, where);
 		if (file) this.close();
 	}
 

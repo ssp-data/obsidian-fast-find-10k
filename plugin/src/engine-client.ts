@@ -2,6 +2,7 @@
 
 import type {
 	AccessEntry,
+	ComboEntry,
 	DocInput,
 	EngineConfig,
 	Ghost,
@@ -85,6 +86,21 @@ export class EngineClient {
 
 	setAccess(entries: AccessEntry[]): void {
 		this.send({ t: 'access', entries });
+	}
+
+	setCombos(entries: ComboEntry[]): void {
+		this.send({ t: 'combos', entries });
+	}
+
+	/** Drops every access timestamp and combo count in the engine. */
+	clearFrecency(): void {
+		this.send({ t: 'clearFrecency' });
+	}
+
+	/** The engine's combo key for a raw query (`Query::parse(q).normalized`). */
+	normalizeQuery(query: string): Promise<string> {
+		const id = this.nextId++;
+		return this.request<string>(id, { t: 'normalizeQuery', id, query });
 	}
 
 	track(path: string, now: number, query?: string): void {
@@ -178,6 +194,8 @@ export class EngineClient {
 				return this.resolve(m.id, m.text);
 			case 'stats':
 				return this.resolve(m.id, m.docs);
+			case 'normalized':
+				return this.resolve(m.id, m.query);
 			case 'vectorsSet':
 				if (!m.ok) console.error('Fast Find 10K: set_vectors failed', m.error);
 				this.vectorWaiters.shift()?.(m.ok);

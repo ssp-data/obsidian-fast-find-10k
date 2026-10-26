@@ -1,4 +1,4 @@
-import init, { WasmEngine } from '../crates/ff10k-wasm/pkg/ff10k_wasm.js';
+import init, { WasmEngine, normalize_query } from '../crates/ff10k-wasm/pkg/ff10k_wasm.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
@@ -30,4 +30,8 @@ assert.throws(() => e.set_ghosts('not json'));
 assert.throws(() => e.set_access('a', 'not json'));
 assert.throws(() => e.upsert_batch('not json'));
 assert.equal(e.upsert_batch('[{"path":"b.md","mtime":1,"text":"z"}]'), 1);
+assert.equal(normalize_query('  Café   ÖLMÜHLE  -x #tag '), 'cafe olmuhle');
+e.record_query_open('obsidian trouble', 'a/Obsidian Setup.md');
+e.record_access('a/Obsidian Setup.md', 100);
+e.clear_frecency();
 console.log('smoke ok');

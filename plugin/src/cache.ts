@@ -150,6 +150,15 @@ export class NoteCache {
 		return req(this.db.transaction(ACCESS).objectStore(ACCESS).getAll()) as Promise<AccessRow[]>;
 	}
 
+	/** Every stored combo count; keys are `query|path` (a path never contains `|`). */
+	async getQueries(): Promise<{ query: string; path: string; count: number }[]> {
+		const rows = (await req(this.db.transaction(QUERIES).objectStore(QUERIES).getAll())) as QueryRow[];
+		return rows.map((r) => {
+			const cut = r.key.lastIndexOf('|');
+			return { query: r.key.slice(0, cut), path: r.key.slice(cut + 1), count: r.count };
+		});
+	}
+
 	putAccess(path: string, ts: number[]): Promise<void> {
 		const tx = this.db.transaction(ACCESS, 'readwrite');
 		tx.objectStore(ACCESS).put({ path, ts });

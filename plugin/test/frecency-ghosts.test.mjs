@@ -8,7 +8,7 @@ const obsidianStub = {
 	setup(build) {
 		build.onResolve({ filter: /^obsidian$/ }, () => ({ path: 'obsidian', namespace: 'stub' }));
 		build.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-			contents: 'export class Notice {} export class MarkdownView {} export class TFile {} export const normalizePath = (p) => p;',
+			contents: 'export class Notice { constructor(m) { globalThis.__notices?.push(m); } } export class MarkdownView {} export class TFile {} export const normalizePath = (p) => p;',
 			loader: 'js',
 		}));
 	},
@@ -19,9 +19,9 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { sanitizeName } = await load('src/actions.ts');
+const { sanitizeName, ghostNotePath, insertLink } = await load('src/actions.ts');
 const { collectGhosts, throttle } = await load('src/unresolved.ts');
-const { FrecencyTracker, normalizeQuery } = await load('src/frecency.ts');
+const { FrecencyTracker } = await load('src/frecency.ts');
 
 test('sanitizeName strips forbidden characters, collapses whitespace, trims', () => {
 	assert.equal(sanitizeName('  AI Data Engineer Workflows  '), 'AI Data Engineer Workflows');
@@ -32,6 +32,38 @@ test('sanitizeName strips forbidden characters, collapses whitespace, trims', ()
 	assert.equal(sanitizeName(''), '');
 	assert.equal(sanitizeName('x'.repeat(300)).length, 200);
 	assert.equal(sanitizeName('Café Ölmühle (draft) #1'), 'Café Ölmühle (draft) #1');
+	assert.equal(sanitizeName('. .'), '');
+	assert.equal(sanitizeName('..'), '');
+	assert.equal(sanitizeName('.notes'), 'notes');
+	assert.equal(sanitizeName(' ...hidden. '), 'hidden');
+});
+
+test('ghostNotePath keeps folders, strips .md, refuses traversal', () => {
+	assert.equal(ghostNotePath('folder/Note'), 'folder/Note.md');
+	assert.equal(ghostNotePath('a/b c/Plan: v2?'), 'a/b c/Plan v2.md');
+	assert.equal(ghostNotePath('Note.md'), 'Note.md');
+	assert.equal(ghostNotePath('Note'), 'Note.md');
+	assert.equal(ghostNotePath('/folder/Note'), 'folder/Note.md');
+	assert.equal(ghostNotePath('../x'), null);
+	assert.equal(ghostNotePath('a/./x'), null);
+	assert.equal(ghostNotePath('a//x'), null);
+	assert.equal(ghostNotePath('a/.hidden/x'), 'a/hidden/x.md');
+	assert.equal(ghostNotePath('folder/'), null);
+	assert.equal(ghostNotePath(''), null);
+});
+
+test('insertLink refuses a Markdown view in reading mode', () => {
+	globalThis.__notices = [];
+	let inserted = null;
+	const view = { file: { path: 'b.md' }, getMode: () => 'preview', editor: { replaceSelection: (t) => (inserted = t) } };
+	const app = { workspace: { getActiveViewOfType: () => view } };
+	const hit = { path: 'a.md', title: 'Ghost', isGhost: true, badge: 'Title', heading: null };
+	assert.equal(insertLink(app, hit), false);
+	assert.equal(inserted, null);
+	assert.deepEqual(globalThis.__notices, ['Fast Find 10K: switch to editing mode to insert a link']);
+	view.getMode = () => 'source';
+	assert.equal(insertLink(app, hit), true);
+	assert.equal(inserted, '[[Ghost]]');
 });
 
 test('collectGhosts strips #heading and |alias and counts distinct source files', () => {
@@ -95,14 +127,19 @@ test('throttle runs once per window, trailing', async () => {
 	assert.equal(n, 2);
 });
 
-function fakeTracker(access = []) {
-	const calls = { track: [], put: [], bump: [], set: [], cleared: 0 };
+function fakeTracker(access = [], queries = []) {
+	const calls = { track: [], put: [], bump: [], set: [], combos: [], cleared: 0, engineCleared: 0 };
 	const engine = {
 		setAccess: (e) => calls.set.push(e),
+		setCombos: (e) => calls.combos.push(e),
+		clearFrecency: () => calls.engineCleared++,
+		// stand-in for the engine's Query::parse(..).normalized
+		normalizeQuery: async (q) => q.toLowerCase().split(/\s+/).filter(Boolean).join(' '),
 		track: (path, now, query) => calls.track.push(query === undefined ? [path, now] : [path, now, query]),
 	};
 	const cache = {
 		getAccess: async () => access,
+		getQueries: async () => queries,
 		putAccess: async (path, ts) => calls.put.push([path, ts]),
 		bumpQuery: async (q, path) => (calls.bump.push([q, path]), 1),
 		clearAccess: async () => calls.cleared++,
@@ -113,10 +150,11 @@ function fakeTracker(access = []) {
 	return { tracker, calls, clock };
 }
 
-test('start loads the access store into the engine', async () => {
-	const { tracker, calls } = fakeTracker([{ path: 'a.md', ts: [1, 2] }]);
+test('start loads the access and combo stores into the engine', async () => {
+	const { tracker, calls } = fakeTracker([{ path: 'a.md', ts: [1, 2] }], [{ query: 'de', path: 'a.md', count: 4 }]);
 	await tracker.start();
 	assert.deepEqual(calls.set, [[{ path: 'a.md', ts: [1, 2] }]]);
+	assert.deepEqual(calls.combos, [[{ query: 'de', path: 'a.md', count: 4 }]]);
 });
 
 test('a file-open within 500 ms of a modal open of the same note is not counted twice', async () => {
@@ -155,19 +193,21 @@ test('excluded paths are not tracked; history keeps the newest 128', async () =>
 	assert.equal(ts.at(-1), clock.ms / 1000);
 });
 
-test('clear wipes the store and empties every tracked path in the engine', async () => {
+test('clear wipes the stores and sends clearFrecency to the engine', async () => {
 	const { tracker, calls } = fakeTracker([{ path: 'a.md', ts: [1] }]);
 	await tracker.start();
 	await tracker.recordFileOpen('b.md');
 	await tracker.clear();
 	assert.equal(calls.cleared, 1);
-	assert.deepEqual(calls.set.at(-1).sort((x, y) => x.path.localeCompare(y.path)), [
-		{ path: 'a.md', ts: [] },
-		{ path: 'b.md', ts: [] },
-	]);
+	assert.equal(calls.engineCleared, 1);
+	await tracker.recordFileOpen('a.md');
+	assert.deepEqual(calls.put.at(-1), ['a.md', [1000]]); // history starts over
 });
 
-test('normalizeQuery lower-cases, folds diacritics and collapses whitespace', () => {
-	assert.equal(normalizeQuery('  Café   Ölmühle\tAI '), 'cafe olmuhle ai');
-	assert.equal(normalizeQuery('   '), '');
+test('a modal open whose query normalizes to nothing records no combo', async () => {
+	const { tracker, calls } = fakeTracker();
+	await tracker.start();
+	await tracker.noteModalOpen('a.md', '   ');
+	assert.deepEqual(calls.track, [['a.md', 1000]]);
+	assert.deepEqual(calls.bump, []);
 });

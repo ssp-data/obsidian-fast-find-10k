@@ -113,6 +113,13 @@ export interface AccessEntry {
 	ts: number[];
 }
 
+/** `count` opens of `path` from the query whose normalized form is `query`. */
+export interface ComboEntry {
+	query: string;
+	path: string;
+	count: number;
+}
+
 export type Req =
 	| { t: 'init'; id: number; config: EngineConfig }
 	| { t: 'config'; config: EngineConfig }
@@ -125,6 +132,9 @@ export type Req =
 	| { t: 'ghosts'; ghosts: Ghost[] }
 	| { t: 'access'; entries: AccessEntry[] }
 	| { t: 'track'; path: string; now: number; query?: string }
+	| { t: 'combos'; entries: ComboEntry[] }
+	| { t: 'clearFrecency' }
+	| { t: 'normalizeQuery'; id: number; query: string }
 	| { t: 'vectors'; dims: number; paths: string[]; data: Float32Array }
 	| { t: 'clearVectors' }
 	| { t: 'docText'; id: number; path: string }
@@ -139,5 +149,6 @@ export type Res =
 	| { t: 'semantic'; id: number; items: SemanticHit[] }
 	| { t: 'docText'; id: number; text: string | null }
 	| { t: 'stats'; id: number; docs: number }
+	| { t: 'normalized'; id: number; query: string }
 	| { t: 'vectorsSet'; ok: boolean; error?: string }
 	| { t: 'error'; id?: number; message: string };

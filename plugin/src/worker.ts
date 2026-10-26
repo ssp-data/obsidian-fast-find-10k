@@ -2,7 +2,7 @@
 // Messages are processed strictly in order on one promise chain; a search that has been
 // superseded by a newer one by the time it runs is answered as stale instead of executed.
 
-import init, { WasmEngine } from '../../crates/ff10k-wasm/pkg/ff10k_wasm.js';
+import init, { normalize_query, WasmEngine } from '../../crates/ff10k-wasm/pkg/ff10k_wasm.js';
 import wasmBytes from '../../crates/ff10k-wasm/pkg/ff10k_wasm_bg.wasm';
 import type { Req, Res, SearchResponse } from './protocol';
 
@@ -109,6 +109,17 @@ async function handle(m: Req): Promise<void> {
 		case 'track':
 			eng().record_access(m.path, m.now);
 			if (m.query !== undefined) eng().record_query_open(m.query, m.path);
+			return;
+		case 'combos':
+			// record_query_open only counts up; the combo threshold is 3, so 5 is plenty
+			for (const c of m.entries) for (let i = 0; i < Math.min(c.count, 5); i++) eng().record_query_open(c.query, c.path);
+			return;
+		case 'clearFrecency':
+			eng().clear_frecency();
+			return;
+		case 'normalizeQuery':
+			eng(); // wasm initialized
+			post({ t: 'normalized', id: m.id, query: normalize_query(m.query) });
 			return;
 		case 'vectors':
 			try {

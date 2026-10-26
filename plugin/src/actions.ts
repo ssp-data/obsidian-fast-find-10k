@@ -29,16 +29,24 @@ export async function open(app: App, hit: Pick<Hit, 'path' | 'line' | 'heading'>
 
 const MAX_NAME = 200;
 
+/** Leading/trailing dots and whitespace: a leading dot would make a hidden (never indexed) file. */
+const stripEnds = (s: string) => s.replace(/^[\s.]+|[\s.]+$/g, '');
+
 /** File name from a query or link target: drops `\ / : * ? " < > |`, collapses whitespace,
- * trims (also trailing dots), caps at 200 chars. `''` when nothing is left. */
+ * trims (also leading and trailing dots), caps at 200 chars. `''` when nothing is left. */
 export function sanitizeName(raw: string): string {
-	return raw
-		.replace(/[\\/:*?"<>|]/g, '')
-		.replace(/\s+/g, ' ')
-		.trim()
-		.replace(/\.+$/, '')
-		.slice(0, MAX_NAME)
-		.trim();
+	const s = raw.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ');
+	return stripEnds(stripEnds(s).slice(0, MAX_NAME));
+}
+
+/** Vault path (with `.md`) for an unresolved link target, which Obsidian resolves from the vault
+ * root: each folder segment sanitized, a trailing `.md` dropped, a leading `/` ignored.
+ * Null for an empty, `.` or `..` segment (or one that sanitizes to nothing). */
+export function ghostNotePath(target: string): string | null {
+	const raw = target.trim().replace(/^\/+/, '').replace(/\.md$/i, '').split('/');
+	if (raw.some((seg) => ['', '.', '..'].includes(seg.trim()))) return null;
+	const segs = raw.map(sanitizeName);
+	return segs.some((seg) => !seg) ? null : `${segs.join('/')}.md`;
 }
 
 /** Creates `name.md` where Obsidian's "Default location for new notes" says, then opens it.
@@ -51,7 +59,35 @@ export async function createNote(app: App, name: string, where: OpenWhere): Prom
 	}
 	const folder = app.fileManager.getNewFileParent(app.workspace.getActiveFile()?.path ?? '');
 	const dir = folder.path === '/' || folder.path === '' ? '' : `${folder.path}/`;
-	const path = normalizePath(`${dir}${clean}.md`);
+	return createAt(app, normalizePath(`${dir}${clean}.md`), where);
+}
+
+/** Creates the note an unresolved link points to, so that link resolves: a target with a folder
+ * lands at that path from the vault root (missing folders created), one without goes where new
+ * notes go. Null on failure (with a Notice). */
+export async function createGhostNote(app: App, target: string, where: OpenWhere): Promise<TFile | null> {
+	const path = ghostNotePath(target);
+	if (!path) {
+		new Notice(`Fast Find 10K: cannot create a note for the link "${target}"`);
+		return null;
+	}
+	const slash = path.lastIndexOf('/');
+	if (slash < 0) return createNote(app, path.slice(0, -'.md'.length), where);
+	const parts = path.slice(0, slash).split('/');
+	try {
+		for (let i = 1; i <= parts.length; i++) {
+			const dir = parts.slice(0, i).join('/');
+			if (!app.vault.getFolderByPath(dir)) await app.vault.createFolder(dir);
+		}
+	} catch (e) {
+		new Notice(`Fast Find 10K: could not create the folder for ${path} (${String(e)})`);
+		return null;
+	}
+	return createAt(app, normalizePath(path), where);
+}
+
+/** Creates an empty note at `path` (or finds the existing one) and opens it. */
+async function createAt(app: App, path: string, where: OpenWhere): Promise<TFile | null> {
 	if (app.vault.getAbstractFileByPath(path) instanceof TFile) {
 		new Notice(`Fast Find 10K: ${path} already exists, opening`);
 	} else {
@@ -67,11 +103,15 @@ export async function createNote(app: App, name: string, where: OpenWhere): Prom
 
 /** Inserts a link to `hit` at the active editor's cursor (replacing the selection): the user's
  * link format via `generateMarkdownLink`, `#Heading` for heading hits, `[[target]]` for ghosts.
- * False (with a Notice) when there is no Markdown editor. */
+ * False (with a Notice) when there is no Markdown view in editing mode. */
 export function insertLink(app: App, hit: Pick<Hit, 'path' | 'title' | 'isGhost' | 'badge' | 'heading'>): boolean {
 	const view = app.workspace.getActiveViewOfType(MarkdownView);
 	if (!view?.file) {
 		new Notice('Fast Find 10K: open a note in an editor to insert a link');
+		return false;
+	}
+	if (view.getMode() !== 'source') {
+		new Notice('Fast Find 10K: switch to editing mode to insert a link');
 		return false;
 	}
 	let link: string;
