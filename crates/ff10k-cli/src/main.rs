@@ -4,7 +4,7 @@ mod smart_env;
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
 use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
@@ -103,22 +103,30 @@ fn attach_vectors(engine: &mut Engine, vault: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Global allocator wrapper counting live heap bytes, for `ff10k profile`.
+/// Global allocator wrapper counting live heap bytes while `COUNTING` is on (`ff10k profile`
+/// only; every other command pays one relaxed load per allocation).
 struct Counting;
 
+static COUNTING: AtomicBool = AtomicBool::new(false);
 static LIVE_BYTES: AtomicUsize = AtomicUsize::new(0);
+
+fn count(delta: usize) {
+    if COUNTING.load(Relaxed) {
+        LIVE_BYTES.fetch_add(delta, Relaxed);
+    }
+}
 
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
-        LIVE_BYTES.fetch_add(l.size(), Relaxed);
+        count(l.size());
         System.alloc(l)
     }
     unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
-        LIVE_BYTES.fetch_sub(l.size(), Relaxed);
+        count(l.size().wrapping_neg());
         System.dealloc(p, l)
     }
     unsafe fn realloc(&self, p: *mut u8, l: Layout, new: usize) -> *mut u8 {
-        LIVE_BYTES.fetch_add(new.wrapping_sub(l.size()), Relaxed);
+        count(new.wrapping_sub(l.size()));
         System.realloc(p, l, new)
     }
 }
@@ -226,6 +234,9 @@ fn main() -> Result<()> {
         }
         Cmd::Profile { vault } => {
             let ex = exclusion(&vault)?;
+            // Counted from here on: frees of blocks allocated earlier would go negative, but
+            // nothing allocated before this point is freed before the final reading.
+            COUNTING.store(true, Relaxed);
             let heap_before = live_mb();
             let t = Instant::now();
             let notes = read_vault_with(&vault, &*ex).with_context(|| format!("reading {}", vault.display()))?;
