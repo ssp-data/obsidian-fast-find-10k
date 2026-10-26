@@ -99,6 +99,12 @@ impl Engine {
         self.index.upsert_profiled(doc, text.to_owned(), prof);
     }
 
+    /// Drops every indexed note and the index caches at once (for a rebuild); access history,
+    /// combos, ghosts, vectors and the config stay.
+    pub fn clear(&mut self) {
+        self.index = Index::new();
+    }
+
     pub fn remove(&mut self, path: &str) -> bool {
         self.index.remove(path).is_some()
     }
@@ -678,6 +684,23 @@ mod tests {
     fn unit(deg: f32) -> [f32; 3] {
         let r = deg.to_radians();
         [r.cos(), r.sin(), 0.0]
+    }
+
+    #[test]
+    fn clear_drops_docs_keeps_frecency_combos_and_vectors() {
+        let mut e = with_vectors(&[("RW Pandas AI.md", 0.0)]);
+        e.record_access("RW Pandas AI.md", 1_000.0);
+        e.record_query_open("pandas", "RW Pandas AI.md");
+        e.clear();
+        assert_eq!(e.doc_count(), 0);
+        assert_eq!(e.doc_text("RW Pandas AI.md"), None);
+        assert!(e.search("pandas", &opts()).hits.iter().all(|h| h.is_ghost));
+        assert!(e.has_vectors());
+        assert_eq!(e.access["RW Pandas AI.md"].len(), 1);
+        assert_eq!(e.combos["pandas"]["RW Pandas AI.md"], 1);
+        // Re-indexing after a clear works like a fresh engine.
+        e.upsert("RW Pandas AI.md", 0.0, "every data engineer will need");
+        assert_eq!(e.search("pandas", &opts()).hits[0].path, "RW Pandas AI.md");
     }
 
     fn with_vectors(rows: &[(&str, f32)]) -> Engine {

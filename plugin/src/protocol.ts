@@ -125,6 +125,7 @@ export type Req =
 	| { t: 'config'; config: EngineConfig }
 	| { t: 'upsert'; docs: DocInput[] }
 	| { t: 'remove'; paths: string[] }
+	| { t: 'clear' }
 	| { t: 'rename'; old: string; new: string }
 	| { t: 'search'; id: number; query: string; mode: Mode; limit: number; debug: boolean }
 	| { t: 'similar'; id: number; path: string; limit: number; minScore: number }

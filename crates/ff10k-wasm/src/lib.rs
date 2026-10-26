@@ -71,6 +71,11 @@ impl WasmEngine {
         Ok(docs.len() as u32)
     }
 
+    /// Drops every indexed note (rebuild); frecency, combos, ghosts and vectors stay.
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+
     pub fn remove(&mut self, path: &str) -> bool {
         self.inner.remove(path)
     }

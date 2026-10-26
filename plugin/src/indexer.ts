@@ -102,7 +102,7 @@ export class Indexer {
 			} catch (e) {
 				console.error('[ff10k] clearing the note cache failed', e);
 			}
-			this.engine.remove([...this.inEngine]);
+			this.engine.clear();
 			this.inEngine.clear();
 			await this.fullRun(true);
 		});

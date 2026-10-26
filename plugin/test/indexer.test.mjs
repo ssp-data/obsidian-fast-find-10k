@@ -63,8 +63,15 @@ function harness(files, cachedRead) {
 				this.docs.add(d.path);
 			}
 		},
+		removed: 0,
+		cleared: 0,
 		remove(paths) {
+			this.removed += paths.length;
 			for (const p of paths) this.docs.delete(p);
+		},
+		clear() {
+			this.cleared++;
+			this.docs.clear();
 		},
 		stats() {
 			return Promise.resolve(this.docs.size);
@@ -134,6 +141,18 @@ test('rebuild still runs after a failed run', async () => {
 	assert.deepEqual(h.upserts.map((d) => d.path), ['a.md']);
 	assert.equal(h.ix.status.done, true);
 	assert.equal(h.ix.status.indexed, 1);
+});
+
+test('rebuild clears the engine at once instead of removing doc by doc', async () => {
+	const files = [file('a.md'), file('b.md')];
+	const h = harness(files, async (f) => `text ${f.path}`);
+	await quiet(() => h.ix.start());
+	h.engine.docs.add('stale.md');
+	await quiet(() => h.ix.rebuild());
+	assert.equal(h.engine.cleared, 1);
+	assert.equal(h.engine.removed, 0);
+	assert.deepEqual([...h.engine.docs].sort(), ['a.md', 'b.md']);
+	assert.equal(h.ix.status.indexed, 2);
 });
 
 test('a late startup read does not overwrite a fresher modify flush', async () => {

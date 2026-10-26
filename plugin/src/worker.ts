@@ -76,6 +76,9 @@ async function handle(m: Req): Promise<void> {
 		case 'remove':
 			for (const p of m.paths) eng().remove(p);
 			return;
+		case 'clear':
+			eng().clear();
+			return;
 		case 'rename':
 			eng().rename(m.old, m.new);
 			return;

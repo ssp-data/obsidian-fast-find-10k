@@ -69,6 +69,10 @@ test('worker bundle answers init, upsert, search, stale and errors', async () =>
 		const body = (await waitFor((m) => m.t === 'results' && m.id === 6)).res.hits[0];
 		assert.ok(body.excerpt, 'body hit has an excerpt');
 		assert.deepEqual(body.excerpt.ranges.map(([a, b]) => body.excerpt.text.slice(a, b)), ['scheduler']);
+
+		w.postMessage({ t: 'clear' });
+		w.postMessage({ t: 'stats', id: 7 });
+		assert.deepEqual(await waitFor((m) => m.t === 'stats' && m.id === 7), { t: 'stats', id: 7, docs: 0 });
 	} finally {
 		await w.terminate();
 	}

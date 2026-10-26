@@ -57,6 +57,11 @@ export class EngineClient {
 		this.send({ t: 'remove', paths });
 	}
 
+	/** Drops every indexed note in one call (frecency, combos, ghosts and vectors stay). */
+	clear(): void {
+		this.send({ t: 'clear' });
+	}
+
 	rename(oldPath: string, newPath: string): void {
 		this.send({ t: 'rename', old: oldPath, new: newPath });
 	}
