@@ -615,6 +615,25 @@ mod tests {
         assert!(match_term(&ix, &term("should"), false, NORMAL).is_empty());
     }
 
+    /// The matched-char rule on its own: frizbee scores `troubleshooting` against
+    /// "utxx drbleshooting" at ratio ≥ 0.65 with a span inside the limit, but only 12 of the 15
+    /// needle chars are matched (2 typos allowed → 13 needed): `r`, `o` are substituted, not typed.
+    #[test]
+    fn fuzzy_matched_char_rule_rejects_despite_ratio() {
+        let (needle, hay) = ("troubleshooting", "utxx drbleshooting");
+        let config = Config { max_typos: Some(2), sort: SortStrategy::Unsorted, ..Default::default() };
+        let mut m = Matcher::new(needle, &config);
+        let self_score = m.match_list(&[needle])[0].score as f32;
+        let r = &m.match_list_indices(&[hay])[0];
+        let (ranges, matched) = byte_ranges(hay, &r.indices);
+        let span = hay[ranges[0].0 as usize..ranges.last().unwrap().1 as usize].chars().count();
+        assert!(r.score as f32 / self_score >= MIN_FUZZY_RATIO, "{}", r.score as f32 / self_score);
+        assert!(span <= 15 + 2 * 2 + 1, "{span}");
+        assert_eq!(matched, 12);
+        let ix = ix_of(&[("Utxx Drbleshooting.md", "")]);
+        assert!(match_term(&ix, &term(needle), false, NORMAL).is_empty());
+    }
+
     #[test]
     fn fuzzy_keeps_real_typo() {
         let ix = ix_of(&[("Obsidian Troubleshooting.md", "")]);
@@ -634,4 +653,3 @@ mod tests {
         assert_eq!(keys, sorted);
     }
 }
-

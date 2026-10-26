@@ -1,11 +1,11 @@
-import { Notice, Plugin } from 'obsidian';
+import { Notice, Platform, Plugin } from 'obsidian';
 import workerSource from 'virtual:worker-source';
 import { NoteCache } from './cache';
 import { EngineClient } from './engine-client';
 import { FrecencyTracker } from './frecency';
 import { Indexer } from './indexer';
 import type { Mode } from './protocol';
-import { DEFAULT_SETTINGS, type FastFindSettings, mergeSettings, settingsToEngineConfig } from './settings';
+import { DEFAULT_SETTINGS, type FastFindSettings, mergeSettings, migrateKeymap, settingsToEngineConfig } from './settings';
 import { FastFindSettingTab } from './settings-tab';
 import { SmartConnectionsBridge } from './smart-connections-bridge';
 import { FastFindModal } from './ui/modal';
@@ -27,6 +27,7 @@ export default class FastFindPlugin extends Plugin {
 	async onload(): Promise<void> {
 		// one object for the plugin's lifetime: the bridge and the indexer keep a reference
 		this.settings = mergeSettings(await this.loadData());
+		if (migrateKeymap(this.settings.keymap, Platform.isMacOS)) await this.saveSettings();
 
 		const engine = new EngineClient(workerSource);
 		this.engine = engine;

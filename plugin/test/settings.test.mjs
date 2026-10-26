@@ -8,7 +8,7 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { mergeSettings, settingsToEngineConfig, DEFAULT_SETTINGS, DEFAULT_KEYMAP } = await load('src/settings.ts');
+const { mergeSettings, settingsToEngineConfig, migrateKeymap, DEFAULT_SETTINGS, DEFAULT_KEYMAP } = await load('src/settings.ts');
 const { parseKeySpec, validateBinding, keyLabel, conflicts } = await load('src/keys.ts');
 const { helpGroups } = await load('src/ui/help.ts');
 
@@ -102,6 +102,19 @@ test('insert link is gone: no default binding, a saved one is dropped', () => {
 test('why ranked defaults to Ctrl+R; a saved binding keeps its value', () => {
 	assert.equal(DEFAULT_KEYMAP.toggleDebug, 'Ctrl+R');
 	assert.equal(mergeSettings({ keymap: { toggleDebug: 'Ctrl+/' } }).keymap.toggleDebug, 'Ctrl+/');
+});
+
+test('keymap migration: the old why-ranked default Ctrl+/ becomes Ctrl+R once, unless Ctrl+R is taken', () => {
+	const old = mergeSettings({ keymap: { toggleDebug: 'Ctrl+/' } }).keymap;
+	assert.equal(migrateKeymap(old, false), true);
+	assert.equal(old.toggleDebug, 'Ctrl+R');
+	assert.equal(migrateKeymap(old, false), false); // already migrated
+	const taken = mergeSettings({ keymap: { toggleDebug: 'Ctrl+/', openAll: 'Ctrl+R' } }).keymap;
+	assert.equal(migrateKeymap(taken, false), false);
+	assert.equal(taken.toggleDebug, 'Ctrl+/');
+	const custom = mergeSettings({ keymap: { toggleDebug: 'Alt+D' } }).keymap;
+	assert.equal(migrateKeymap(custom, false), false);
+	assert.equal(custom.toggleDebug, 'Alt+D');
 });
 
 test('the default keymap has no clashes on either platform', () => {

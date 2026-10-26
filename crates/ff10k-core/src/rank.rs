@@ -346,7 +346,17 @@ fn phrase_hits(index: &Index, words: &[String], multi: bool) -> Vec<TermHit> {
 }
 
 fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> Vec<Unit> {
-    let n_words = query.terms.len() + query.phrases.iter().map(Vec::len).sum::<usize>();
+    let optional: Vec<bool> = {
+        let list: HashSet<String> = cfg.optional_terms.iter().map(|w| normalize(w.trim())).collect();
+        let marked: Vec<bool> = query.terms.iter().map(|t| list.contains(&t.norm)).collect();
+        // A query of only optional terms keeps them all required (behaves as without the list).
+        let all = query.phrases.is_empty() && marked.iter().all(|&m| m);
+        marked.into_iter().map(|m| m && !all).collect()
+    };
+    // Short-term rule: only required words count, since optional ones do not narrow the
+    // candidates (`ai the` keeps `ai` exact-only).
+    let required_terms = optional.iter().filter(|&&o| !o).count();
+    let n_words = required_terms + query.phrases.iter().map(Vec::len).sum::<usize>();
     let multi = n_words > 1;
     // A field weighted 0 in the settings is not searched at all (not merely scored 0).
     let keep = |h: &TermHit| (!files_only || class(h.field) == 1) && cfg.weights.get(h.field) > 0.0;
@@ -355,13 +365,6 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
     let body_kept = !files_only && cfg.weights.body > 0.0;
     let body_later = body_kept && query.terms.len() + query.phrases.len() > 1;
     let scope = if body_kept && !body_later { Scope::All } else { Scope::NoBody };
-    let optional: Vec<bool> = {
-        let list: HashSet<String> = cfg.optional_terms.iter().map(|w| normalize(w.trim())).collect();
-        let marked: Vec<bool> = query.terms.iter().map(|t| list.contains(&t.norm)).collect();
-        // A query of only optional terms keeps them all required (behaves as without the list).
-        let all = query.phrases.is_empty() && marked.iter().all(|&m| m);
-        marked.into_iter().map(|m| m && !all).collect()
-    };
     let mut units = Vec::new();
     for (t, &optional) in query.terms.iter().zip(&optional) {
         units.push(Unit {

@@ -161,6 +161,12 @@ fn matches(h: &Hit, name: &str) -> bool {
     h.title == name || h.path.ends_with(name)
 }
 
+/// Whether some indexed note answers to `name` (title or path suffix), so a negative check
+/// cannot pass because of a misspelled name.
+fn indexed(engine: &Engine, name: &str) -> bool {
+    engine.docs().any(|d| d.title == name || d.path.ends_with(name))
+}
+
 /// Runs every case of `golden` against the vault at `vault_dir`.
 ///
 /// Panics when the vault or the golden file cannot be read or parsed (it is a test harness).
@@ -194,6 +200,11 @@ fn run_case(engine: &Engine, case: &Case) -> Vec<Failure> {
     for name in &case.expect_in_top {
         if !hits.iter().take(TOP_N).any(|h| matches(h, name)) {
             out.push(fail(format!("{name:?} in top {TOP_N}")));
+        }
+    }
+    for name in case.must_not_top3.iter().chain(&case.must_not_appear) {
+        if !indexed(engine, name) {
+            out.push(fail(format!("{name:?} to exist, but no indexed note has that title or path")));
         }
     }
     for name in &case.must_not_top3 {
@@ -233,6 +244,36 @@ mod tests {
         let (engine, stats) = load_vault_with(&dir, &|p| p.starts_with("skip/")).unwrap();
         assert_eq!(engine.doc_count(), 1);
         assert_eq!(stats, VaultStats { docs: 1, bytes: 5 });
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn negative_keys_fail_on_a_name_no_note_has() {
+        let dir = std::env::temp_dir().join(format!("ff10k-neg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Airbyte Checkpointing.md"), "state").unwrap();
+        std::fs::write(dir.join("Other.md"), "airbyte").unwrap();
+        let golden = dir.join("g.toml");
+        std::fs::write(
+            &golden,
+            r#"
+[[case]]
+query = "airbyte"
+must_not_appear = ["Airbyte Checkpointng"]
+must_not_top3 = ["Airbyte Checkpointng"]
+
+[[case]]
+query = "state"
+must_not_appear = ["Other"]
+must_not_top3 = ["Other.md"]
+"#,
+        )
+        .unwrap();
+        let failures = run_golden(&dir, &golden);
+        let expected: Vec<&str> = failures.iter().map(|f| f.expected.as_str()).collect();
+        assert_eq!(expected.len(), 2, "{expected:?}");
+        assert!(expected.iter().all(|e| e.contains("no indexed note")), "{expected:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

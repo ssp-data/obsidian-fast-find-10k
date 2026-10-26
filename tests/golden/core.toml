@@ -109,10 +109,12 @@ expect_top = "Fundamentals of Data Engineering (Joe Reis, Matt Housley)"
 # "prescheduled") are rejected. None of the decoys contains "writing" or "should".
 [[case]]
 query = "ai writing"
-must_not_appear = ["Airbyte Checkpointing"]
+must_not_appear = ["Airbyte Checkpointing", "Don't use AI for everything, you stop thinking-learning AI Use"]
 
-# `i` is an optional term (default list `a an the of to in on i`): never required, scored when it hits.
+# `i` is an optional term (default list `a an the of to in on i`): never required, scored when it hits;
+# "Change Should Happen" has no `i` and still shows. It ranks first (fields 200 x title factor 0.85 =
+# 170 vs 300 x floor 0.5 = 150: four unmatched title words), so no expect_top here (task 23 review).
 [[case]]
 query = "should i change"
-expect_top = "Should I Change My Writing because of AI"
+expect_in_top = ["Should I Change My Writing because of AI", "Change Should Happen"]
 must_not_appear = ["Social Media Prescheduled Long Format"]

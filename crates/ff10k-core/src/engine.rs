@@ -139,6 +139,12 @@ impl Engine {
         renamed
     }
 
+    /// Every indexed note (for the golden runner's name checks).
+    #[cfg(feature = "golden")]
+    pub(crate) fn docs(&self) -> impl Iterator<Item = &crate::doc::Doc> + '_ {
+        self.index.ids().filter_map(|id| self.index.get(id))
+    }
+
     pub fn doc_count(&self) -> usize {
         self.index.len()
     }
@@ -931,6 +937,18 @@ mod tests {
         let terms = |h: &Hit| h.debug.as_ref().unwrap().per_term.iter().map(|t| t.0.clone()).collect::<Vec<_>>();
         assert_eq!(terms(with), ["should", "i", "change"]);
         assert_eq!(terms(without), ["should", "change"]);
+    }
+
+    #[test]
+    fn optional_terms_do_not_make_a_query_multi_term() {
+        let mut e = Engine::new();
+        e.upsert("Airflow Basics.md", 0.0, "data pipelines and the scheduler");
+        e.upsert("AI Notes.md", 0.0, "data and the rest");
+        let r = e.search("ai the", &opts());
+        assert!(hit(&r, "Airflow Basics").is_none(), "{:?}", titles(&r));
+        assert!(hit(&r, "AI Notes").is_some());
+        // A required second term still lets `ai` prefix-match.
+        assert!(hit(&e.search("ai data", &opts()), "Airflow Basics").is_some());
     }
 
     #[test]

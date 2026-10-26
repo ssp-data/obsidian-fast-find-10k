@@ -54,7 +54,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 | Ctrl+F | toggle files only |
 | Ctrl+S | add semantic results (Smart Connections) |
 | Ctrl+P | toggle the preview |
-| Ctrl+R | toggle "why ranked here" (tier, per-term field and match, score parts); while the search is open Ctrl+R does not reload Obsidian |
+| Ctrl+R | toggle "why ranked here" (tier, per-term field and match, score parts); while the search is open Ctrl+R does not reload Obsidian. A saved binding still on the old default Ctrl+/ moves to Ctrl+R on load (unless Ctrl+R is taken) |
 | Ctrl+? (Ctrl+Shift+/) | toggle the key help |
 | Esc | close (or leave the similar panel / help) |
 

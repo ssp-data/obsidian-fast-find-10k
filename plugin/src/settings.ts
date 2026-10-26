@@ -1,6 +1,7 @@
 // Plugin settings: interface, defaults, merging saved data, and the mapping to the engine config.
 // The settings tab is in settings-tab.ts.
 
+import { validateBinding } from './keys';
 import type { EngineConfig, PartialMode, Weights } from './protocol';
 
 export type FuzzySetting = 'off' | 'normal' | 'loose';
@@ -127,6 +128,14 @@ export function mergeSettings(saved: unknown): FastFindSettings {
 	s.downrankedFolders = [...s.downrankedFolders];
 	s.optionalTerms = [...s.optionalTerms];
 	return s;
+}
+
+/** Moves a saved why-ranked binding still on the old default `Ctrl+/` to the new `Ctrl+R`,
+ * unless another saved binding already uses Ctrl+R. True when it changed `km` (then save). */
+export function migrateKeymap(km: Keymap, isMac: boolean): boolean {
+	if (km.toggleDebug !== 'Ctrl+/' || validateBinding(km, 'toggleDebug', 'Ctrl+R', isMac) !== null) return false;
+	km.toggleDebug = 'Ctrl+R';
+	return true;
 }
 
 export function settingsToEngineConfig(s: FastFindSettings): EngineConfig {
