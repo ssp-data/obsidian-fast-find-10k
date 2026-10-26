@@ -2,7 +2,7 @@
 
 use unicode_general_category::{get_general_category, GeneralCategory};
 
-use crate::normalize::normalize;
+use crate::normalize::normalize_into;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
@@ -13,6 +13,9 @@ pub struct Token {
 }
 
 fn is_word_char(c: char) -> bool {
+    if c.is_ascii() {
+        return c.is_ascii_alphanumeric() || c == '-' || c == '_';
+    }
     c.is_alphanumeric()
         || c == '-'
         || c == '_'
@@ -48,9 +51,9 @@ fn words(raw: &str) -> Vec<(usize, usize)> {
     out
 }
 
-/// Split a separator-free piece before an uppercase letter following a lowercase letter (digits do not split: `10K`).
-fn camel_pieces(raw: &str, base: usize) -> Vec<(usize, usize)> {
-    let mut out = Vec::new();
+/// Split a separator-free piece before an uppercase letter following a lowercase letter (digits
+/// do not split: `10K`), appending the byte ranges to `out`.
+fn camel_pieces(raw: &str, base: usize, out: &mut Vec<(usize, usize)>) {
     let mut start = 0;
     let mut prev: Option<char> = None;
     for (i, c) in raw.char_indices() {
@@ -63,45 +66,58 @@ fn camel_pieces(raw: &str, base: usize) -> Vec<(usize, usize)> {
         prev = Some(c);
     }
     out.push((base + start, base + raw.len()));
-    out
 }
 
 fn has_alnum(s: &str) -> bool {
     s.chars().any(char::is_alphanumeric)
 }
 
-pub fn tokenize(raw: &str) -> Vec<Token> {
-    let mut tokens = Vec::new();
+/// Calls `f(text, pos, byte_start, byte_end)` for every token of `raw`, in `tokenize` order.
+/// `text` borrows a buffer reused between calls, so callers copy it only when they keep it.
+pub fn for_each_token(raw: &str, mut f: impl FnMut(&str, u32, u32, u32)) {
+    let mut buf = String::new();
+    let mut leaves: Vec<(usize, usize)> = Vec::new();
     let mut pos: u32 = 0;
+    let mut emit = |s: usize, e: usize, pos: u32, buf: &mut String| {
+        normalize_into(&raw[s..e], buf);
+        if has_alnum(buf) {
+            f(buf, pos, s as u32, e as u32);
+        }
+    };
     for (ws, we) in words(raw) {
         let word = &raw[ws..we];
         // Leaves: hyphen/underscore parts, each further split at camelCase boundaries.
-        let mut leaves: Vec<(usize, usize)> = Vec::new();
+        leaves.clear();
         let mut off = 0;
         for part in word.split(['-', '_']) {
             if !part.is_empty() {
-                leaves.extend(camel_pieces(part, ws + off));
+                camel_pieces(part, ws + off, &mut leaves);
             }
             off += part.len() + 1;
         }
-        let make = |s: usize, e: usize, pos: u32| {
-            let text = normalize(&raw[s..e]);
-            has_alnum(&text).then(|| Token {
-                text,
-                pos,
-                byte_start: s as u32,
-                byte_end: e as u32,
-            })
-        };
         if leaves.len() > 1 {
-            tokens.extend(make(ws, we, pos));
+            emit(ws, we, pos, &mut buf);
         }
         for (k, &(s, e)) in leaves.iter().enumerate() {
-            tokens.extend(make(s, e, pos + k as u32));
+            emit(s, e, pos + k as u32, &mut buf);
         }
         pos += leaves.len().max(1) as u32;
     }
+}
+
+pub fn tokenize(raw: &str) -> Vec<Token> {
+    let mut tokens = Vec::new();
+    for_each_token(raw, |text, pos, byte_start, byte_end| {
+        tokens.push(Token { text: text.to_owned(), pos, byte_start, byte_end })
+    });
     tokens
+}
+
+/// Number of tokens `tokenize(raw)` yields, without allocating them.
+pub fn count_tokens(raw: &str) -> usize {
+    let mut n = 0;
+    for_each_token(raw, |_, _, _, _| n += 1);
+    n
 }
 
 pub fn tokenize_query_term(term: &str) -> Vec<String> {
@@ -117,6 +133,7 @@ pub fn tokenize_query_term(term: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::normalize::normalize;
 
     fn texts(raw: &str) -> Vec<String> {
         tokenize(raw).into_iter().map(|t| t.text).collect()
@@ -153,6 +170,13 @@ mod tests {
     #[test]
     fn wikilink_text_is_tokenized_without_brackets() {
         assert_eq!(texts("[[Data Mesh|mesh]]"), ["data", "mesh", "mesh"]);
+    }
+
+    #[test]
+    fn count_matches_tokenize() {
+        for raw in ["Obsidian: Trouble-shoot!", "DataEngineering 10K", "", "--", "Spa\u{308}ti ハ\u{3099}"] {
+            assert_eq!(count_tokens(raw), tokenize(raw).len(), "{raw:?}");
+        }
     }
 
     #[test]

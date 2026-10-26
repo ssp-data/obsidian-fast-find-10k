@@ -10,7 +10,7 @@ use crate::doc::{Doc, Field};
 use crate::markdown::title_and_segments;
 use crate::normalize::{normalize, strip_symbols};
 use crate::similar::{word_spans, TitleKeys};
-use crate::tokenize::tokenize;
+use crate::tokenize::for_each_token;
 
 pub type DocId = u32;
 
@@ -133,14 +133,23 @@ pub struct Index {
 
 type TermMap = HashMap<String, SmallVec<[u32; 4]>>;
 
+/// Appends `p` to the term's positions, allocating the key only for a term new to this map.
+fn push_pos(map: &mut TermMap, term: &str, p: Option<u32>) {
+    let list = match map.get_mut(term) {
+        Some(list) => list,
+        None => map.entry(term.to_owned()).or_default(),
+    };
+    list.extend(p);
+}
+
 fn add_tokens(map: &mut TermMap, raw: &str, hidx: Option<usize>) {
-    for t in tokenize(raw) {
+    for_each_token(raw, |text, pos, _, _| {
         let p = match hidx {
-            Some(h) => ((h as u32) << 16) | (t.pos & 0xFFFF),
-            None => t.pos,
+            Some(h) => ((h as u32) << 16) | (pos & 0xFFFF),
+            None => pos,
         };
-        map.entry(t.text).or_default().push(p);
-    }
+        push_pos(map, text, Some(p));
+    });
 }
 
 /// Derive every (field, term -> positions) of a doc. Deterministic, so `remove` can re-derive it.
@@ -175,12 +184,11 @@ fn derive(doc: &Doc) -> Vec<TermMap> {
         add_tokens(&mut maps[fidx(Field::Path)], &strip_symbols(s), None);
     }
     let body = &mut maps[fidx(Field::Body)];
-    for (i, t) in tokenize(&doc.body).into_iter().enumerate() {
-        let e = body.entry(t.text).or_default();
-        if i < BODY_POSITION_CAP {
-            e.push(t.pos);
-        }
-    }
+    let mut i = 0;
+    for_each_token(&doc.body, |text, pos, _, _| {
+        push_pos(body, text, (i < BODY_POSITION_CAP).then_some(pos));
+        i += 1;
+    });
     maps
 }
 

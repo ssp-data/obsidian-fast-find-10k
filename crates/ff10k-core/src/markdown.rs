@@ -1,7 +1,7 @@
 //! Markdown field extraction: a hand-written line scanner turning a raw note into a `Doc`.
 
 use crate::doc::{Doc, Heading, LinkRef};
-use crate::tokenize::tokenize;
+use crate::tokenize::count_tokens;
 
 /// File stem (without `.md`) and parent directory segments of a vault-relative path.
 pub(crate) fn title_and_segments(path: &str) -> (String, Vec<String>) {
@@ -104,7 +104,7 @@ pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
         acc += l.len() as u32 + 1;
     }
     let body = body_lines.join("\n");
-    let word_count = tokenize(&body).len() as u32;
+    let word_count = count_tokens(&body) as u32;
 
     Doc {
         path: path.to_string(),
