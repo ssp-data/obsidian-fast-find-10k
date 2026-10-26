@@ -32,10 +32,11 @@ const MAX_NAME = 200;
 /** Leading/trailing dots and whitespace: a leading dot would make a hidden (never indexed) file. */
 const stripEnds = (s: string) => s.replace(/^[\s.]+|[\s.]+$/g, '');
 
-/** File name from a query or link target: drops `\ / : * ? " < > |`, collapses whitespace,
- * trims (also leading and trailing dots), caps at 200 chars. `''` when nothing is left. */
+/** File name from a query or link target: drops `\ / : * ? " < > |` and the link-breaking
+ * `# ^ [ ]`, collapses whitespace, trims (also leading and trailing dots), caps at 200 chars.
+ * `''` when nothing is left. */
 export function sanitizeName(raw: string): string {
-	const s = raw.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ');
+	const s = raw.replace(/[\\/:*?"<>|#^[\]]/g, '').replace(/\s+/g, ' ');
 	return stripEnds(stripEnds(s).slice(0, MAX_NAME));
 }
 

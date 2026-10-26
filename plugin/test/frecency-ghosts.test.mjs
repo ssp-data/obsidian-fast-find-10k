@@ -23,6 +23,13 @@ const { sanitizeName, ghostNotePath } = await load('src/actions.ts');
 const { collectGhosts, throttle } = await load('src/unresolved.ts');
 const { FrecencyTracker } = await load('src/frecency.ts');
 
+test('sanitizeName strips link-breaking characters # ^ [ ]', () => {
+	assert.equal(sanitizeName('Meeting #42 ^abc [[draft]]'), 'Meeting 42 abc draft');
+	assert.equal(sanitizeName('[a]#^b'), 'ab');
+	assert.equal(sanitizeName(' #^[] '), '');
+	assert.equal(ghostNotePath('Projects/[x] #1'), 'Projects/x 1.md');
+});
+
 test('sanitizeName strips forbidden characters, collapses whitespace, trims', () => {
 	assert.equal(sanitizeName('  AI Data Engineer Workflows  '), 'AI Data Engineer Workflows');
 	assert.equal(sanitizeName('a\\b/c:d*e?f"g<h>i|j'), 'abcdefghij');
@@ -31,7 +38,7 @@ test('sanitizeName strips forbidden characters, collapses whitespace, trims', ()
 	assert.equal(sanitizeName('  ?? / ** '), '');
 	assert.equal(sanitizeName(''), '');
 	assert.equal(sanitizeName('x'.repeat(300)).length, 200);
-	assert.equal(sanitizeName('Café Ölmühle (draft) #1'), 'Café Ölmühle (draft) #1');
+	assert.equal(sanitizeName('Café Ölmühle (draft) #1'), 'Café Ölmühle (draft) 1');
 	assert.equal(sanitizeName('. .'), '');
 	assert.equal(sanitizeName('..'), '');
 	assert.equal(sanitizeName('.notes'), 'notes');
