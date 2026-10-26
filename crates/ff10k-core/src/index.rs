@@ -14,6 +14,36 @@ use crate::tokenize::tokenize;
 
 pub type DocId = u32;
 
+/// Time spent in each phase of `Index::upsert_profiled`, accumulated across calls (native only;
+/// the plain `upsert*` paths never read the clock).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct UpsertProfile {
+    /// `markdown::extract` (filled by `Engine::upsert_profiled`).
+    pub extract: std::time::Duration,
+    /// Re-deriving and dropping the old postings of a replaced doc.
+    pub unindex: std::time::Duration,
+    /// Tokenizing every field into per-field term maps.
+    pub derive: std::time::Duration,
+    /// Merging the term maps into the posting lists, plus link counts.
+    pub insert: std::time::Duration,
+    /// Cached per-doc keys (`Keys::of`: path/title/alias normalization, `TitleKeys`).
+    pub keys: std::time::Duration,
+}
+
+/// Runs `f`, adding its wall time to `slot` when profiling (never reads the clock otherwise).
+pub(crate) fn timed<T>(slot: Option<&mut std::time::Duration>, f: impl FnOnce() -> T) -> T {
+    match slot {
+        #[cfg(not(target_arch = "wasm32"))]
+        Some(d) => {
+            let t = std::time::Instant::now();
+            let out = f();
+            *d += t.elapsed();
+            out
+        }
+        _ => f(),
+    }
+}
+
 /// Maximum number of body tokens that get positions; later tokens are indexed without them.
 pub const BODY_POSITION_CAP: usize = 50_000;
 
@@ -173,9 +203,18 @@ impl Index {
 
     /// Insert or replace by path, keeping the raw note text for previews.
     pub fn upsert_with_text(&mut self, doc: Doc, text: String) -> DocId {
+        self.upsert_inner(doc, text, None)
+    }
+
+    /// `upsert_with_text`, adding each phase's wall time to `prof` (dev profiling only).
+    pub fn upsert_profiled(&mut self, doc: Doc, text: String, prof: &mut UpsertProfile) -> DocId {
+        self.upsert_inner(doc, text, Some(prof))
+    }
+
+    fn upsert_inner(&mut self, doc: Doc, text: String, mut prof: Option<&mut UpsertProfile>) -> DocId {
         let id = match self.path_to_id.get(&doc.path).copied() {
             Some(id) => {
-                self.unindex(id);
+                timed(prof.as_deref_mut().map(|p| &mut p.unindex), || self.unindex(id));
                 id
             }
             None => match self.free.pop() {
@@ -187,17 +226,24 @@ impl Index {
             },
         };
         self.path_to_id.insert(doc.path.clone(), id);
-        self.index(id, &doc);
+        let maps = timed(prof.as_deref_mut().map(|p| &mut p.derive), || derive(&doc));
+        timed(prof.as_deref_mut().map(|p| &mut p.insert), || self.insert(id, &doc, maps));
         if self.records[id as usize].is_none() {
             self.live += 1;
         }
-        self.records[id as usize] = Some(Record { keys: Keys::of(&doc), doc, text });
+        let keys = timed(prof.map(|p| &mut p.keys), || Keys::of(&doc));
+        self.records[id as usize] = Some(Record { keys, doc, text });
         self.clear_strings();
         id
     }
 
     fn index(&mut self, id: DocId, doc: &Doc) {
-        for (fi, map) in derive(doc).into_iter().enumerate() {
+        let maps = derive(doc);
+        self.insert(id, doc, maps);
+    }
+
+    fn insert(&mut self, id: DocId, doc: &Doc, maps: Vec<TermMap>) {
+        for (fi, map) in maps.into_iter().enumerate() {
             for (term, positions) in map {
                 let list = self.dicts[fi].entry(term).or_default();
                 let p = Posting { doc: id, positions };

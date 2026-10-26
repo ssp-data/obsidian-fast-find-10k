@@ -79,8 +79,28 @@ pub struct VaultStats {
 /// returns true. Also returns the indexed document and byte counts.
 pub fn load_vault_with(vault_dir: &Path, exclude: &dyn Fn(&str) -> bool) -> std::io::Result<(Engine, VaultStats)> {
     let mut engine = Engine::new();
-    let mut notes: Vec<(String, String)> = Vec::new();
+    let notes = read_vault_with(vault_dir, exclude)?;
     let mut bytes = 0u64;
+    for n in &notes {
+        bytes += n.text.len() as u64;
+        engine.upsert(&n.path, n.mtime, &n.text);
+    }
+    engine.set_ghosts(ghosts(&notes));
+    let stats = VaultStats { docs: notes.len(), bytes };
+    Ok((engine, stats))
+}
+
+/// One markdown file read from a vault directory.
+pub struct VaultNote {
+    /// Vault-relative, `/`-separated.
+    pub path: String,
+    pub mtime: f64,
+    pub text: String,
+}
+
+/// Reads every non-excluded `.md` file under `vault_dir` (dot-folders skipped), sorted by path.
+pub fn read_vault_with(vault_dir: &Path, exclude: &dyn Fn(&str) -> bool) -> std::io::Result<Vec<VaultNote>> {
+    let mut notes = Vec::new();
     let walker = WalkDir::new(vault_dir).sort_by_file_name().into_iter();
     for entry in walker.filter_entry(|e| e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.')) {
         let entry = entry?;
@@ -99,19 +119,15 @@ pub fn load_vault_with(vault_dir: &Path, exclude: &dyn Fn(&str) -> bool) -> std:
             .duration_since(UNIX_EPOCH)
             .map_or(0.0, |d| d.as_secs_f64());
         let text = std::fs::read_to_string(entry.path())?;
-        bytes += text.len() as u64;
-        engine.upsert(&path, mtime, &text);
-        notes.push((path, text));
+        notes.push(VaultNote { path, mtime, text });
     }
-    engine.set_ghosts(ghosts(&notes));
-    let stats = VaultStats { docs: notes.len(), bytes };
-    Ok((engine, stats))
+    Ok(notes)
 }
 
 /// Unresolved wikilink targets, with the number of distinct notes linking to each.
-fn ghosts(notes: &[(String, String)]) -> Vec<Ghost> {
+pub fn ghosts(notes: &[VaultNote]) -> Vec<Ghost> {
     let mut known: HashSet<String> = HashSet::new();
-    for (path, _) in notes {
+    for VaultNote { path, .. } in notes {
         let stem = path.strip_suffix(".md").unwrap_or(path);
         known.insert(normalize(stem));
         known.insert(normalize(stem.rsplit('/').next().unwrap_or(stem)));
@@ -123,7 +139,7 @@ fn ghosts(notes: &[(String, String)]) -> Vec<Ghost> {
     // target -> linking note paths, in first-seen order.
     let mut order: Vec<String> = Vec::new();
     let mut refs: HashMap<String, HashSet<&str>> = HashMap::new();
-    for (path, text) in notes {
+    for VaultNote { path, text, .. } in notes {
         for link in extract(path, text, 0.0).links {
             let target = link.target.trim();
             if target.is_empty() || resolves(target) {

@@ -8,7 +8,8 @@ use std::time::Instant;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use ff10k_core::engine::{Engine, Hit, Mode, SearchOptions};
-use ff10k_core::golden::{load_vault_with, run_golden_with, VaultStats};
+use ff10k_core::golden::{ghosts, load_vault_with, read_vault_with, run_golden_with, VaultStats};
+use ff10k_core::index::UpsertProfile;
 use ff10k_core::similar::SimilarReason;
 use regex::Regex;
 
@@ -50,6 +51,8 @@ enum Cmd {
     Golden { vault: PathBuf, golden: PathBuf },
     /// Latency benchmark.
     Bench { vault: PathBuf },
+    /// Index a vault and print the time split across read / extract / tokenize / insert / keys.
+    Profile { vault: PathBuf },
 }
 
 /// Reads `<vault>/.obsidian/app.json` once and builds the exclusion predicate.
@@ -191,6 +194,42 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
             println!("golden: all passed");
+        }
+        Cmd::Profile { vault } => {
+            let ex = exclusion(&vault)?;
+            let t = Instant::now();
+            let notes = read_vault_with(&vault, &*ex).with_context(|| format!("reading {}", vault.display()))?;
+            let read = t.elapsed();
+            let bytes: usize = notes.iter().map(|n| n.text.len()).sum();
+            let mut engine = Engine::new();
+            let mut prof = UpsertProfile::default();
+            let t = Instant::now();
+            for n in &notes {
+                engine.upsert_profiled(&n.path, n.mtime, &n.text, &mut prof);
+            }
+            let upsert = t.elapsed();
+            let t = Instant::now();
+            engine.set_ghosts(ghosts(&notes));
+            let ghost = t.elapsed();
+            let t = Instant::now();
+            std::hint::black_box(engine.search("a", &SearchOptions::default()));
+            let first = t.elapsed();
+            let ms = |d: std::time::Duration| d.as_secs_f64() * 1e3;
+            let mb = bytes as f64 / (1024.0 * 1024.0);
+            println!("docs: {}, bytes: {} ({mb:.1} MB)", notes.len(), bytes);
+            println!("read files       {:>9.1} ms", ms(read));
+            println!("upsert total     {:>9.1} ms  ({:.1} MB/s)", ms(upsert), mb / upsert.as_secs_f64());
+            println!("  extract        {:>9.1} ms", ms(prof.extract));
+            println!("  unindex        {:>9.1} ms", ms(prof.unindex));
+            println!("  derive (tok)   {:>9.1} ms", ms(prof.derive));
+            println!("  insert         {:>9.1} ms", ms(prof.insert));
+            println!("  keys           {:>9.1} ms", ms(prof.keys));
+            println!("  other          {:>9.1} ms", ms(upsert.saturating_sub(prof.extract + prof.unindex + prof.derive + prof.insert + prof.keys)));
+            println!("ghosts (CLI)     {:>9.1} ms", ms(ghost));
+            println!("first search     {:>9.1} ms", ms(first));
+            if let Some(kb) = rss_kb() {
+                println!("rss: {:.1} MB", kb as f64 / 1024.0);
+            }
         }
         Cmd::Bench { vault } => {
             let ex = exclusion(&vault)?;
