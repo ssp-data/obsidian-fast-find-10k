@@ -19,6 +19,14 @@ pub(crate) fn title_and_segments(path: &str) -> (String, Vec<String>) {
 }
 
 pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
+    let mut doc = extract_uncounted(path, text, mtime);
+    doc.word_count = count_tokens(&doc.body) as u32;
+    doc
+}
+
+/// `extract` with `word_count` left at 0: the index counts body tokens while indexing them, so
+/// the engine skips this extra tokenizer pass.
+pub(crate) fn extract_uncounted(path: &str, text: &str, mtime: f64) -> Doc {
     let (title, path_segments) = title_and_segments(path);
 
     // Lines of the original text with their byte offsets (`\r` stripped from content).
@@ -104,7 +112,6 @@ pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
         acc += l.len() as u32 + 1;
     }
     let body = body_lines.join("\n");
-    let word_count = count_tokens(&body) as u32;
 
     Doc {
         path: path.to_string(),
@@ -119,7 +126,7 @@ pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
         body_line_src,
         mtime,
         size: text.len() as u32,
-        word_count,
+        word_count: 0,
     }
 }
 

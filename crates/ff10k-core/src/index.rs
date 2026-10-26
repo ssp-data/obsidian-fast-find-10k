@@ -3,7 +3,9 @@
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Bound;
+use std::rc::Rc;
 
+use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 use crate::doc::{Doc, Field};
@@ -121,7 +123,7 @@ pub struct Index {
     records: Vec<Option<Record>>,
     free: Vec<DocId>,
     path_to_id: HashMap<String, DocId>,
-    dicts: [BTreeMap<String, Vec<Posting>>; 9],
+    dicts: [Dict; 9],
     /// normalized link target -> number of links with that target.
     link_counts: HashMap<String, u32>,
     /// Lazily built `field_strings` caches (Title, Alias, H1, H2, H3); every mutator clears them.
@@ -131,7 +133,64 @@ pub struct Index {
     live: usize,
 }
 
-type TermMap = HashMap<String, SmallVec<[u32; 4]>>;
+/// One field's term dictionary: a hash map for exact lookups and posting-list updates, and a
+/// sorted map (sharing the key strings) for prefix range scans. Only a term's first and last
+/// posting touch the sorted map.
+#[derive(Default)]
+struct Dict {
+    ids: FxHashMap<Rc<str>, u32>,
+    sorted: BTreeMap<Rc<str>, u32>,
+    lists: Vec<Vec<Posting>>,
+    free: Vec<u32>,
+}
+
+impl Dict {
+    fn get(&self, term: &str) -> &[Posting] {
+        self.ids.get(term).map_or(&[], |&i| self.lists[i as usize].as_slice())
+    }
+
+    fn list_mut(&mut self, term: String) -> &mut Vec<Posting> {
+        let slot = match self.ids.get(term.as_str()) {
+            Some(&i) => i,
+            None => {
+                let i = self.free.pop().unwrap_or_else(|| {
+                    self.lists.push(Vec::new());
+                    (self.lists.len() - 1) as u32
+                });
+                let key: Rc<str> = term.into();
+                self.ids.insert(key.clone(), i);
+                self.sorted.insert(key, i);
+                i
+            }
+        };
+        &mut self.lists[slot as usize]
+    }
+
+    /// Drops `doc`'s posting from the term's list, and the term once its list is empty.
+    fn remove_doc(&mut self, term: &str, doc: DocId) {
+        let Some(&i) = self.ids.get(term) else { return };
+        let list = &mut self.lists[i as usize];
+        if let Ok(at) = list.binary_search_by_key(&doc, |p| p.doc) {
+            list.remove(at);
+        }
+        if list.is_empty() {
+            *list = Vec::new();
+            self.ids.remove(term);
+            self.sorted.remove(term);
+            self.free.push(i);
+        }
+    }
+
+    fn prefix(&self, prefix: &str) -> Vec<(&str, &[Posting])> {
+        self.sorted
+            .range::<str, _>((Bound::Included(prefix), Bound::Unbounded))
+            .take_while(|(k, _)| k.starts_with(prefix))
+            .map(|(k, &i)| (&**k, self.lists[i as usize].as_slice()))
+            .collect()
+    }
+}
+
+type TermMap = FxHashMap<String, SmallVec<[u32; 4]>>;
 
 /// Appends `p` to the term's positions, allocating the key only for a term new to this map.
 fn push_pos(map: &mut TermMap, term: &str, p: Option<u32>) {
@@ -152,9 +211,10 @@ fn add_tokens(map: &mut TermMap, raw: &str, hidx: Option<usize>) {
     });
 }
 
-/// Derive every (field, term -> positions) of a doc. Deterministic, so `remove` can re-derive it.
-fn derive(doc: &Doc) -> Vec<TermMap> {
-    let mut maps: Vec<TermMap> = (0..FIELDS.len()).map(|_| TermMap::new()).collect();
+/// Derive every (field, term -> positions) of a doc, and its body token count (its
+/// `word_count`). Deterministic, so `remove` can re-derive it.
+fn derive(doc: &Doc) -> (Vec<TermMap>, u32) {
+    let mut maps: Vec<TermMap> = (0..FIELDS.len()).map(|_| TermMap::default()).collect();
     add_tokens(&mut maps[fidx(Field::Title)], &strip_symbols(&doc.title), None);
     for a in &doc.aliases {
         add_tokens(&mut maps[fidx(Field::Alias)], a, None);
@@ -189,7 +249,7 @@ fn derive(doc: &Doc) -> Vec<TermMap> {
         push_pos(body, text, (i < BODY_POSITION_CAP).then_some(pos));
         i += 1;
     });
-    maps
+    (maps, i as u32)
 }
 
 fn stem(path: &str) -> &str {
@@ -219,7 +279,9 @@ impl Index {
         self.upsert_inner(doc, text, Some(prof))
     }
 
-    fn upsert_inner(&mut self, doc: Doc, text: String, mut prof: Option<&mut UpsertProfile>) -> DocId {
+    /// `doc.word_count` is (re)set from the body tokens counted while indexing, so callers may
+    /// pass a doc from `markdown::extract_uncounted`.
+    fn upsert_inner(&mut self, mut doc: Doc, text: String, mut prof: Option<&mut UpsertProfile>) -> DocId {
         let id = match self.path_to_id.get(&doc.path).copied() {
             Some(id) => {
                 timed(prof.as_deref_mut().map(|p| &mut p.unindex), || self.unindex(id));
@@ -234,7 +296,8 @@ impl Index {
             },
         };
         self.path_to_id.insert(doc.path.clone(), id);
-        let maps = timed(prof.as_deref_mut().map(|p| &mut p.derive), || derive(&doc));
+        let (maps, words) = timed(prof.as_deref_mut().map(|p| &mut p.derive), || derive(&doc));
+        doc.word_count = words;
         timed(prof.as_deref_mut().map(|p| &mut p.insert), || self.insert(id, &doc, maps));
         if self.records[id as usize].is_none() {
             self.live += 1;
@@ -246,14 +309,14 @@ impl Index {
     }
 
     fn index(&mut self, id: DocId, doc: &Doc) {
-        let maps = derive(doc);
+        let (maps, _) = derive(doc);
         self.insert(id, doc, maps);
     }
 
     fn insert(&mut self, id: DocId, doc: &Doc, maps: Vec<TermMap>) {
         for (fi, map) in maps.into_iter().enumerate() {
             for (term, positions) in map {
-                let list = self.dicts[fi].entry(term).or_default();
+                let list = self.dicts[fi].list_mut(term);
                 let p = Posting { doc: id, positions };
                 // Keep lists sorted by doc id (ids can be reused out of order).
                 match list.last() {
@@ -274,17 +337,10 @@ impl Index {
     /// (cost bounded by the doc's distinct terms times their list lengths).
     fn unindex(&mut self, id: DocId) {
         let Some(rec) = self.records[id as usize].as_ref() else { return };
-        let maps = derive(&rec.doc);
+        let (maps, _) = derive(&rec.doc);
         for (fi, map) in maps.into_iter().enumerate() {
             for term in map.keys() {
-                if let Some(list) = self.dicts[fi].get_mut(term) {
-                    if let Ok(at) = list.binary_search_by_key(&id, |p| p.doc) {
-                        list.remove(at);
-                    }
-                    if list.is_empty() {
-                        self.dicts[fi].remove(term);
-                    }
-                }
+                self.dicts[fi].remove_doc(term, id);
             }
         }
         for l in &rec.doc.links {
@@ -371,7 +427,7 @@ impl Index {
     }
 
     pub fn exact(&self, field: Field, token: &str) -> &[Posting] {
-        self.dicts[fidx(field)].get(token).map_or(&[], |v| v.as_slice())
+        self.dicts[fidx(field)].get(token)
     }
 
     /// All terms starting with `prefix`, in dictionary order. Empty prefix yields nothing.
@@ -379,11 +435,7 @@ impl Index {
         if prefix.is_empty() {
             return Vec::new();
         }
-        self.dicts[fidx(field)]
-            .range::<str, _>((Bound::Included(prefix), Bound::Unbounded))
-            .take_while(|(k, _)| k.starts_with(prefix))
-            .map(|(k, v)| (k.as_str(), v.as_slice()))
-            .collect()
+        self.dicts[fidx(field)].prefix(prefix)
     }
 
     fn clear_strings(&mut self) {
@@ -604,6 +656,15 @@ mod tests {
         let d = ix.get(id).unwrap();
         assert_eq!(d.title, e.title);
         assert_eq!(d.path_segments, e.path_segments);
+    }
+
+    #[test]
+    fn word_count_filled_while_indexing() {
+        let text = "# H\nOne two-three [[Link|alias]]\n```\ncode here\n```";
+        let mut ix = Index::new();
+        let id = ix.upsert(crate::markdown::extract_uncounted("w.md", text, 0.0));
+        assert_eq!(ix.get(id).unwrap().word_count, mk("w.md", text).word_count);
+        assert!(ix.get(id).unwrap().word_count > 0);
     }
 
     #[test]

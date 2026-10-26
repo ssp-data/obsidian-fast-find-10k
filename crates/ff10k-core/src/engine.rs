@@ -5,7 +5,7 @@ use std::collections::{HashMap, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use crate::index::{timed, Index, UpsertProfile};
-use crate::markdown::extract;
+use crate::markdown::extract_uncounted;
 use crate::query::Query;
 use crate::similar::{similar_count_for, similar_for, similar_ids_for, SimilarHit, SimilarReason};
 use crate::vectors::{top, SemanticHit, VectorError, Vectors};
@@ -90,12 +90,12 @@ impl Engine {
     }
 
     pub fn upsert(&mut self, path: &str, mtime: f64, text: &str) {
-        self.index.upsert_with_text(extract(path, text, mtime), text.to_owned());
+        self.index.upsert_with_text(extract_uncounted(path, text, mtime), text.to_owned());
     }
 
     /// `upsert`, adding each phase's wall time to `prof` (dev profiling: `ff10k profile`).
     pub fn upsert_profiled(&mut self, path: &str, mtime: f64, text: &str, prof: &mut UpsertProfile) {
-        let doc = timed(Some(&mut prof.extract), || extract(path, text, mtime));
+        let doc = timed(Some(&mut prof.extract), || extract_uncounted(path, text, mtime));
         self.index.upsert_profiled(doc, text.to_owned(), prof);
     }
 
