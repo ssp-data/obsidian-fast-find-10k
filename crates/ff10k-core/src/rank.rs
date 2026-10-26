@@ -327,15 +327,13 @@ fn apply_filters(index: &Index, query: &Query, cands: &mut HashMap<DocId, Slots>
     }
     if !query.paths.is_empty() {
         cands.retain(|d, _| {
-            index.get(*d).is_some_and(|doc| {
-                let p = normalize(&strip_symbols(&doc.path));
-                query.paths.iter().all(|f| p.contains(f.as_str()))
-            })
+            index.path_norm(*d).is_some_and(|p| query.paths.iter().all(|f| p.contains(f.as_str())))
         });
     }
     for ex in &query.excludes {
         let Some(t) = synth_term(ex) else { continue };
-        for h in match_term(index, &t, true, NO_FUZZY) {
+        // Excludes obey the short-term rule: `-ai` removes the token `ai`, never `aim`.
+        for h in match_term(index, &t, false, NO_FUZZY) {
             cands.remove(&h.doc);
         }
     }
@@ -418,20 +416,16 @@ fn proximity(units: &[Unit], slots: &Slots) -> f32 {
     }
 }
 
-fn title_tokens(title: &str) -> usize {
-    title.split(|c: char| !c.is_alphanumeric()).filter(|s| !s.is_empty()).count()
-}
-
-fn downranked(doc: &Doc, folders: &[String]) -> bool {
+/// `path_norm` is the doc's cached normalized path; `folders` are pre-normalized. No allocation.
+fn downranked(path_norm: &str, folders: &[String]) -> bool {
     if folders.is_empty() {
         return false;
     }
-    let path = normalize(&doc.path);
-    folders.iter().any(|f| path.starts_with(f.as_str()) && path[f.len()..].starts_with('/'))
-        || doc.path_segments.iter().any(|s| {
-            let s = normalize(s);
-            folders.contains(&s)
-        })
+    let dirs = path_norm.rsplit_once('/').map_or("", |(d, _)| d);
+    folders.iter().any(|f| {
+        dirs.strip_prefix(f.as_str()).is_some_and(|r| r.is_empty() || r.starts_with('/'))
+            || dirs.split('/').any(|seg| seg.trim() == f)
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -456,7 +450,7 @@ fn score<'a>(
         .map(|h| w.get(h.field) * h.quality)
         .sum();
     let prox = if tier <= 3 { proximity(units, &slots) } else { 0.0 };
-    let extra_title = title_tokens(&doc.title).saturating_sub(n_words);
+    let extra_title = (index.title_tokens(id) as usize).saturating_sub(n_words);
     let structural = SHORT_TITLE_BONUS / (1.0 + extra_title as f32)
         + BACKLINK_BONUS * (1.0 + index.backlinks(id) as f32).ln();
     let exact_title = units
@@ -464,7 +458,7 @@ fn score<'a>(
         .zip(&slots)
         .any(|(u, &s)| unit_hits(u, s).iter().any(|h| h.field == Field::Title && h.kind == MatchKind::Exact));
     let mut penalty = 1.0;
-    if downranked(doc, folders) {
+    if downranked(index.path_norm(id).unwrap_or(""), folders) {
         penalty *= cfg.downrank_factor;
     }
     if doc.word_count < SHORT_NOTE_WORDS && !exact_title {
@@ -501,7 +495,7 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
     let folders: Vec<String> = cfg
         .downranked_folders
         .iter()
-        .map(|f| normalize(f.trim_matches('/')))
+        .map(|f| normalize(&strip_symbols(f.trim_matches('/'))).trim().to_string())
         .filter(|f| !f.is_empty())
         .collect();
     let mut scored: Vec<Scored> = cands
@@ -570,7 +564,7 @@ fn title_display(s: &Scored, units: &[Unit], badge: Field) -> (String, Vec<(u32,
 /// Tokens of `body` up to and including position `pos`, plus `radius` bytes past it. Tokenizes
 /// a growing prefix cut at whitespace (a word boundary, so positions match the full tokenization).
 fn tokens_around(body: &str, pos: u32, radius: usize) -> Vec<Token> {
-    let mut cut = 4096;
+    let mut cut = 512;
     loop {
         let end = if cut >= body.len() {
             body.len()
@@ -619,7 +613,8 @@ fn body_context(s: &Scored, units: &[Unit]) -> Option<(Excerpt, u32)> {
     let at = toks.iter().filter(|t| t.pos == pos);
     let tok = at.clone().find(|t| word_matches(&t.text, &units[ui].words)).or_else(|| at.clone().next())?;
     let (bs, be) = (tok.byte_start as usize, tok.byte_end as usize);
-    let line = s.doc.body_line_starts.partition_point(|&x| x as usize <= bs).saturating_sub(1) as u32;
+    let body_line = s.doc.body_line_starts.partition_point(|&x| x as usize <= bs).saturating_sub(1);
+    let line = s.doc.body_line_src.get(body_line).copied().unwrap_or(body_line as u32);
     let start = floor_boundary(body, bs.saturating_sub(EXCERPT_RADIUS));
     let end = ceil_boundary(body, be + EXCERPT_RADIUS);
     let ranges = toks

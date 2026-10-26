@@ -47,6 +47,36 @@ fn fidx(f: Field) -> usize {
 struct Record {
     doc: Doc,
     text: String,
+    keys: Keys,
+}
+
+/// Per-doc normalized strings, computed once per upsert/rename so queries never re-normalize.
+struct Keys {
+    /// `normalize(strip_symbols(path))`, for `path:` filters and downranked folders.
+    path_norm: String,
+    /// Link-count keys for backlinks: by title and by extension-less path.
+    title_key: String,
+    path_key: Option<String>,
+    /// Alphanumeric runs in the title (for the short-title bonus).
+    title_tokens: u16,
+}
+
+impl Keys {
+    fn of(doc: &Doc) -> Keys {
+        let title_key = normalize(&doc.title);
+        let path_key = normalize(stem(&doc.path));
+        Keys {
+            path_norm: normalize(&strip_symbols(&doc.path)),
+            path_key: (path_key != title_key).then_some(path_key),
+            title_tokens: doc
+                .title
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|s| !s.is_empty())
+                .count()
+                .min(u16::MAX as usize) as u16,
+            title_key,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -59,6 +89,8 @@ pub struct Index {
     link_counts: HashMap<String, u32>,
     /// Lazily built `field_strings` caches (Title, Alias, H1, H2, H3); every mutator clears them.
     strings: [OnceCell<Vec<(DocId, u16, String)>>; 5],
+    /// Lazily built backlink count per DocId (0 for free slots); cleared with `strings`.
+    backlink_cache: OnceCell<Vec<u32>>,
     live: usize,
 }
 
@@ -152,7 +184,7 @@ impl Index {
         if self.records[id as usize].is_none() {
             self.live += 1;
         }
-        self.records[id as usize] = Some(Record { doc, text });
+        self.records[id as usize] = Some(Record { keys: Keys::of(&doc), doc, text });
         self.clear_strings();
         id
     }
@@ -228,6 +260,7 @@ impl Index {
         rec.doc.path = new.to_string();
         rec.doc.title = title;
         rec.doc.path_segments = segs;
+        rec.keys = Keys::of(&rec.doc);
         let doc = rec.doc.clone();
         self.index(id, &doc);
         self.path_to_id.remove(old);
@@ -238,6 +271,16 @@ impl Index {
 
     pub fn get(&self, id: DocId) -> Option<&Doc> {
         self.records.get(id as usize)?.as_ref().map(|r| &r.doc)
+    }
+
+    /// `normalize(strip_symbols(path))` of a doc, cached at upsert/rename.
+    pub fn path_norm(&self, id: DocId) -> Option<&str> {
+        self.records.get(id as usize)?.as_ref().map(|r| r.keys.path_norm.as_str())
+    }
+
+    /// Number of alphanumeric runs in the doc's title, cached at upsert/rename.
+    pub fn title_tokens(&self, id: DocId) -> u16 {
+        self.records.get(id as usize).and_then(Option::as_ref).map_or(0, |r| r.keys.title_tokens)
     }
 
     pub fn text(&self, id: DocId) -> Option<&str> {
@@ -281,6 +324,7 @@ impl Index {
         for c in &mut self.strings {
             c.take();
         }
+        self.backlink_cache.take();
     }
 
     /// Normalized strings for fuzzy matching, as `(doc, heading_idx, string)`; `heading_idx` is 0
@@ -318,15 +362,21 @@ impl Index {
         })
     }
 
+    /// Links pointing at the doc (by title or extension-less path). O(1) after a lazy O(N)
+    /// rebuild following each mutation.
     pub fn backlinks(&self, id: DocId) -> u32 {
-        let Some(doc) = self.get(id) else { return 0 };
-        let by_title = normalize(&doc.title);
-        let by_path = normalize(stem(&doc.path));
-        let mut n = self.link_counts.get(&by_title).copied().unwrap_or(0);
-        if by_path != by_title {
-            n += self.link_counts.get(&by_path).copied().unwrap_or(0);
-        }
-        n
+        let counts = self.backlink_cache.get_or_init(|| {
+            let count = |k: &str| self.link_counts.get(k).copied().unwrap_or(0);
+            self.records
+                .iter()
+                .map(|r| {
+                    r.as_ref().map_or(0, |r| {
+                        count(&r.keys.title_key) + r.keys.path_key.as_deref().map_or(0, count)
+                    })
+                })
+                .collect()
+        });
+        counts.get(id as usize).copied().unwrap_or(0)
     }
 
     pub fn docs_with_tag(&self, tag: &str) -> Vec<DocId> {
@@ -424,6 +474,22 @@ mod tests {
         assert_eq!(ix.backlinks(b), 2);
         ix.remove("C.md");
         assert_eq!(ix.backlinks(b), 1);
+    }
+
+    #[test]
+    fn cached_keys_follow_rename_and_link_changes() {
+        let mut ix = Index::new();
+        let id = ix.upsert(mk("💡 Area/Old Name.md", ""));
+        assert_eq!(ix.path_norm(id), Some("area/old name.md"));
+        assert_eq!(ix.title_tokens(id), 2);
+        assert_eq!(ix.backlinks(id), 0);
+        assert!(ix.rename("💡 Area/Old Name.md", "Archive/New-Long Name.md"));
+        assert_eq!(ix.path_norm(id), Some("archive/new-long name.md"));
+        assert_eq!(ix.title_tokens(id), 3);
+        // The backlink cache is rebuilt after a mutation adds a link to the renamed doc.
+        assert_eq!(ix.backlinks(id), 0);
+        ix.upsert(mk("A.md", "see [[New-Long Name]]"));
+        assert_eq!(ix.backlinks(id), 1);
     }
 
     #[test]

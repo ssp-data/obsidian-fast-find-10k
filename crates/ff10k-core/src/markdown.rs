@@ -39,6 +39,7 @@ pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
 
     let mut sc = Scanner::default();
     let mut body_lines: Vec<String> = Vec::new();
+    let mut body_line_src: Vec<u32> = Vec::new();
     let mut headings: Vec<Heading> = Vec::new();
     let mut fence: Option<(char, usize)> = None;
     for (idx, &(start, line)) in lines.iter().enumerate().skip(first_body_line) {
@@ -60,6 +61,7 @@ pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
         }
         if fence.is_some() {
             body_lines.push(line.to_string());
+            body_line_src.push(idx as u32);
             continue;
         }
         let content = match atx_heading(line) {
@@ -78,6 +80,7 @@ pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
             None => line,
         };
         body_lines.push(sc.inline(content));
+        body_line_src.push(idx as u32);
     }
 
     // Section end: start of the next heading of level <= own.
@@ -113,6 +116,7 @@ pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
         path_segments,
         body,
         body_line_starts,
+        body_line_src,
         mtime,
         size: text.len() as u32,
         word_count,

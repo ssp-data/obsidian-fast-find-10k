@@ -257,6 +257,26 @@ mod tests {
         assert_eq!(h.badge, Field::H2);
         assert_eq!(h.line, Some(2));
         assert_eq!(h.heading.as_ref().unwrap().level, 2);
+
+        // Frontmatter and fence-marker lines are not in the body; `line` is still the source line.
+        e.upsert(
+            "Fm.md",
+            0.0,
+            "---\ntags: [x]\naliases: [y]\nstatus: z\n---\nintro\n```\ncode\n```\nthe kafka zookeeper\n",
+        );
+        let r = e.search("kafka zookeeper", &opts());
+        assert_eq!(r.hits[0].path, "Fm.md");
+        assert_eq!(r.hits[0].line, Some(9));
+    }
+
+    #[test]
+    fn short_exclude_is_exact_only() {
+        let mut e = Engine::new();
+        e.upsert("Pandas tips.md", 0.0, "we aim for speed");
+        e.upsert("Pandas and AI.md", 0.0, "");
+        e.upsert("Pandas notes.md", 0.0, "using ai with dataframes");
+        let r = e.search("pandas -ai", &opts());
+        assert_eq!(titles(&r), ["Pandas tips"]);
     }
 
     #[test]
@@ -286,6 +306,28 @@ mod tests {
         let dt = t.elapsed();
         assert_eq!(r.hits.len(), 50);
         assert_eq!(r.candidates, 2000);
-        assert!(dt.as_millis() < 200, "{dt:?}");
+        assert!(dt.as_millis() < 100, "{dt:?}");
+    }
+
+    /// Release-only budget guard (spec §6.6: p95 < 10 ms for 10k notes).
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn release_budget_10k_docs() {
+        const LOREM: &str = "lorem ipsum dolor sit amet consectetur adipiscing elit sed do \
+            eiusmod tempor incididunt ut labore et dolore magna aliqua enim";
+        let body: String = (0..10).map(|_| LOREM).collect::<Vec<_>>().join(" ");
+        let mut e = Engine::new();
+        e.set_config(Config { downranked_folders: vec!["Archive".into()], ..Config::default() });
+        for i in 0..10_000 {
+            let dir = if i % 10 == 0 { "Archive".to_string() } else { format!("Folder {}", i % 20) };
+            e.upsert(&format!("{dir}/Note {i}.md"), i as f64, &body);
+        }
+        let _ = e.search("note", &opts()); // warm the field_strings cache
+        let times: Vec<(&str, u64)> = ["note", "dolor", "note dolor", "path:folder"]
+            .into_iter()
+            .map(|q| (q, (0..5).map(|_| e.search(q, &opts()).elapsed_us).min().unwrap()))
+            .collect();
+        eprintln!("{times:?}");
+        assert!(times.iter().all(|t| t.1 < 10_000), "{times:?}");
     }
 }

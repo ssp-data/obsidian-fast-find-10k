@@ -93,6 +93,8 @@ pub struct Doc {
     pub path_segments: Vec<String>,
     pub body: String,
     pub body_line_starts: Vec<u32>,
+    /// Source-text line index of each body line (frontmatter and fence markers are not in `body`).
+    pub body_line_src: Vec<u32>,
     pub mtime: f64,
     pub size: u32,
     pub word_count: u32,
