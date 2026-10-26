@@ -86,18 +86,26 @@ export class Indexer {
 
 	/** Warm start: cache → engine, then diff the vault and re-read what changed. */
 	start(): Promise<void> {
-		this.run = this.run.then(() => this.fullRun(false));
-		return this.run;
+		return this.enqueue(() => this.fullRun(false));
 	}
 
 	/** Drops the note cache and re-reads every file. */
 	rebuild(): Promise<void> {
-		this.run = this.run.then(async () => {
-			await this.cache.clear();
+		return this.enqueue(async () => {
+			try {
+				await this.cache.clear();
+			} catch (e) {
+				console.error('[ff10k] clearing the note cache failed', e);
+			}
 			this.engine.remove([...this.inEngine]);
 			this.inEngine.clear();
 			await this.fullRun(true);
 		});
+	}
+
+	/** Serializes full runs; a failed run never blocks the next one (Rebuild is the recovery path). */
+	private enqueue(job: () => Promise<void>): Promise<void> {
+		this.run = this.run.catch(() => {}).then(job);
 		return this.run;
 	}
 
@@ -122,10 +130,23 @@ export class Indexer {
 		this.listeners.clear();
 	}
 
+	/** Never rejects: on failure it logs and still marks the run done. */
 	private async fullRun(fromScratch: boolean): Promise<void> {
 		const t0 = performance.now();
 		this.setStatus({ indexed: this.status.indexed, total: 0, done: false });
 		this.engine.onProgress((_count, total) => this.setStatus({ ...this.status, indexed: total }));
+		try {
+			await this.indexVault(fromScratch, t0);
+		} catch (e) {
+			console.error('[ff10k] indexing failed', e);
+		} finally {
+			if (!this.status.done && !this.disposed) {
+				this.setStatus({ ...this.status, done: true, elapsedMs: Math.round(performance.now() - t0) });
+			}
+		}
+	}
+
+	private async indexVault(fromScratch: boolean, t0: number): Promise<void> {
 
 		// 1. Cache → engine; searchable as soon as the first batch lands.
 		const meta = new Map<string, { mtime: number; size: number }>();
@@ -171,15 +192,36 @@ export class Indexer {
 		console.log(`[ff10k] indexed ${docs} docs in ${elapsedMs} ms (warm: ${fromCache} from cache, ${changed.length} re-read)`);
 	}
 
-	/** Reads the files, sends them to the engine and stores them in the cache. */
+	/** Reads the files, sends them to the engine and stores them in the cache.
+	 * Unreadable files are skipped; a row whose file changed during the read, or that has a
+	 * pending event, is dropped because a newer flush owns that path. */
 	private async indexFiles(files: TFile[]): Promise<void> {
-		const rows: NoteRow[] = await Promise.all(
-			files.map(async (f) => ({ path: f.path, mtime: f.stat.mtime / 1000, size: f.stat.size, text: await this.app.vault.cachedRead(f) })),
+		const read = await Promise.all(
+			files.map(async (f): Promise<NoteRow | null> => {
+				const mtime = f.stat.mtime / 1000;
+				const size = f.stat.size;
+				try {
+					const text = await this.app.vault.cachedRead(f);
+					return { path: f.path, mtime, size, text };
+				} catch {
+					return null;
+				}
+			}),
 		);
 		if (this.disposed) return;
+		const failed = read.filter((r) => r === null).length;
+		if (failed) console.error(`[ff10k] ${failed} of ${files.length} files could not be read`);
+		const rows = read.filter(
+			(r, i): r is NoteRow => r !== null && files[i].stat.mtime / 1000 === r.mtime && !this.timers.has(r.path),
+		);
+		if (!rows.length) return;
 		this.engine.upsert(rows.map((r) => ({ path: r.path, mtime: r.mtime, text: r.text })));
 		for (const r of rows) this.inEngine.add(r.path);
-		await this.cache.put(rows);
+		try {
+			await this.cache.put(rows);
+		} catch (e) {
+			console.error('[ff10k] caching notes failed', e);
+		}
 	}
 
 	private schedule(path: string, kind: Pending): void {

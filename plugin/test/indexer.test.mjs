@@ -44,3 +44,115 @@ test('glob helper', () => {
 	assert.equal(m('a/**/b.md', 'a/x/y/b.md'), true);
 	assert.equal(m('(x)+.md', '(x)+.md'), true);
 });
+
+// --- start()/rebuild() with stubbed vault, cache and engine ---
+
+function file(path, mtime = 1000) {
+	return { path, extension: 'md', stat: { mtime, size: 10 } };
+}
+
+function harness(files, cachedRead) {
+	const upserts = [];
+	const puts = [];
+	const engine = {
+		docs: new Set(),
+		onProgress() {},
+		upsert(docs) {
+			for (const d of docs) {
+				upserts.push(d);
+				this.docs.add(d.path);
+			}
+		},
+		remove(paths) {
+			for (const p of paths) this.docs.delete(p);
+		},
+		stats() {
+			return Promise.resolve(this.docs.size);
+		},
+	};
+	const cache = {
+		failClear: false,
+		streamAll: async () => {},
+		put: async (rows) => void puts.push(...rows),
+		delete: async () => {},
+		clear: async () => {
+			if (cache.failClear) throw new Error('clear failed');
+		},
+	};
+	const app = {
+		metadataCache: { isUserIgnored: () => false },
+		workspace: { onLayoutReady: (cb) => cb() },
+		vault: {
+			getMarkdownFiles: () => files,
+			getFileByPath: (p) => files.find((f) => f.path === p) ?? null,
+			cachedRead,
+		},
+	};
+	const ix = new Indexer(app, engine, cache, { ignoredGlobs: [] });
+	return { ix, engine, cache, upserts, puts };
+}
+
+const quiet = async (fn) => {
+	const { error, log } = console;
+	console.error = console.log = () => {};
+	try {
+		return await fn();
+	} finally {
+		Object.assign(console, { error, log });
+	}
+};
+
+test('one failed read does not drop the rest of the batch', async () => {
+	const files = [file('a.md'), file('b.md'), file('c.md')];
+	const h = harness(files, async (f) => {
+		if (f.path === 'b.md') throw new Error('ENOENT');
+		return `text ${f.path}`;
+	});
+	await quiet(() => h.ix.start());
+	assert.deepEqual(h.upserts.map((d) => d.path).sort(), ['a.md', 'c.md']);
+	assert.equal(h.ix.status.done, true);
+});
+
+test('a failed cache.put still upserts and finishes', async () => {
+	const h = harness([file('a.md')], async () => 'x');
+	h.cache.put = async () => {
+		throw new Error('QuotaExceededError');
+	};
+	await quiet(() => h.ix.start());
+	assert.deepEqual(h.upserts.map((d) => d.path), ['a.md']);
+	assert.equal(h.ix.status.done, true);
+});
+
+test('rebuild still runs after a failed run', async () => {
+	const h = harness([file('a.md')], async () => 'x');
+	h.cache.streamAll = async () => {
+		throw new Error('idb broken');
+	};
+	await quiet(() => h.ix.start()).catch(() => {});
+	assert.equal(h.ix.status.done, true);
+	await quiet(() => h.ix.rebuild());
+	assert.deepEqual(h.upserts.map((d) => d.path), ['a.md']);
+	assert.equal(h.ix.status.done, true);
+	assert.equal(h.ix.status.indexed, 1);
+});
+
+test('a late startup read does not overwrite a fresher modify flush', async () => {
+	const p = file('p.md', 1000);
+	let releaseStale;
+	let calls = 0;
+	const h = harness([p], (f) => {
+		calls++;
+		if (calls === 1) return new Promise((r) => (releaseStale = () => r('stale')));
+		return Promise.resolve('fresh');
+	});
+	const started = quiet(() => h.ix.start());
+	await new Promise((r) => setTimeout(r, 0));
+	p.stat.mtime = 2000; // modified on disk
+	await h.ix.flush('p.md', 'upsert');
+	releaseStale();
+	await started;
+	const last = (arr) => arr.filter((d) => d.path === 'p.md').at(-1);
+	assert.equal(last(h.upserts).text, 'fresh');
+	assert.equal(last(h.puts).text, 'fresh');
+	assert.equal(last(h.puts).mtime, 2);
+});
