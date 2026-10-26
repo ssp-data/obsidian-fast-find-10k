@@ -1,5 +1,7 @@
 //! Tokenizer: splits raw text into normalized tokens with word positions and raw byte offsets.
 
+use unicode_general_category::{get_general_category, GeneralCategory};
+
 use crate::normalize::normalize;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,7 +13,13 @@ pub struct Token {
 }
 
 fn is_word_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '-' || c == '_'
+    c.is_alphanumeric()
+        || c == '-'
+        || c == '_'
+        || matches!(
+            get_general_category(c),
+            GeneralCategory::NonspacingMark | GeneralCategory::SpacingMark
+        )
 }
 
 /// Byte ranges of maximal runs of word characters, with leading/trailing joiners trimmed.
@@ -153,5 +161,20 @@ mod tests {
             tokenize_query_term("Data-Engineering"),
             ["data-engineering", "data", "engineering"]
         );
+    }
+
+    #[test]
+    fn decomposed_accent_matches_precomposed() {
+        assert_eq!(texts("Spa\u{308}ti"), ["spati"]);
+        assert_eq!(texts("Spa\u{308}ti"), texts("Sp\u{e4}ti"));
+    }
+
+    #[test]
+    fn decomposed_kana_stays_one_token_with_marks_in_range() {
+        let raw = "\u{30CF}\u{3099}";
+        let t = tokenize(raw);
+        assert_eq!(t.len(), 1);
+        assert_eq!(t[0].text, normalize(raw));
+        assert_eq!((t[0].byte_start as usize, t[0].byte_end as usize), (0, raw.len()));
     }
 }
