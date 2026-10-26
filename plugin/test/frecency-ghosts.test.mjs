@@ -19,7 +19,7 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { sanitizeName, ghostNotePath, insertLink } = await load('src/actions.ts');
+const { sanitizeName, ghostNotePath } = await load('src/actions.ts');
 const { collectGhosts, throttle } = await load('src/unresolved.ts');
 const { FrecencyTracker } = await load('src/frecency.ts');
 
@@ -50,20 +50,6 @@ test('ghostNotePath keeps folders, strips .md, refuses traversal', () => {
 	assert.equal(ghostNotePath('a/.hidden/x'), 'a/hidden/x.md');
 	assert.equal(ghostNotePath('folder/'), null);
 	assert.equal(ghostNotePath(''), null);
-});
-
-test('insertLink refuses a Markdown view in reading mode', () => {
-	globalThis.__notices = [];
-	let inserted = null;
-	const view = { file: { path: 'b.md' }, getMode: () => 'preview', editor: { replaceSelection: (t) => (inserted = t) } };
-	const app = { workspace: { getActiveViewOfType: () => view } };
-	const hit = { path: 'a.md', title: 'Ghost', isGhost: true, badge: 'Title', heading: null };
-	assert.equal(insertLink(app, hit), false);
-	assert.equal(inserted, null);
-	assert.deepEqual(globalThis.__notices, ['Fast Find 10K: switch to editing mode to insert a link']);
-	view.getMode = () => 'source';
-	assert.equal(insertLink(app, hit), true);
-	assert.equal(inserted, '[[Ghost]]');
 });
 
 test('collectGhosts strips #heading and |alias and counts distinct source files', () => {

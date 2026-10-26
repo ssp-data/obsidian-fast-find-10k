@@ -131,7 +131,7 @@ Observed on the test vault, 2026-10-26:
 | Ctrl+J ×2, ↓ / Ctrl+K, ↑ | selection 0 → 3 → 1 |
 | Ctrl+P | `ff10k-preview-hidden` toggles on the modal |
 | Ctrl+/ | per-term debug line under every row, e.g. `obsidian: title exact 1.0 · trouble: title prefix 0.6 \| fields 158.33 · … \| score 186.92` |
-| Tab / Shift+Enter / Alt+Enter / Ctrl+S | Notice "coming in a later task" |
+| Tab / Shift+Enter / Ctrl+S | Notice "coming in a later task" |
 | Enter | same leaf (3 → 3 leaves), opens Obsidian Troubleshoot, modal closed |
 | Mod+Enter | new tab (3 → 4 leaves) |
 | Mod+Alt+Enter | split (root split children 1 → 2) |
@@ -198,7 +198,9 @@ match when that match sits deep in the note. With a target at line 300 or 2,500 
 Ghost rows take the same `—` path but cannot be checked in the app yet: ghosts are not fed to
 the engine before the create-note task.
 
-## Frecency, ghosts, create note, insert link (task 19)
+## Frecency, ghosts, create note (task 19)
+
+Insert link (Alt+Enter) was removed in task 23 on owner request; its checks are gone from this section.
 
 Frecency: every `file-open` of an indexed note appends a timestamp (seconds, newest 128 kept) to
 the `access` store and the engine; an open through the modal is recorded by the modal (plus one
@@ -217,11 +219,9 @@ o eval code="app.plugins.plugins['fast-find-10k'].cache.getAccess().then(a=>wind
 o eval code="JSON.stringify(window.__acc)"
 o eval code="const r=indexedDB.open('ff10k/'+app.appId); r.onsuccess=()=>{const q=r.result.transaction('queries').objectStore('queries').getAll(); q.onsuccess=()=>window.__q=JSON.stringify(q.result)}; 'ok'"
 o eval code="window.__q"
-# create / guard / insert link: Shift+Enter, Ctrl+Shift+Enter, Alt+Enter
+# create / guard: Shift+Enter, Ctrl+Shift+Enter
 o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:true,bubbles:true,cancelable:true})); 'ok'"
 o eval code="const s=document.querySelector('.ff10k-similar'); s.querySelector('.ff10k-similar-label').textContent+': '+[...s.querySelectorAll('.ff10k-similar-title')].map(e=>e.textContent).join(', ')"
-o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',altKey:true,bubbles:true,cancelable:true})); 'ok'"
-o eval code="JSON.stringify(app.workspace.activeEditor.editor.getValue())"
 ```
 
 Observed on the test vault, 2026-10-26 (6,097 ghost targets → capped to 5,000; top by refs:
@@ -239,13 +239,9 @@ Observed on the test vault, 2026-10-26 (6,097 ghost targets → capped to 5,000;
 | Esc | panel back to `similar notes · possible duplicates`, focus on the input, modal open |
 | Shift+Enter, Shift+Enter (new-note location = folder `ff10k-new`) | `ff10k-new/Smart Note Taking.md` created and active, modal closed |
 | 2 s later, `smart note taking` | 0 ghost rows; the new note is the first title row |
-| Alt+Enter on `Process of Smart Note-Taking` | editor text `[[Process of Smart Note-Taking]]`, modal closed |
-| Alt+Enter on h3 `### Smart Note Taking` in Zettelkasten | `[[Zettelkasten#Smart Note Taking]]` |
-| Alt+Enter on ghost `Writers Block` | `[[Writers Block]]` |
 | `Index`, Shift+Enter (no note named Index yet) | guard `_index, LlamaIndex, CocoIndex`; Shift+Enter → `ff10k-new/Index.md` |
 | `Index` again, folder now `ff10k-idx`, Shift+Enter then Ctrl+Shift+Enter | guard lists `ff10k-new/Index.md` first; `ff10k-idx/Index.md` created in a new tab (4 → 5 leaves) |
 | `index`: both rows | `ff10k-idx/Index.md`, `ff10k-new/Index.md` (distinct paths) |
-| Alt+Enter on `ff10k-new/Index.md` from `ff10k-idx/Index.md` | `[[ff10k-new/Index]]`, `getFirstLinkpathDest` → `ff10k-new/Index.md` |
 | guard on, Enter on a guard row | opens that existing note, nothing created |
 | `createGuard` false, Shift+Enter | created at once |
 
@@ -260,8 +256,6 @@ Review fixes (task 19), 2026-10-26:
 | ghost `ff10k-g/sub/Ghost Folder Note`, Shift+Enter | `ff10k-g/sub/Ghost Folder Note.md` created (folders made), the link resolves |
 | ghost `ff10kdotnote2.md` | `ff10kdotnote2.md` (no `.md.md`) |
 | ghost `../evil` | Notice `cannot create a note for the link "../evil"`, nothing created |
-| Alt+Enter, active note in reading mode | Notice `switch to editing mode to insert a link`, modal stays, file unchanged |
-| Alt+Enter, same note in editing mode | `[[Showcase]]` inserted at the cursor |
 | `frecency.clear()` | 0 access, 0 queries rows; debug `frecency 0.00 · combo 0.00` |
 
 Ghosts set by hand for a check (`engine.setGhosts([...])`) last until the next metadata

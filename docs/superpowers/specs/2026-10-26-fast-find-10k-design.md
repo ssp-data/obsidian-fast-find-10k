@@ -238,7 +238,7 @@ Rows in the result list that have ≥ 1 similar note (either signal above thresh
 - Shift+Enter creates a note from the query text (Mod+Shift+Enter: in a new tab). Filename = query with `\ / : * ? " < > |` removed and whitespace trimmed; if the selected row is a ghost (unresolved link), the exact link target is used instead. Location follows Obsidian's "Default location for new notes" (same folder as current, configured folder, or vault root), via `fileManager` / `vault.create`, then open.
 - **Create guard**: before creating, the modal swaps the similar panel to "Already have?" showing up to 3 nearest existing notes (title-overlap and, if available, semantic neighbours of the query embedding). Enter on one of them opens it instead; Shift+Enter again confirms creation; Esc cancels. Setting to disable the guard.
 - Ghost rows: unresolved link targets appear as tier-1 candidates, rendered italic with a dashed icon and "not created · linked from N notes". Enter on a ghost = create it (with the guard).
-- Alt+Enter inserts a link to the selected result at the cursor of the active editor (`fileManager.generateMarkdownLink`); for a heading hit, `[[Note#Heading]]`. The modal closes.
+- Insert link (Alt+Enter, `[[link]]` at the editor cursor) was removed on owner request (task 23).
 
 ## 9. Smart Connections integration
 
@@ -270,7 +270,6 @@ Keys (modal; all configurable in settings):
 | Mod+Enter | open in new tab |
 | Mod+Alt+Enter | open in split |
 | Shift+Enter | create note from query / ghost (with guard) |
-| Alt+Enter | insert `[[link]]` at cursor |
 | Ctrl+F (in modal) | toggle files-only mode (tier 1 only, no body index consulted) |
 | Ctrl+S | add semantic tier for this query |
 | Ctrl+J / Ctrl+K, ↑ / ↓ | move selection |

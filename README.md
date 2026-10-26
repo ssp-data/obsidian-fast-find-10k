@@ -51,7 +51,6 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 | Alt+Shift+Enter | open all shown results in tabs (10 or fewer) |
 | Shift+Enter | create a note named after the query (with the "Already have?" guard) |
 | Mod+Shift+Enter | create it in a new tab |
-| Alt+Enter | insert a `[[link]]` to the selected note at the cursor |
 | Ctrl+F | toggle files only |
 | Ctrl+S | add semantic results (Smart Connections) |
 | Ctrl+P | toggle the preview |

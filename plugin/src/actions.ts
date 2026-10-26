@@ -1,5 +1,5 @@
 // Actions on a search hit: open (same leaf, new tab or split, jumping to the matched line),
-// create a note from the query, insert a link at the cursor.
+// create a note from the query or an unresolved link.
 
 import { type App, MarkdownView, Notice, normalizePath, TFile } from 'obsidian';
 import type { Hit } from './protocol';
@@ -99,34 +99,4 @@ async function createAt(app: App, path: string, where: OpenWhere): Promise<TFile
 		}
 	}
 	return open(app, { path, line: null, heading: null }, where);
-}
-
-/** Inserts a link to `hit` at the active editor's cursor (replacing the selection): the user's
- * link format via `generateMarkdownLink`, `#Heading` for heading hits, `[[target]]` for ghosts.
- * False (with a Notice) when there is no Markdown view in editing mode. */
-export function insertLink(app: App, hit: Pick<Hit, 'path' | 'title' | 'isGhost' | 'badge' | 'heading'>): boolean {
-	const view = app.workspace.getActiveViewOfType(MarkdownView);
-	if (!view?.file) {
-		new Notice('Fast Find 10K: open a note in an editor to insert a link');
-		return false;
-	}
-	if (view.getMode() !== 'source') {
-		new Notice('Fast Find 10K: switch to editing mode to insert a link');
-		return false;
-	}
-	let link: string;
-	if (hit.isGhost) {
-		link = `[[${hit.title}]]`;
-	} else {
-		const file = app.vault.getAbstractFileByPath(hit.path);
-		if (!(file instanceof TFile)) {
-			new Notice(`Fast Find 10K: note not found (${hit.path})`);
-			return false;
-		}
-		const isHeading = hit.badge === 'H1' || hit.badge === 'H2' || hit.badge === 'H3';
-		const subpath = isHeading && hit.heading ? `#${hit.heading.text}` : undefined;
-		link = app.fileManager.generateMarkdownLink(file, view.file.path, subpath);
-	}
-	view.editor.replaceSelection(link);
-	return true;
 }

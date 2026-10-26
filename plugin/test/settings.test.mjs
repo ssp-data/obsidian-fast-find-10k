@@ -81,6 +81,11 @@ test('binding validation: syntax and clashes with other actions (Mod = Ctrl off 
 	assert.equal(validateBinding(km, 'moveDown', 'Ctrl+J', false), null);
 });
 
+test('insert link is gone: no default binding, a saved one is dropped', () => {
+	assert.equal('insertLink' in DEFAULT_KEYMAP, false);
+	assert.equal('insertLink' in mergeSettings({ keymap: { insertLink: 'Alt+Enter' } }).keymap, false);
+});
+
 test('the default keymap has no clashes on either platform', () => {
 	assert.deepEqual(conflicts(DEFAULT_KEYMAP, false), []);
 	assert.deepEqual(conflicts(DEFAULT_KEYMAP, true), []);
@@ -96,7 +101,7 @@ test('key labels: platform symbols, Shift+/ shows as ?', () => {
 test('help overlay: every action once, in its group, with its current binding', () => {
 	const km = { ...DEFAULT_KEYMAP, openTab: 'Ctrl+T' };
 	const groups = helpGroups(km);
-	assert.deepEqual(groups.map((g) => g.title), ['Navigate', 'Open', 'Create & link', 'Modes & panels', 'Help']);
+	assert.deepEqual(groups.map((g) => g.title), ['Navigate', 'Open', 'Create', 'Modes & panels', 'Help']);
 	const actions = groups.flatMap((g) => g.rows.map((r) => r.action));
 	for (const a of Object.keys(DEFAULT_KEYMAP)) assert.equal(actions.filter((x) => x === a).length, 1, a);
 	const row = (a) => groups.flatMap((g) => g.rows).find((r) => r.action === a);

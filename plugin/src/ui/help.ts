@@ -18,7 +18,7 @@ export interface HelpGroup {
 const GROUPS: [string, [keyof Keymap | 'close', string][]][] = [
 	['Navigate', [['moveDown', 'next result'], ['moveUp', 'previous result'], ['previewDown', 'scroll preview down'], ['previewUp', 'scroll preview up'], ['focusSimilar', 'focus similar notes']]],
 	['Open', [['open', 'open'], ['openTab', 'open in new tab'], ['openSplit', 'open in split'], ['openAll', 'open all shown in tabs (≤ 10)']]],
-	['Create & link', [['create', 'create note from query'], ['createTab', 'create note in new tab'], ['insertLink', 'insert [[link]] at cursor']]],
+	['Create', [['create', 'create note from query'], ['createTab', 'create note in new tab']]],
 	['Modes & panels', [['filesOnly', 'toggle files only'], ['semantic', 'add semantic results'], ['togglePreview', 'toggle preview'], ['toggleDebug', 'toggle why ranked']]],
 	['Help', [['showHelp', 'toggle this help'], ['close', 'close']]],
 ];

@@ -1,8 +1,8 @@
-// The search modal: query input, tiered results, data-driven keys, open/create/link actions,
+// The search modal: query input, tiered results, data-driven keys, open/create actions,
 // help overlay.
 
 import { type App, Modal, Notice, Platform, Scope, TFile, type WorkspaceLeaf } from 'obsidian';
-import { createGhostNote, createNote, ghostNotePath, insertLink, open, type OpenWhere, sanitizeName } from '../actions';
+import { createGhostNote, createNote, ghostNotePath, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
 import type { Hit, Mode, SearchResponse, SemanticHit } from '../protocol';
 import type { EngineClient } from '../engine-client';
@@ -281,7 +281,6 @@ export class FastFindModal extends Modal {
 			openSplit: () => void this.openSelected('split'),
 			create: () => void this.startCreate('same'),
 			createTab: () => void this.startCreate('tab'),
-			insertLink: () => this.insertLinkSelected(),
 			semantic: () => this.forceSemantic(),
 			focusSimilar: () => this.enterSimilar(km),
 			filesOnly: () => this.setMode(this.state.mode === 'all' ? 'filesOnly' : 'all'),
@@ -444,7 +443,6 @@ export class FastFindModal extends Modal {
 			[[km.openSplit], 'split'],
 			[[km.create], 'create note'],
 			[[km.createTab], 'create in tab'],
-			[[km.insertLink], 'insert [[link]]'],
 			[[km.filesOnly], 'files only'],
 			[[km.semantic], 'semantic'],
 			[[km.moveDown, km.moveUp], 'move'],
@@ -630,12 +628,6 @@ export class FastFindModal extends Modal {
 	private async create(name: string, ghost: string | null, where: OpenWhere): Promise<void> {
 		const file = ghost === null ? await createNote(this.app, name, where) : await createGhostNote(this.app, ghost, where);
 		if (file) this.close();
-	}
-
-	/** Alt+Enter: link to the selected result at the editor cursor, then close. */
-	private insertLinkSelected(): void {
-		const hit = this.state.hits[this.state.selected];
-		if (hit && insertLink(this.app, hit)) this.close();
 	}
 
 	private setMode(mode: Mode): void {

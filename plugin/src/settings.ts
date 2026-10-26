@@ -14,7 +14,6 @@ export interface Keymap {
 	openSplit: string;
 	create: string;
 	createTab: string;
-	insertLink: string;
 	filesOnly: string;
 	semantic: string;
 	moveDown: string;
@@ -34,7 +33,6 @@ export const DEFAULT_KEYMAP: Keymap = {
 	openSplit: 'Mod+Alt+Enter',
 	create: 'Shift+Enter',
 	createTab: 'Mod+Shift+Enter',
-	insertLink: 'Alt+Enter',
 	filesOnly: 'Ctrl+F',
 	semantic: 'Ctrl+S',
 	moveDown: 'Ctrl+J',
