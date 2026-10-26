@@ -18,7 +18,7 @@ fn is_word_char(c: char) -> bool {
 fn words(raw: &str) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let mut start: Option<usize> = None;
-    let mut push = |s: usize, e: usize, out: &mut Vec<(usize, usize)>| {
+    let push = |s: usize, e: usize, out: &mut Vec<(usize, usize)>| {
         let w = &raw[s..e];
         let t = w.trim_start_matches(['-', '_']);
         let s2 = s + (w.len() - t.len());
