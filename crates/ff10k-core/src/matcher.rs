@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
 use crate::doc::Field;
-use crate::index::{DocId, Index, Posting};
+use crate::index::{DocId, Index, Posting, PostingList};
 use crate::query::Term;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -92,7 +92,7 @@ impl<'a> Acc<'a> {
         Acc { kind, quality: -1.0, heading_idx: None, positions: SmallVec::new(), tokens: SmallVec::new() }
     }
 
-    fn add(&mut self, field: Field, kind: MatchKind, quality: f32, p: &Posting, hl: Option<(&'a str, usize)>) {
+    fn add(&mut self, field: Field, kind: MatchKind, quality: f32, p: Posting, hl: Option<(&'a str, usize)>) {
         let heading = is_heading(field);
         let better = quality > self.quality
             || (quality == self.quality && kind_rank(kind) < kind_rank(self.kind));
@@ -104,7 +104,7 @@ impl<'a> Acc<'a> {
         if heading {
             self.positions.extend(p.positions.iter().map(|x| x & 0xFFFF));
         } else {
-            self.positions.extend_from_slice(&p.positions);
+            self.positions.extend_from_slice(p.positions);
         }
         self.tokens.extend(hl);
     }
@@ -120,14 +120,14 @@ fn match_token<'a>(
 ) {
     let track = has_strings(field);
     let needle_chars = needle.chars().count() as f32;
-    let mut add = |tok: &'a str, postings: &[Posting]| {
+    let mut add = |tok: &'a str, postings: &PostingList| {
         let (kind, quality) = if tok.len() == needle.len() {
             (MatchKind::Exact, 1.0)
         } else {
             (MatchKind::Prefix, needle_chars / tok.chars().count() as f32)
         };
         let hl = track.then_some((tok, needle.len()));
-        for p in postings {
+        for p in postings.iter() {
             out.entry(p.doc).or_insert_with(|| Acc::new(kind)).add(field, kind, quality, p, hl);
         }
     };

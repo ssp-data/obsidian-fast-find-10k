@@ -49,16 +49,84 @@ pub(crate) fn timed<T>(slot: Option<&mut std::time::Duration>, f: impl FnOnce() 
 /// Maximum number of body tokens that get positions; later tokens are indexed without them.
 pub const BODY_POSITION_CAP: usize = 50_000;
 
-/// One doc's occurrences of a term in a field.
+/// One doc's occurrences of a term in a field (a view into a `PostingList`).
 ///
 /// `positions`: for `Body`, `Title`, `Alias`, `Tag`, `Link`, `Path` the token `pos` within its
 /// string. For `H1/H2/H3` each entry is packed `(heading_idx << 16) | pos` (`pos` masked to 16
 /// bits), where `heading_idx` indexes `Doc::headings`. Body tokens beyond `BODY_POSITION_CAP`
 /// create the posting but add no position (so `positions` may be empty).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Posting {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Posting<'a> {
     pub doc: DocId,
-    pub positions: SmallVec<[u32; 4]>,
+    pub positions: &'a [u32],
+}
+
+/// A term's postings in one field, sorted by doc id, stored column-wise: 8 bytes per posting
+/// plus 4 per position (a `Vec` of structs with inline positions cost ~40 bytes per posting).
+#[derive(Default, Debug)]
+pub struct PostingList {
+    docs: Vec<DocId>,
+    /// `positions[ends[i - 1]..ends[i]]` belong to `docs[i]` (`0..ends[0]` for the first).
+    ends: Vec<u32>,
+    positions: Vec<u32>,
+}
+
+static EMPTY_LIST: PostingList = PostingList { docs: Vec::new(), ends: Vec::new(), positions: Vec::new() };
+
+impl PostingList {
+    pub fn len(&self) -> usize {
+        self.docs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.docs.is_empty()
+    }
+
+    fn start(&self, i: usize) -> usize {
+        if i == 0 { 0 } else { self.ends[i - 1] as usize }
+    }
+
+    pub fn get(&self, i: usize) -> Option<Posting<'_>> {
+        let doc = *self.docs.get(i)?;
+        Some(Posting { doc, positions: &self.positions[self.start(i)..self.ends[i] as usize] })
+    }
+
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = Posting<'_>> + '_ {
+        (0..self.docs.len()).map(|i| self.get(i).expect("index in range"))
+    }
+
+    /// Adds `doc`'s posting, keeping doc order (ids can be reused out of order). `doc` must
+    /// not be in the list yet.
+    fn insert(&mut self, doc: DocId, positions: &[u32]) {
+        let n = positions.len() as u32;
+        if self.docs.last().is_none_or(|&last| last < doc) {
+            self.docs.push(doc);
+            self.positions.extend_from_slice(positions);
+            self.ends.push(self.positions.len() as u32);
+            return;
+        }
+        let at = self.docs.partition_point(|&d| d < doc);
+        let start = self.start(at);
+        self.docs.insert(at, doc);
+        self.positions.splice(start..start, positions.iter().copied());
+        self.ends.insert(at, start as u32 + n);
+        for e in &mut self.ends[at + 1..] {
+            *e += n;
+        }
+    }
+
+    /// Drops `doc`'s posting, if present.
+    fn remove(&mut self, doc: DocId) {
+        let Ok(at) = self.docs.binary_search(&doc) else { return };
+        let (start, end) = (self.start(at), self.ends[at] as usize);
+        self.docs.remove(at);
+        self.ends.remove(at);
+        self.positions.drain(start..end);
+        let n = (end - start) as u32;
+        for e in &mut self.ends[at..] {
+            *e -= n;
+        }
+    }
 }
 
 const FIELDS: [Field; 9] = [
@@ -140,21 +208,21 @@ pub struct Index {
 struct Dict {
     ids: FxHashMap<Rc<str>, u32>,
     sorted: BTreeMap<Rc<str>, u32>,
-    lists: Vec<Vec<Posting>>,
+    lists: Vec<PostingList>,
     free: Vec<u32>,
 }
 
 impl Dict {
-    fn get(&self, term: &str) -> &[Posting] {
-        self.ids.get(term).map_or(&[], |&i| self.lists[i as usize].as_slice())
+    fn get(&self, term: &str) -> &PostingList {
+        self.ids.get(term).map_or(&EMPTY_LIST, |&i| &self.lists[i as usize])
     }
 
-    fn list_mut(&mut self, term: String) -> &mut Vec<Posting> {
+    fn list_mut(&mut self, term: String) -> &mut PostingList {
         let slot = match self.ids.get(term.as_str()) {
             Some(&i) => i,
             None => {
                 let i = self.free.pop().unwrap_or_else(|| {
-                    self.lists.push(Vec::new());
+                    self.lists.push(PostingList::default());
                     (self.lists.len() - 1) as u32
                 });
                 let key: Rc<str> = term.into();
@@ -170,22 +238,20 @@ impl Dict {
     fn remove_doc(&mut self, term: &str, doc: DocId) {
         let Some(&i) = self.ids.get(term) else { return };
         let list = &mut self.lists[i as usize];
-        if let Ok(at) = list.binary_search_by_key(&doc, |p| p.doc) {
-            list.remove(at);
-        }
+        list.remove(doc);
         if list.is_empty() {
-            *list = Vec::new();
+            *list = PostingList::default();
             self.ids.remove(term);
             self.sorted.remove(term);
             self.free.push(i);
         }
     }
 
-    fn prefix(&self, prefix: &str) -> Vec<(&str, &[Posting])> {
+    fn prefix(&self, prefix: &str) -> Vec<(&str, &PostingList)> {
         self.sorted
             .range::<str, _>((Bound::Included(prefix), Bound::Unbounded))
             .take_while(|(k, _)| k.starts_with(prefix))
-            .map(|(k, &i)| (&**k, self.lists[i as usize].as_slice()))
+            .map(|(k, &i)| (&**k, &self.lists[i as usize]))
             .collect()
     }
 }
@@ -316,16 +382,7 @@ impl Index {
     fn insert(&mut self, id: DocId, doc: &Doc, maps: Vec<TermMap>) {
         for (fi, map) in maps.into_iter().enumerate() {
             for (term, positions) in map {
-                let list = self.dicts[fi].list_mut(term);
-                let p = Posting { doc: id, positions };
-                // Keep lists sorted by doc id (ids can be reused out of order).
-                match list.last() {
-                    Some(last) if last.doc > id => {
-                        let at = list.partition_point(|x| x.doc < id);
-                        list.insert(at, p);
-                    }
-                    _ => list.push(p),
-                }
+                self.dicts[fi].list_mut(term).insert(id, &positions);
             }
         }
         for l in &doc.links {
@@ -426,12 +483,12 @@ impl Index {
         self.live == 0
     }
 
-    pub fn exact(&self, field: Field, token: &str) -> &[Posting] {
+    pub fn exact(&self, field: Field, token: &str) -> &PostingList {
         self.dicts[fidx(field)].get(token)
     }
 
     /// All terms starting with `prefix`, in dictionary order. Empty prefix yields nothing.
-    pub fn prefix(&self, field: Field, prefix: &str) -> Vec<(&str, &[Posting])> {
+    pub fn prefix(&self, field: Field, prefix: &str) -> Vec<(&str, &PostingList)> {
         if prefix.is_empty() {
             return Vec::new();
         }
@@ -519,7 +576,7 @@ mod tests {
         let _b = ix.upsert(mk("Data Engineering.md", "x"));
         let hits = ix.exact(Field::Title, "ai");
         assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].doc, a);
+        assert_eq!(hits.get(0).unwrap().doc, a);
     }
 
     #[test]
@@ -618,7 +675,7 @@ mod tests {
         let t = Instant::now();
         ix.upsert(doc);
         assert!(t.elapsed().as_secs_f32() < 2.0, "{:?}", t.elapsed());
-        let p = &ix.exact(Field::Body, "word")[0];
+        let p = ix.exact(Field::Body, "word").get(0).unwrap();
         assert!(p.positions.len() <= BODY_POSITION_CAP);
         assert_eq!(p.positions.len(), BODY_POSITION_CAP);
     }
@@ -630,8 +687,8 @@ mod tests {
         assert_eq!(ix.field_strings(Field::Title), &[(id, 0, "n".to_string())]);
         assert_eq!(ix.field_strings(Field::Alias), &[(id, 0, "foo bar".to_string())]);
         assert_eq!(ix.field_strings(Field::H2), &[(id, 1, "sub heading".to_string())]);
-        let p = &ix.exact(Field::H2, "sub")[0];
-        assert_eq!(p.positions.as_slice(), &[1u32 << 16]);
+        let p = ix.exact(Field::H2, "sub").get(0).unwrap();
+        assert_eq!(p.positions, &[1u32 << 16]);
         ix.remove("n.md");
         assert!(ix.field_strings(Field::Title).is_empty());
     }
@@ -656,6 +713,25 @@ mod tests {
         let d = ix.get(id).unwrap();
         assert_eq!(d.title, e.title);
         assert_eq!(d.path_segments, e.path_segments);
+    }
+
+    #[test]
+    fn posting_list_keeps_positions_with_their_doc() {
+        let mut l = PostingList::default();
+        l.insert(5, &[1, 2]);
+        l.insert(9, &[]);
+        l.insert(2, &[7]);
+        l.insert(7, &[3, 4, 5]);
+        let all: Vec<_> = l.iter().map(|p| (p.doc, p.positions.to_vec())).collect();
+        assert_eq!(all, vec![(2, vec![7]), (5, vec![1, 2]), (7, vec![3, 4, 5]), (9, vec![])]);
+        l.remove(5);
+        l.remove(4);
+        let all: Vec<_> = l.iter().map(|p| (p.doc, p.positions.to_vec())).collect();
+        assert_eq!(all, vec![(2, vec![7]), (7, vec![3, 4, 5]), (9, vec![])]);
+        l.remove(2);
+        l.remove(9);
+        l.remove(7);
+        assert!(l.is_empty() && l.positions.is_empty() && l.ends.is_empty());
     }
 
     #[test]
