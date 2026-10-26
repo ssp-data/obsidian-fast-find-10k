@@ -309,7 +309,7 @@ Modal prefill: current editor selection if any, else empty (not the last query; 
   |---|---|---|
   | `obsidian trouble` | Obsidian Troubleshooting | |
   | `data engineering ai` | AI in Data Engineering (tier 1 family) | body-only hits |
-  | `data engineer ai` | same | |
+  | `data engineer ai` | AI for Data Engineers (prefix quality; family in top 5) | |
   | `ai data engineering` | same | |
   | `AI` | notes with token `ai` in title | Airflow, aim decoys |
   | `mlops data engineering` | both MLOps notes, flagged similar | |
@@ -366,3 +366,4 @@ Rulings made during implementation (controller):
 - Smart case (§6.2) is deferred: fuzzy matching runs the normalized query against normalized field strings, so case bonuses are inert in v1.
 - Fuzzy hits are rejected when the matched span exceeds `needle_chars + 2×max_typos + 1` characters or the score ratio is below 0.5, so scattered subsequences (`airflow` → "AI rules for low budgets") never enter tier 1.
 - The short-term rule applies per compound part (`gen-ai` keeps `ai` exact-only in single-term queries).
+- `data engineer ai` ranks "AI for Data Engineers" first because `engineer`→`engineers` (8/9) outscores `engineer`→`engineering` (8/11); the §6.3 example assumed equal quality.

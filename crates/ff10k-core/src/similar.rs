@@ -66,22 +66,25 @@ fn strip_suffix_once(s: &str) -> Option<&str> {
         return Some(rest);
     }
     let rest = head.strip_suffix('-')?;
+    // A digit before the dash is a date or version (`2026-07-01`, `v1.2-3`), not a copy number.
+    if rest.ends_with(|c: char| c.is_ascii_digit()) {
+        return None;
+    }
     let rest = rest.strip_suffix(' ').unwrap_or(rest);
     (!rest.is_empty()).then_some(rest)
 }
 
-/// Normalized title without trailing ` -N`, `-N`, ` (N)`, ` copy`, ` copy N`, trailing
-/// punctuation and double spaces.
+fn trim_punct(s: &str) -> &str {
+    s.trim_end_matches(['.', ',', ';', ':', '!', '?', ' '])
+}
+
+/// Normalized title without one trailing ` -N`, `-N`, ` (N)`, ` copy` or ` copy N`, trailing
+/// punctuation and double spaces. At most one suffix is stripped, so `2026-07-01` never
+/// collapses to `2026`.
 pub fn canonical_title(norm_title: &str) -> String {
-    let mut s = norm_title.split_whitespace().collect::<Vec<_>>().join(" ");
-    loop {
-        let trimmed = s.trim_end_matches(['.', ',', ';', ':', '!', '?', ' ']);
-        let next = strip_suffix_once(trimmed).unwrap_or(trimmed);
-        if next.len() == s.len() {
-            return s;
-        }
-        s = next.trim_end().to_string();
-    }
+    let s = norm_title.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = trim_punct(&s);
+    trim_punct(strip_suffix_once(trimmed).unwrap_or(trimmed)).to_string()
 }
 
 /// Cached per-title keys (filled at upsert/rename by the index).
@@ -272,6 +275,24 @@ mod tests {
         assert_eq!(canonical_title("note copy 3"), "note");
         assert_eq!(canonical_title("note -2"), "note");
         assert_eq!(canonical_title("a  b copy."), "a b");
+    }
+
+    #[test]
+    fn daily_notes_are_not_copies() {
+        for t in ["2026-07-01", "2026-07", "2026", "meeting 2026-07-01", "v1.2-3"] {
+            assert_eq!(canonical_title(t), t);
+        }
+        // One suffix at most.
+        assert_eq!(canonical_title("note (1) (2)"), "note (1)");
+        let e = engine(&["Daily/2026-07-01.md", "Daily/2026-07-02.md", "Daily/2026-07-10.md"]);
+        let r = reasons(&e, "Daily/2026-07-01.md");
+        assert!(r.is_empty(), "{r:?}");
+        let r = e.search("2026-07-01", &SearchOptions::default());
+        assert!(r.hits.iter().all(|h| h.similar_count == 0), "{:?}", r.hits.iter().map(|h| (&h.title, h.similar_count)).collect::<Vec<_>>());
+        // Same prefix, different date: not a copy (title overlap may still apply).
+        let e = engine(&["Meeting 2026-07-01.md", "Meeting 2026-07-02.md"]);
+        let r = reasons(&e, "Meeting 2026-07-01.md");
+        assert!(r.iter().all(|(_, why)| why != "CopySuffix"), "{r:?}");
     }
 
     #[test]
