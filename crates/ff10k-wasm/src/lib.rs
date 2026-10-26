@@ -76,6 +76,11 @@ impl WasmEngine {
         self.inner.clear();
     }
 
+    /// Builds the lazy query caches (call when idle after mutations).
+    pub fn warm_up(&self) {
+        self.inner.warm_up();
+    }
+
     pub fn remove(&mut self, path: &str) -> bool {
         self.inner.remove(path)
     }

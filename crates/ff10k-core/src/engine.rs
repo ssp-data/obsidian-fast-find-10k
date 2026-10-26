@@ -105,6 +105,14 @@ impl Engine {
         self.index = Index::new();
     }
 
+    /// Builds the lazy per-query caches of the index and the ghost set, so the first query
+    /// after a batch of mutations is not the one paying for them (the worker calls this once
+    /// it is idle after mutations).
+    pub fn warm_up(&self) {
+        self.index.warm_up();
+        self.ghosts.warm_up();
+    }
+
     pub fn remove(&mut self, path: &str) -> bool {
         self.index.remove(path).is_some()
     }
@@ -684,6 +692,17 @@ mod tests {
     fn unit(deg: f32) -> [f32; 3] {
         let r = deg.to_radians();
         [r.cos(), r.sin(), 0.0]
+    }
+
+    #[test]
+    fn warm_up_primes_index_and_ghost_caches() {
+        let mut e = corpus();
+        e.set_ghosts(vec![Ghost { target: "Smart Note Taking".into(), refs: 2 }]);
+        e.warm_up();
+        assert!(e.index.caches_built());
+        assert!(e.ghosts.caches_built());
+        let r = e.search("data engineering", &opts());
+        assert_eq!(r.hits[0].tier, 1);
     }
 
     #[test]

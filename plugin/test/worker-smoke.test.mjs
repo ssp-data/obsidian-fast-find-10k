@@ -73,6 +73,13 @@ test('worker bundle answers init, upsert, search, stale and errors', async () =>
 		w.postMessage({ t: 'clear' });
 		w.postMessage({ t: 'stats', id: 7 });
 		assert.deepEqual(await waitFor((m) => m.t === 'stats' && m.id === 7), { t: 'stats', id: 7, docs: 0 });
+
+		// After the idle warm-up has run, the engine still answers normally.
+		w.postMessage({ t: 'upsert', docs: [{ path: 'c/Warm Note.md', mtime: 1, text: '# warm' }] });
+		await new Promise((r) => setTimeout(r, 250));
+		w.postMessage({ t: 'search', id: 8, query: 'warm', mode: 'all', limit: 10, debug: false });
+		assert.equal((await waitFor((m) => m.t === 'results' && m.id === 8)).res.hits[0].title, 'Warm Note');
+		assert.equal(replies.filter((m) => m.t === 'error').length, 1, 'only the bad ghosts message errored');
 	} finally {
 		await w.terminate();
 	}

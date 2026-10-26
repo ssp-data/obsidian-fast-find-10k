@@ -158,6 +158,15 @@ pub struct GhostSet {
 }
 
 impl GhostSet {
+    /// Builds the lazy caches of the private ghost index (see `Index::warm_up`).
+    pub fn warm_up(&self) {
+        self.index.warm_up();
+    }
+
+    pub fn caches_built(&self) -> bool {
+        self.index.caches_built()
+    }
+
     /// Duplicate and empty targets are dropped (first wins).
     pub fn new(ghosts: Vec<Ghost>) -> Self {
         let mut set = GhostSet::default();

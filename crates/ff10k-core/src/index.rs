@@ -495,6 +495,20 @@ impl Index {
         self.dicts[fidx(field)].prefix(prefix)
     }
 
+    /// Builds every lazy cache now (fuzzy/highlight strings of Title, Alias, H1–H3 and the
+    /// backlink counts), so the next query does not pay for them.
+    pub fn warm_up(&self) {
+        for f in [Field::Title, Field::Alias, Field::H1, Field::H2, Field::H3] {
+            self.field_strings(f);
+        }
+        self.backlinks(0);
+    }
+
+    /// True when every lazy cache is built (none cleared since the last `warm_up`).
+    pub fn caches_built(&self) -> bool {
+        self.strings.iter().all(|c| c.get().is_some()) && self.backlink_cache.get().is_some()
+    }
+
     fn clear_strings(&mut self) {
         for c in &mut self.strings {
             c.take();
@@ -741,6 +755,17 @@ mod tests {
         let id = ix.upsert(crate::markdown::extract_uncounted("w.md", text, 0.0));
         assert_eq!(ix.get(id).unwrap().word_count, mk("w.md", text).word_count);
         assert!(ix.get(id).unwrap().word_count > 0);
+    }
+
+    #[test]
+    fn warm_up_builds_every_lazy_cache() {
+        let mut ix = Index::new();
+        ix.upsert(mk("n.md", "# Top\n## Sub\n### Deep\nsee [[n]]"));
+        assert!(!ix.caches_built());
+        ix.warm_up();
+        assert!(ix.caches_built());
+        ix.upsert(mk("m.md", ""));
+        assert!(!ix.caches_built(), "a mutation clears them again");
     }
 
     #[test]

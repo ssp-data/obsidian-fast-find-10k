@@ -18,6 +18,22 @@ let chain: Promise<void> = Promise.resolve();
 
 const post = (msg: Res) => scope.postMessage(msg);
 
+/** Quiet time after the last index mutation before the lazy query caches are rebuilt. */
+const WARM_IDLE_MS = 100;
+let warmTimer: ReturnType<typeof setTimeout> | null = null;
+const MUTATIONS = new Set<Req['t']>(['upsert', 'remove', 'rename', 'clear', 'ghosts']);
+
+/** Mutations clear the engine's lazy caches (fuzzy strings, backlinks: tens of ms to rebuild on
+ * 10k notes). Rebuild them once the worker has been idle for a moment, so the next keystroke
+ * does not pay for them; a search arriving first simply builds them itself. */
+function scheduleWarmUp(): void {
+	if (warmTimer !== null) clearTimeout(warmTimer);
+	warmTimer = setTimeout(() => {
+		warmTimer = null;
+		chain = chain.then(() => engine?.warm_up());
+	}, WARM_IDLE_MS);
+}
+
 function eng(): WasmEngine {
 	if (!engine) throw 'engine not initialized';
 	return engine;
@@ -147,6 +163,7 @@ async function handle(m: Req): Promise<void> {
 scope.onmessage = (ev) => {
 	const m = ev.data;
 	if (m.t === 'search' && m.id > latestSearchId) latestSearchId = m.id;
+	if (MUTATIONS.has(m.t)) scheduleWarmUp();
 	chain = chain.then(() =>
 		handle(m).catch((e: unknown) => {
 			const id = 'id' in m ? m.id : undefined;
