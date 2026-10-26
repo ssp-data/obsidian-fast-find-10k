@@ -137,10 +137,12 @@ impl WasmEngine {
         to_json(&self.inner.semantic(query_vec, limit as usize, min_score))
     }
 
-    pub fn set_vectors(&mut self, dims: u32, paths_json: &str, data: &[f32]) -> Result<(), JsValue> {
+    /// `data` arrives as an owned `Vec` (wasm-bindgen copies the `Float32Array` into wasm memory
+    /// once), so the matrix is not copied a second time (13 MB for 8k x 384).
+    pub fn set_vectors(&mut self, dims: u32, paths_json: &str, data: Vec<f32>) -> Result<(), JsValue> {
         let paths: Vec<String> = serde_json::from_str(paths_json).map_err(js_err)?;
         self.inner
-            .set_vectors(dims as usize, paths, data.to_vec())
+            .set_vectors(dims as usize, paths, data)
             .map_err(|e| js_err(format!("{e:?}")))
     }
 

@@ -13,6 +13,8 @@ interface WorkerScope {
 
 const scope = self as unknown as WorkerScope;
 let engine: WasmEngine | null = null;
+/** The wasm instance's linear memory (only grows; its size is the engine's peak heap). */
+let wasmMemory: WebAssembly.Memory | null = null;
 let latestSearchId = 0;
 let chain: Promise<void> = Promise.resolve();
 
@@ -73,7 +75,7 @@ async function handle(m: Req): Promise<void> {
 	switch (m.t) {
 		case 'init': {
 			if (!engine) {
-				await init({ module_or_path: wasmBytes });
+				wasmMemory = (await init({ module_or_path: wasmBytes })).memory;
 				engine = new WasmEngine();
 			}
 			engine.set_config(JSON.stringify(m.config));
@@ -155,7 +157,7 @@ async function handle(m: Req): Promise<void> {
 			post({ t: 'docText', id: m.id, text: eng().doc_text(m.path) ?? null });
 			return;
 		case 'stats':
-			post({ t: 'stats', id: m.id, docs: eng().doc_count() });
+			post({ t: 'stats', id: m.id, docs: eng().doc_count(), wasmBytes: wasmMemory?.buffer.byteLength ?? 0 });
 			return;
 	}
 }

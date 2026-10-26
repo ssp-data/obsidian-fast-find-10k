@@ -149,7 +149,8 @@ export type Res =
 	| { t: 'similar'; id: number; items: SimilarHit[] }
 	| { t: 'semantic'; id: number; items: SemanticHit[] }
 	| { t: 'docText'; id: number; text: string | null }
-	| { t: 'stats'; id: number; docs: number }
+	/** `wasmBytes`: size of the engine's wasm linear memory (diagnostics). */
+	| { t: 'stats'; id: number; docs: number; wasmBytes: number }
 	| { t: 'normalized'; id: number; query: string }
 	| { t: 'vectorsSet'; ok: boolean; error?: string }
 	| { t: 'error'; id?: number; message: string };

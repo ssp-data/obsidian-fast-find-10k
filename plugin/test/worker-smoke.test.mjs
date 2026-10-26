@@ -58,7 +58,9 @@ test('worker bundle answers init, upsert, search, stale and errors', async () =>
 		assert.ok(res.elapsedUs > 0, `elapsedUs measured: ${res.elapsedUs}`);
 		assert.equal(typeof (await waitFor((m) => m.t === 'error')).message, 'string');
 		assert.equal((await waitFor((m) => m.t === 'vectorsSet')).ok, false);
-		assert.deepEqual(await waitFor((m) => m.t === 'stats'), { t: 'stats', id: 4, docs: 2 });
+		const stats = await waitFor((m) => m.t === 'stats');
+		assert.deepEqual([stats.id, stats.docs], [4, 2]);
+		assert.ok(stats.wasmBytes >= 1 << 20, `wasm memory reported: ${stats.wasmBytes}`);
 
 		// Ranges arrive as UTF-16 offsets: 'ø' is 2 UTF-8 bytes, '💡' and 'ü'/'ß' shift the excerpt.
 		w.postMessage({ t: 'search', id: 5, query: 'cafe', mode: 'all', limit: 10, debug: false });
@@ -72,7 +74,7 @@ test('worker bundle answers init, upsert, search, stale and errors', async () =>
 
 		w.postMessage({ t: 'clear' });
 		w.postMessage({ t: 'stats', id: 7 });
-		assert.deepEqual(await waitFor((m) => m.t === 'stats' && m.id === 7), { t: 'stats', id: 7, docs: 0 });
+		assert.equal((await waitFor((m) => m.t === 'stats' && m.id === 7)).docs, 0);
 
 		// After the idle warm-up has run, the engine still answers normally.
 		w.postMessage({ t: 'upsert', docs: [{ path: 'c/Warm Note.md', mtime: 1, text: '# warm' }] });
