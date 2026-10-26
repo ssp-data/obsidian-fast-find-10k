@@ -214,6 +214,10 @@ fn fence_marker(trimmed: &str) -> Option<(char, usize)> {
         return None;
     }
     let n = trimmed.chars().take_while(|&x| x == c).count();
+    // A backtick fence's info string cannot contain a backtick (CommonMark).
+    if c == '`' && trimmed[n..].contains('`') {
+        return None;
+    }
     (n >= 3).then_some((c, n))
 }
 
@@ -245,6 +249,9 @@ struct Scanner {
 impl Scanner {
     fn inline(&mut self, line: &str) -> String {
         let mut out = String::with_capacity(line.len());
+        let mut close_wiki = Finder::new("]]");
+        let mut md = MdLinkFinder::default();
+        let mut ticks_memo: Vec<Finder> = Vec::new();
         let mut i = 0;
         while i < line.len() {
             let rest = &line[i..];
@@ -254,47 +261,54 @@ impl Scanner {
             if rest.starts_with('`') {
                 let n = rest.bytes().take_while(|&b| b == b'`').count();
                 let ticks = &rest[..n];
-                if let Some(close) = rest[n..].find(ticks) {
-                    out.push_str(&rest[n..n + close]);
-                    i += n + close + n;
+                while ticks_memo.len() < n {
+                    ticks_memo.push(Finder::new(""));
+                }
+                let memo = &mut ticks_memo[n - 1];
+                memo.pat = ticks;
+                if let Some(close) = memo.find(line, i + n) {
+                    out.push_str(&line[i + n..close]);
+                    i = close + n;
                 } else {
                     out.push_str(ticks);
                     i += n;
                 }
                 continue;
             }
-            if let Some(after) = rest.strip_prefix("![[") {
-                if let Some(close) = after.find("]]") {
-                    let inner = &after[..close];
+            if rest.starts_with("![[") {
+                if let Some(close) = close_wiki.find(line, i + 3) {
+                    let inner = &line[i + 3..close];
                     if is_note_target(inner) {
                         self.wikilink(inner, &mut out);
                     }
-                    i += 3 + close + 2;
+                    i = close + 2;
                     continue;
                 }
             }
-            if let Some(after) = rest.strip_prefix("[[") {
-                if let Some(close) = after.find("]]") {
-                    self.wikilink(&after[..close], &mut out);
-                    i += 2 + close + 2;
+            if rest.starts_with("[[") {
+                if let Some(close) = close_wiki.find(line, i + 2) {
+                    self.wikilink(&line[i + 2..close], &mut out);
+                    i = close + 2;
                     continue;
                 }
             }
-            if let Some(after) = rest.strip_prefix("![") {
-                if let Some(len) = md_link_len(after) {
-                    i += 2 + len;
+            if rest.starts_with("![") {
+                if let Some((_, end)) = md.find(line, i + 2) {
+                    i = end;
                     continue;
                 }
             }
-            if let Some(after) = rest.strip_prefix('[') {
-                if let Some(len) = md_link_len(after) {
-                    let text_end = after.find("](").unwrap_or(0);
-                    out.push_str(&after[..text_end]);
-                    i += 1 + len;
+            if rest.starts_with('[') {
+                if let Some((mid, end)) = md.find(line, i + 1) {
+                    out.push_str(&line[i + 1..mid]);
+                    i = end;
                     continue;
                 }
             }
-            if rest.starts_with("data:") && prev.is_none_or(|c| !c.is_alphanumeric()) {
+            if rest.starts_with("data:")
+                && prev.is_none_or(|c| !c.is_alphanumeric())
+                && is_data_uri(&rest[5..])
+            {
                 let n = rest
                     .find(|c: char| c.is_whitespace() || c == ')')
                     .unwrap_or(rest.len());
@@ -355,14 +369,77 @@ fn is_note_target(inner: &str) -> bool {
     }
 }
 
-/// Length of `text](url)` after an opening `[`, if it is a markdown link.
-fn md_link_len(after: &str) -> Option<usize> {
-    let mid = after.find("](")?;
-    if after[..mid].contains('[') {
-        return None;
+/// Memoized "next occurrence of `pat` at or after `q`" within one line.
+/// Keeps repeated searches linear: a cached hit stays valid while it is >= q,
+/// and a cached miss stays valid for every later q.
+struct Finder<'p> {
+    pat: &'p str,
+    from: usize,
+    hit: Option<usize>,
+    set: bool,
+}
+
+impl<'p> Finder<'p> {
+    fn new(pat: &'p str) -> Self {
+        Finder {
+            pat,
+            from: 0,
+            hit: None,
+            set: false,
+        }
     }
-    let close = after[mid + 2..].find(')')?;
-    Some(mid + 2 + close + 1)
+
+    fn find(&mut self, hay: &str, q: usize) -> Option<usize> {
+        if self.set && self.from <= q && self.hit.is_none_or(|p| p >= q) {
+            return self.hit;
+        }
+        self.from = q;
+        self.hit = hay[q..].find(self.pat).map(|p| p + q);
+        self.set = true;
+        self.hit
+    }
+}
+
+/// Finds markdown links `text](url)` after an opening `[`, with memoized searches.
+struct MdLinkFinder {
+    mid: Finder<'static>,
+    open: Finder<'static>,
+    close: Finder<'static>,
+}
+
+impl Default for MdLinkFinder {
+    fn default() -> Self {
+        MdLinkFinder {
+            mid: Finder::new("]("),
+            open: Finder::new("["),
+            close: Finder::new(")"),
+        }
+    }
+}
+
+impl MdLinkFinder {
+    /// For link text starting at `q`: absolute `(text_end, link_end)`.
+    fn find(&mut self, line: &str, q: usize) -> Option<(usize, usize)> {
+        let mid = self.mid.find(line, q)?;
+        if self.open.find(line, q).is_some_and(|p| p < mid) {
+            return None;
+        }
+        let close = self.close.find(line, mid + 2)?;
+        Some((mid, close + 1))
+    }
+}
+
+/// After `data:`: a mime type `type/subtype` or a bare `;base64`.
+fn is_data_uri(after: &str) -> bool {
+    if after.starts_with(";base64") {
+        return true;
+    }
+    let is_mime_char = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-');
+    let Some((ty, rest)) = after.split_once('/') else {
+        return false;
+    };
+    let sub_len = rest.find(|c: char| !is_mime_char(c)).unwrap_or(rest.len());
+    !ty.is_empty() && ty.chars().all(is_mime_char) && sub_len > 0
 }
 
 #[cfg(test)]
@@ -537,5 +614,54 @@ mod tests {
         assert_eq!(d.headings.len(), 1);
         assert_eq!(d.headings[0].text, "yes");
         assert_eq!(d.headings[0].line, 3);
+    }
+
+    #[test]
+    fn long_bracket_lines_are_linear() {
+        // The scanner itself gets the tight budget; the end-to-end bound is looser because
+        // the (linear) tokenizer alone needs ~100 ms per 200k chars in unoptimized builds.
+        // The former quadratic scan took ~39 s on the first input.
+        let inputs = [
+            "[".repeat(200_000),
+            "[x] ".repeat(20_000),
+            "[[".repeat(100_000),
+            "](".repeat(100_000),
+            "` `` ".repeat(40_000),
+        ];
+        for line in inputs {
+            let t = std::time::Instant::now();
+            Scanner::default().inline(&line);
+            let ms = t.elapsed().as_millis();
+            assert!(ms < 100, "scanner took {ms} ms on {:?}...", &line[..5]);
+            let t = std::time::Instant::now();
+            extract("n.md", &line, 0.0);
+            let ms = t.elapsed().as_millis();
+            assert!(ms < 1000, "extract took {ms} ms on {:?}...", &line[..5]);
+        }
+    }
+
+    #[test]
+    fn inline_triple_backticks_do_not_open_fence() {
+        let d = extract("n.md", "```inline```\n# Later\n#tag [[L]]", 0.0);
+        assert_eq!(d.headings.len(), 1);
+        assert_eq!(d.tags, vec!["tag"]);
+        assert_eq!(d.links, vec![link("L", None, None)]);
+    }
+
+    #[test]
+    fn prose_data_colon_kept() {
+        let d = extract("n.md", "Big data: the new oil", 0.0);
+        assert!(d.body.contains("data"), "body: {:?}", d.body);
+        let d = extract(
+            "n.md",
+            "x data:image/png;base64,AAAA y data:;base64,BBBB z",
+            0.0,
+        );
+        assert!(
+            !d.body.contains("AAAA") && !d.body.contains("BBBB"),
+            "body: {:?}",
+            d.body
+        );
+        assert!(d.body.contains('z'));
     }
 }
