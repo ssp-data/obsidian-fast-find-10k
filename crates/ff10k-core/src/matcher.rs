@@ -110,12 +110,60 @@ impl<'a> Acc<'a> {
     }
 }
 
-/// Exact (and, when allowed, prefix) matches of `needle` in `field`, merged into `out`.
+/// A set of doc ids: a bitset over the index's id range.
+#[derive(Clone, Debug, Default)]
+pub struct DocSet {
+    bits: Vec<u64>,
+}
+
+impl DocSet {
+    pub fn insert(&mut self, doc: DocId) {
+        let (w, b) = (doc as usize / 64, doc % 64);
+        if w >= self.bits.len() {
+            self.bits.resize(w + 1, 0);
+        }
+        self.bits[w] |= 1 << b;
+    }
+
+    pub fn contains(&self, doc: DocId) -> bool {
+        self.bits.get(doc as usize / 64).is_some_and(|w| w & (1 << (doc % 64)) != 0)
+    }
+
+    pub fn union_with(&mut self, other: &DocSet) {
+        if other.bits.len() > self.bits.len() {
+            self.bits.resize(other.bits.len(), 0);
+        }
+        for (a, b) in self.bits.iter_mut().zip(&other.bits) {
+            *a |= b;
+        }
+    }
+
+    pub fn intersect_with(&mut self, other: &DocSet) {
+        self.bits.truncate(other.bits.len());
+        for (a, b) in self.bits.iter_mut().zip(&other.bits) {
+            *a &= b;
+        }
+    }
+}
+
+/// The fields (and, for Body, the docs) `match_term_scoped` matches.
+#[derive(Clone, Copy, Debug)]
+pub enum Scope<'s> {
+    All,
+    /// Every field except Body.
+    NoBody,
+    /// Only Body, and only for docs in the set (others are left out, as if they had none).
+    BodyOnly(&'s DocSet),
+}
+
+/// Exact (and, when allowed, prefix) matches of `needle` in `field`, merged into `out`; with
+/// `only`, postings of other docs are skipped.
 fn match_token<'a>(
     index: &'a Index,
     field: Field,
     needle: &'a str,
     allow_prefix: bool,
+    only: Option<&DocSet>,
     out: &mut HashMap<DocId, Acc<'a>>,
 ) {
     let track = has_strings(field);
@@ -128,6 +176,9 @@ fn match_token<'a>(
         };
         let hl = track.then_some((tok, needle.len()));
         for p in postings.iter() {
+            if only.is_some_and(|s| !s.contains(p.doc)) {
+                continue;
+            }
             out.entry(p.doc).or_insert_with(|| Acc::new(kind)).add(field, kind, quality, p, hl);
         }
     };
@@ -237,6 +288,33 @@ fn typo_budget(len: usize, fuzzy: FuzzyLevel) -> Option<u16> {
 /// rule on their own length. Fuzzy hits need `score / self_score ≥ 0.5` and a matched span of at
 /// most `needle_chars + 2 × max_typos + 1` chars.
 pub fn match_term(index: &Index, term: &Term, multi_term: bool, fuzzy: FuzzyLevel) -> Vec<TermHit> {
+    match_term_scoped(index, term, multi_term, fuzzy, Scope::All)
+}
+
+/// Docs with any Body token the term (or one of its compound parts) matches exactly or, where
+/// the short-term rule allows, by prefix. A superset of the docs `match_term` gives a Body hit.
+pub fn body_docs(index: &Index, term: &Term, multi_term: bool) -> DocSet {
+    let mut set = DocSet::default();
+    for p in &term.parts {
+        let mut add = |list: &crate::index::PostingList| list.iter().for_each(|x| set.insert(x.doc));
+        if multi_term || p.chars().count() >= 4 {
+            index.prefix(Field::Body, p).into_iter().for_each(|(_, l)| add(l));
+        } else {
+            add(index.exact(Field::Body, p));
+        }
+    }
+    set
+}
+
+/// `match_term` restricted to the fields (and Body docs) of `scope`; a field in scope gets the
+/// same hits as from `match_term`.
+pub fn match_term_scoped(
+    index: &Index,
+    term: &Term,
+    multi_term: bool,
+    fuzzy: FuzzyLevel,
+    scope: Scope,
+) -> Vec<TermHit> {
     let Some(full) = term.parts.first() else { return Vec::new() };
     let len = full.chars().count();
     // Short-term rule, applied to each part on its own length.
@@ -255,15 +333,21 @@ pub fn match_term(index: &Index, term: &Term, multi_term: bool, fuzzy: FuzzyLeve
 
     let mut out = Vec::new();
     for field in FIELDS {
+        let only = match (field, scope) {
+            (Field::Body, Scope::NoBody) => continue,
+            (Field::Body, Scope::BodyOnly(s)) => Some(s),
+            (_, Scope::BodyOnly(_)) => continue,
+            _ => None,
+        };
         let mut hits: HashMap<DocId, Acc> = HashMap::new();
-        match_token(index, field, full, allow_prefix(full), &mut hits);
+        match_token(index, field, full, allow_prefix(full), only, &mut hits);
 
         if term.parts.len() > 1 {
             let mut parts: Vec<HashMap<DocId, Acc>> = term.parts[1..]
                 .iter()
                 .map(|p| {
                     let mut m = HashMap::new();
-                    match_token(index, field, p, allow_prefix(p), &mut m);
+                    match_token(index, field, p, allow_prefix(p), only, &mut m);
                     m
                 })
                 .collect();
@@ -422,6 +506,39 @@ mod tests {
         let hits = match_term(&ix, &term("troubelshoot"), false, off);
         assert!(hits.iter().all(|h| h.kind != MatchKind::Fuzzy));
         assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn scoped_matching_splits_body_from_other_fields() {
+        let ix = ix();
+        let key = |h: &TermHit| (h.doc, h.field as u8, h.kind as u8, h.quality.to_bits(), h.positions.to_vec());
+        for q in ["data", "troubleshooting", "ai", "data-engineering"] {
+            let t = term(q);
+            let all: Vec<_> = match_term(&ix, &t, true, NORMAL).iter().map(key).collect();
+            let docs = body_docs(&ix, &t, true);
+            let mut split = match_term_scoped(&ix, &t, true, NORMAL, Scope::NoBody);
+            assert!(split.iter().all(|h| h.field != Field::Body));
+            split.extend(match_term_scoped(&ix, &t, true, NORMAL, Scope::BodyOnly(&docs)));
+            split.sort_by_key(|h| (h.doc, h.field as u8));
+            assert_eq!(split.iter().map(key).collect::<Vec<_>>(), all, "{q}");
+        }
+        // Docs outside the set get no Body hit.
+        let none = DocSet::default();
+        assert!(match_term_scoped(&ix, &term("data"), true, NORMAL, Scope::BodyOnly(&none)).is_empty());
+    }
+
+    #[test]
+    fn doc_set_ops() {
+        let (mut a, mut b) = (DocSet::default(), DocSet::default());
+        a.insert(3);
+        a.insert(200);
+        b.insert(3);
+        b.insert(64);
+        let mut i = a.clone();
+        i.intersect_with(&b);
+        assert!(i.contains(3) && !i.contains(200) && !i.contains(64));
+        a.union_with(&b);
+        assert!([3, 64, 200].iter().all(|&d| a.contains(d)) && !a.contains(4));
     }
 
     #[test]

@@ -17,7 +17,7 @@ use crate::doc::{Doc, Field, Weights};
 use crate::frecency::frecency_score;
 use crate::markdown::extract;
 use crate::index::{DocId, Index};
-use crate::matcher::{match_term, FuzzyLevel, MatchKind, TermHit};
+use crate::matcher::{body_docs, match_term, match_term_scoped, DocSet, FuzzyLevel, MatchKind, Scope, TermHit};
 use crate::normalize::{normalize, strip_symbols};
 use crate::query::{Query, Term};
 use crate::tokenize::{tokenize, tokenize_query_term, Token};
@@ -335,12 +335,17 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
     let multi = n_words > 1;
     // A field weighted 0 in the settings is not searched at all (not merely scored 0).
     let keep = |h: &TermHit| (!files_only || class(h.field) == 1) && cfg.weights.get(h.field) > 0.0;
+    // Body hits are filtered out by `keep` here, or (several units) computed last, only for
+    // docs that can still get a tier: see `tierable`.
+    let body_kept = !files_only && cfg.weights.body > 0.0;
+    let body_later = body_kept && query.terms.len() + query.phrases.len() > 1;
+    let scope = if body_kept && !body_later { Scope::All } else { Scope::NoBody };
     let mut units = Vec::new();
     for t in &query.terms {
         units.push(Unit {
             label: t.norm.clone(),
             words: t.parts.iter().map(|p| (p.clone(), prefix_ok(p, multi))).collect(),
-            hits: match_term(index, t, multi, cfg.fuzzy).into_iter().filter(keep).collect(),
+            hits: match_term_scoped(index, t, multi, cfg.fuzzy, scope).into_iter().filter(keep).collect(),
         });
     }
     for p in &query.phrases {
@@ -350,7 +355,45 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
             hits: phrase_hits(index, p, multi).into_iter().filter(keep).collect(),
         });
     }
+    if body_later {
+        let allowed = tierable(index, query, &units, multi);
+        for (u, t) in units.iter_mut().zip(&query.terms) {
+            let body = match_term_scoped(index, t, multi, NO_FUZZY, Scope::BodyOnly(&allowed));
+            if !body.is_empty() {
+                u.hits.extend(body);
+                u.hits.sort_by_key(|h| (h.doc, h.field as u8));
+            }
+        }
+    }
     units
+}
+
+/// Docs that can get a tier once Body hits are added (term units still without them, phrase
+/// units complete): every unit hits the doc somewhere (counting any Body token of a term), or
+/// some unit hits its Title/Alias (partial tier). Body hits of other docs cannot change any
+/// result, so they are never built.
+fn tierable(index: &Index, query: &Query, units: &[Unit], multi: bool) -> DocSet {
+    let mut titled = DocSet::default();
+    let mut all: Option<DocSet> = None;
+    for (i, u) in units.iter().enumerate() {
+        let mut docs = query.terms.get(i).map_or_else(DocSet::default, |t| body_docs(index, t, multi));
+        for h in &u.hits {
+            docs.insert(h.doc);
+            if class(h.field) == 1 {
+                titled.insert(h.doc);
+            }
+        }
+        all = Some(match all {
+            None => docs,
+            Some(mut a) => {
+                a.intersect_with(&docs);
+                a
+            }
+        });
+    }
+    let mut allowed = all.unwrap_or_default();
+    allowed.union_with(&titled);
+    allowed
 }
 
 fn candidates(index: &Index, units: &[Unit]) -> HashMap<DocId, Slots> {
