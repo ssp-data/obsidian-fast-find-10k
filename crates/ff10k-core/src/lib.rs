@@ -10,5 +10,7 @@ pub mod frecency;
 pub mod similar;
 pub mod vectors;
 pub mod engine;
+#[cfg(feature = "golden")]
+pub mod golden;
 
 pub use engine::{Engine, Hit, SearchOptions};

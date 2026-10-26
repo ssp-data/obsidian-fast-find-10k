@@ -1,0 +1,82 @@
+# Golden queries against fixtures/vault (spec §12).
+# A name matches a hit when it equals the hit's title or the hit's path ends with it.
+# expect_in_top = within the first 5 hits; expect_similar_count = exact, hit anywhere in the page.
+
+[[case]]
+query = "obsidian trouble"
+expect_top = "Obsidian Troubleshooting"
+
+[[case]]
+query = "obsidian troubleshoot"
+expect_top = "Obsidian Troubleshooting"
+
+[[case]]
+query = "obsidian troubelshoot"
+expect_top = "Obsidian Troubleshooting"
+
+[[case]]
+query = "AI"
+must_not_top3 = ["Airflow Basics", "aim high", "Airflow for Data Engineering"]
+expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
+
+[[case]]
+query = "data engineering ai"
+expect_top = "AI in Data Engineering"
+expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
+must_not_top3 = ["👉🏻 Data Engineering", "RW Pandas AI — The Future of Data Analysis"]
+
+[[case]]
+query = "data engineer ai"
+expect_top = "AI for Data Engineers"
+expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
+must_not_top3 = ["👉🏻 Data Engineering", "RW Pandas AI — The Future of Data Analysis"]
+
+[[case]]
+query = "ai data engineering"
+expect_top = "AI in Data Engineering"
+expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
+
+[[case]]
+query = "mlops data engineering"
+expect_in_top = ["RW MLOps is mostly data engineering", "RW MLOps Is Mostly Data Engineering."]
+expect_similar_count = { "RW MLOps is mostly data engineering" = 1, "RW MLOps Is Mostly Data Engineering." = 1 }
+
+[[case]]
+query = "rust data eng"
+expect_in_top = ["RW Rust for Data Engineering", "RW Rust for Data Engineering  Dataengineering"]
+expect_similar_count = { "RW Rust for Data Engineering" = 1, "RW Rust for Data Engineering  Dataengineering" = 1 }
+
+[[case]]
+query = "llm pipelines"
+expect_top = "LLMs for Pipelines"
+
+[[case]]
+query = "ai data engineer"
+mode = "files"
+expect_in_top = ["LLMs for Pipelines", "AI Data Engineer Workflows"]
+
+[[case]]
+query = "obsidian search lots"
+# The file name has U+00A0 between "Obsidian" and "Search".
+expect_top = "Obsidian\u00A0Search (lots of files)"
+
+[[case]]
+query = "painful repetitive job"
+expect_in_top = [
+  "RW The Most Painful and Repetitive Job of a Data Engineer",
+  "RW The Most Painful and Repetitive Job of a Data Engineer-2",
+]
+expect_similar_count = { "RW The Most Painful and Repetitive Job of a Data Engineer" = 1, "RW The Most Painful and Repetitive Job of a Data Engineer-2" = 1 }
+
+[[case]]
+query = "index"
+expect_in_top = ["💡 Resources/Index.md", "Archive/Index.md"]
+
+[[case]]
+query = "data mesh"
+expect_top = "Data Mesh"
+must_not_top3 = ["Data Platform Engineering"]
+
+[[case]]
+query = '"data engineering"'
+must_not_top3 = ["Data Platform Engineering"]
