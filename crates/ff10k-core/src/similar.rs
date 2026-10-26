@@ -84,69 +84,127 @@ pub fn canonical_title(norm_title: &str) -> String {
     }
 }
 
-/// Deduplicated non-stopword tokens of a raw title.
-fn title_token_set(title: &str) -> Vec<String> {
-    let mut seen = HashSet::new();
-    tokenize(&strip_symbols(title))
-        .into_iter()
-        .map(|t| t.text)
-        .filter(|t| !STOPWORDS.contains(&t.as_str()) && seen.insert(t.clone()))
-        .collect()
+/// Cached per-title keys (filled at upsert/rename by the index).
+#[derive(Default)]
+pub struct TitleKeys {
+    /// `normalize(strip_symbols(title))`.
+    pub norm: String,
+    /// `canonical_title(norm)`.
+    pub canon: String,
+    /// Sorted, deduplicated non-stopword tokens.
+    pub tokens: Vec<String>,
+}
+
+impl TitleKeys {
+    pub fn of(title: &str) -> TitleKeys {
+        let stripped = strip_symbols(title);
+        let norm = normalize(&stripped);
+        let mut tokens: Vec<String> = tokenize(&stripped)
+            .into_iter()
+            .map(|t| t.text)
+            .filter(|t| !STOPWORDS.contains(&t.as_str()))
+            .collect();
+        tokens.sort_unstable();
+        tokens.dedup();
+        TitleKeys { canon: canonical_title(&norm), norm, tokens }
+    }
 }
 
 fn folder(path: &str) -> &str {
     path.rsplit_once('/').map_or("", |(f, _)| f)
 }
 
-/// Lexical (title-based) neighbours of `id`, best first, at most `limit`.
-pub fn similar_for(index: &Index, id: DocId, limit: usize) -> Vec<SimilarHit> {
-    let Some(doc) = index.get(id) else { return Vec::new() };
-    let tokens = title_token_set(&doc.title);
-    if tokens.is_empty() || limit == 0 {
-        return Vec::new();
+/// Size of the intersection of two sorted, deduplicated lists.
+fn sorted_intersection(a: &[String], b: &[String]) -> usize {
+    let (mut i, mut j, mut n) = (0, 0, 0);
+    while i < a.len() && j < b.len() {
+        match a[i].cmp(&b[j]) {
+            std::cmp::Ordering::Less => i += 1,
+            std::cmp::Ordering::Greater => j += 1,
+            std::cmp::Ordering::Equal => {
+                n += 1;
+                i += 1;
+                j += 1;
+            }
+        }
     }
-    let lists: Vec<_> = tokens.iter().map(|t| index.exact(Field::Title, t)).collect();
+    n
+}
+
+/// Calls `emit(candidate, reason, score)` for every lexical neighbour of `id`. No strings are
+/// allocated per candidate.
+fn scan(index: &Index, id: DocId, mut emit: impl FnMut(DocId, SimilarReason, f32)) {
+    let (Some(doc), Some(keys)) = (index.get(id), index.title_keys(id)) else { return };
+    if keys.tokens.is_empty() {
+        return;
+    }
+    let lists: Vec<_> = keys.tokens.iter().map(|t| index.exact(Field::Title, t)).collect();
     let all_common = lists.iter().all(|l| l.len() > COMMON_TOKEN_DOCS);
     let mut shared: HashMap<DocId, u32> = HashMap::new();
+    let mut used = 0;
     for l in &lists {
         if l.len() > COMMON_TOKEN_DOCS && !all_common {
             continue;
         }
+        used += 1;
         for p in l.iter() {
             if p.doc != id {
                 *shared.entry(p.doc).or_insert(0) += 1;
             }
         }
     }
-    let min_shared = if tokens.len() <= 2 { 1 } else { 2 };
+    // Based on the tokens actually looked up: skipped common tokens never add to `shared`.
+    let min_shared = if used <= 2 { 1 } else { 2 };
     let mut cands: Vec<(DocId, u32)> = shared.into_iter().filter(|c| c.1 >= min_shared).collect();
-    cands.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    cands.truncate(MAX_CANDIDATES);
-
-    let norm = normalize(&strip_symbols(&doc.title));
-    let canon = canonical_title(&norm);
-    let mut out: Vec<SimilarHit> = Vec::new();
-    let mut seen: HashSet<&str> = HashSet::new();
+    if cands.len() > MAX_CANDIDATES {
+        cands.select_nth_unstable_by(MAX_CANDIDATES, |a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        cands.truncate(MAX_CANDIDATES);
+    }
+    let na = keys.tokens.len();
     for (cid, _) in cands {
-        let Some(other) = index.get(cid) else { continue };
-        if other.path == doc.path || !seen.insert(other.path.as_str()) {
+        let (Some(other), Some(ok)) = (index.get(cid), index.title_keys(cid)) else { continue };
+        if other.path == doc.path {
             continue;
         }
-        let other_norm = normalize(&strip_symbols(&other.title));
-        let j = title_jaccard(&tokens, &title_token_set(&other.title));
-        let (reason, score) = if canonical_title(&other_norm) == canon && other.title != doc.title {
-            (SimilarReason::CopySuffix, 1.0)
-        } else if other_norm == norm && folder(&other.path) != folder(&doc.path) {
-            (SimilarReason::SameTitleDifferentFolder, 1.0)
-        } else if j >= 0.8 {
-            (SimilarReason::SameWordsReordered, j)
-        } else if j >= 0.6 {
-            (SimilarReason::SimilarTitle(j), j)
+        if ok.canon == keys.canon && other.title != doc.title {
+            emit(cid, SimilarReason::CopySuffix, 1.0);
+        } else if ok.norm == keys.norm && folder(&other.path) != folder(&doc.path) {
+            emit(cid, SimilarReason::SameTitleDifferentFolder, 1.0);
         } else {
-            continue;
-        };
-        out.push(SimilarHit { path: other.path.clone(), title: other.title.clone(), reason, score });
+            let nb = ok.tokens.len();
+            // Even a full overlap of the smaller set cannot reach 0.6.
+            if (na.min(nb) as f32) < 0.6 * na.max(nb) as f32 {
+                continue;
+            }
+            let s = sorted_intersection(&keys.tokens, &ok.tokens);
+            let j = s as f32 / (na + nb - s) as f32;
+            if j >= 0.8 {
+                emit(cid, SimilarReason::SameWordsReordered, j);
+            } else if j >= 0.6 {
+                emit(cid, SimilarReason::SimilarTitle(j), j);
+            }
+        }
     }
+}
+
+/// Number of lexical neighbours of `id` (no hits are built).
+pub fn similar_count_for(index: &Index, id: DocId) -> u32 {
+    let mut n = 0;
+    scan(index, id, |_, _, _| n += 1);
+    n
+}
+
+/// Lexical (title-based) neighbours of `id`, best first, at most `limit`.
+pub fn similar_for(index: &Index, id: DocId, limit: usize) -> Vec<SimilarHit> {
+    let mut out = Vec::new();
+    if limit == 0 {
+        return out;
+    }
+    scan(index, id, |cid, reason, score| {
+        if let Some(d) = index.get(cid) {
+            out.push(SimilarHit { path: d.path.clone(), title: d.title.clone(), reason, score });
+        }
+    });
     out.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.path.cmp(&b.path)));
     out.truncate(limit);
     out
@@ -221,6 +279,69 @@ mod tests {
         let r = e.similar("alpha beta gamma.md", 10);
         assert!(r.iter().any(|h| matches!(h.reason, SimilarReason::SimilarTitle(j) if (j - 0.75).abs() < 1e-6)));
         assert_eq!(e.similar("alpha beta gamma.md", 1).len(), 1);
+    }
+
+    fn big_vault(n: usize) -> Engine {
+        let mut e = Engine::new();
+        for i in 0..n {
+            e.upsert(&format!("Data Engineering {i}.md"), 0.0, "");
+        }
+        e.upsert("Data Engineering Roadmap.md", 0.0, "");
+        e.upsert("Roadmap for Data Engineering.md", 0.0, "");
+        e
+    }
+
+    #[test]
+    fn common_tokens_skipped_still_finds_reordered() {
+        let e = big_vault(600);
+        for (a, b) in [
+            ("Data Engineering Roadmap.md", "Roadmap for Data Engineering.md"),
+            ("Roadmap for Data Engineering.md", "Data Engineering Roadmap.md"),
+        ] {
+            let r = e.similar(a, 10);
+            assert_eq!(r.len(), 1, "{r:?}");
+            assert_eq!(r[0].path, b);
+            assert!(matches!(r[0].reason, SimilarReason::SameWordsReordered));
+        }
+    }
+
+    #[test]
+    fn candidate_cap_keeps_working() {
+        // All tokens common and more than MAX_CANDIDATES docs sharing them.
+        let e = big_vault(2500);
+        assert!(e.similar("Data Engineering Roadmap.md", 10).len() <= 10);
+        assert_eq!(e.similar("Data Engineering 7.md", 10).len(), 0);
+    }
+
+    fn timed_vault() -> Engine {
+        let mut e = Engine::new();
+        for i in 0..10_000 {
+            let t = if i % 10 < 3 { format!("Data Engineering Topic {i}") } else { format!("Other Note {i}") };
+            e.upsert(&format!("Folder {}/{t}.md", i % 20), i as f64, "");
+        }
+        e
+    }
+
+    fn best_search_us(e: &Engine) -> u64 {
+        let o = SearchOptions::default();
+        let _ = e.search("data engineering", &o);
+        (0..5).map(|_| e.search("data engineering", &o).elapsed_us).min().unwrap()
+    }
+
+    #[test]
+    fn similar_count_timing_smoke() {
+        let e = timed_vault();
+        let us = best_search_us(&e);
+        eprintln!("search with similar_count: {us} us");
+        assert!(us < 2_000_000, "{us}");
+    }
+
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn release_budget_similar_count_10k() {
+        let us = best_search_us(&timed_vault());
+        eprintln!("search with similar_count: {us} us");
+        assert!(us < 10_000, "{us}");
     }
 
     fn mlops() -> Engine {

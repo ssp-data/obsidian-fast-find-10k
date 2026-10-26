@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::index::Index;
 use crate::markdown::extract;
 use crate::query::Query;
-use crate::similar::{similar_for, SimilarHit};
+use crate::similar::{similar_count_for, similar_for, SimilarHit};
 use crate::rank::{rank, Extras, GhostSet};
 pub use crate::rank::{
     Config, DebugInfo, Excerpt, Ghost, HeadingHit, Hit, Mode, PartialMode, SearchOptions,
@@ -120,7 +120,7 @@ impl Engine {
         // Neighbour counts only for the first page hits; the recent list (tier 0) stays instant.
         for h in hits.iter_mut().take(SIMILAR_COUNT_HITS).filter(|h| !h.is_ghost && h.tier != 0) {
             if let Some(id) = self.index.id_of(&h.path) {
-                h.similar_count = similar_for(&self.index, id, usize::MAX).len() as u32;
+                h.similar_count = similar_count_for(&self.index, id);
             }
         }
         #[cfg(not(target_arch = "wasm32"))]

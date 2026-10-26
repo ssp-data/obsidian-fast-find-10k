@@ -9,6 +9,7 @@ use smallvec::SmallVec;
 use crate::doc::{Doc, Field};
 use crate::markdown::title_and_segments;
 use crate::normalize::{normalize, strip_symbols};
+use crate::similar::TitleKeys;
 use crate::tokenize::tokenize;
 
 pub type DocId = u32;
@@ -59,6 +60,8 @@ struct Keys {
     path_key: Option<String>,
     /// Alphanumeric runs in the title (for the short-title bonus).
     title_tokens: u16,
+    /// Normalized/canonical title and sorted non-stopword token set, for near-duplicate lookups.
+    sim: TitleKeys,
 }
 
 impl Keys {
@@ -74,6 +77,7 @@ impl Keys {
                 .filter(|s| !s.is_empty())
                 .count()
                 .min(u16::MAX as usize) as u16,
+            sim: TitleKeys::of(&doc.title),
             title_key,
         }
     }
@@ -276,6 +280,11 @@ impl Index {
     /// `normalize(strip_symbols(path))` of a doc, cached at upsert/rename.
     pub fn path_norm(&self, id: DocId) -> Option<&str> {
         self.records.get(id as usize)?.as_ref().map(|r| r.keys.path_norm.as_str())
+    }
+
+    /// Cached near-duplicate keys of the doc's title.
+    pub fn title_keys(&self, id: DocId) -> Option<&TitleKeys> {
+        self.records.get(id as usize)?.as_ref().map(|r| &r.keys.sim)
     }
 
     /// Number of alphanumeric runs in the doc's title, cached at upsert/rename.
