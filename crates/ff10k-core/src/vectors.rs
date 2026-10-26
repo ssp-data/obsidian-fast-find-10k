@@ -46,7 +46,8 @@ fn dot(a: &[f32], b: &[f32]) -> f32 {
 
 impl Vectors {
     /// `data` holds `paths.len()` rows of `dims` floats. Rows are stored as given (expected to
-    /// be unit-normalized already). A duplicate path keeps its LAST row.
+    /// be unit-normalized already), in `data`'s own buffer (rows of duplicates are compacted in
+    /// place, so the matrix is never copied). A duplicate path keeps its LAST row.
     pub fn new(dims: usize, paths: Vec<String>, data: Vec<f32>) -> Result<Self, VectorError> {
         if dims == 0 {
             return Err(VectorError::BadDims);
@@ -61,17 +62,21 @@ impl Vectors {
         }
         let mut v = Vectors {
             dims,
-            rows: Vec::with_capacity(last.len() * dims),
+            rows: data,
             row_of: HashMap::with_capacity(last.len()),
             path_of: Vec::with_capacity(last.len()),
         };
         for (i, p) in paths.iter().enumerate() {
             if last[p.as_str()] == i {
-                v.row_of.insert(p.clone(), v.path_of.len() as u32);
+                let w = v.path_of.len();
+                if w != i {
+                    v.rows.copy_within(i * dims..(i + 1) * dims, w * dims);
+                }
+                v.row_of.insert(p.clone(), w as u32);
                 v.path_of.push(p.clone());
-                v.rows.extend_from_slice(&data[i * dims..(i + 1) * dims]);
             }
         }
+        v.rows.truncate(v.path_of.len() * dims);
         Ok(v)
     }
 
@@ -180,6 +185,7 @@ mod tests {
         let v = Vectors::new(2, s(&["a", "b", "a"]), vec![1.0, 0.0, 0.0, 1.0, 0.0, -1.0]).unwrap();
         assert_eq!(v.len(), 2);
         assert_eq!(v.get("a"), Some(&[0.0, -1.0][..]));
+        assert_eq!(v.get("b"), Some(&[0.0, 1.0][..]));
         assert_eq!(v.get("zz"), None);
     }
 }
