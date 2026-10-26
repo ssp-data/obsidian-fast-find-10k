@@ -121,3 +121,55 @@ test('open all: up to 10 distinct notes, ghosts excluded', () => {
 	assert.deepEqual(openAllTargets(eleven), { eligible: false, count: 11, paths: [] });
 	assert.deepEqual(openAllTargets([h('g', true)]), { eligible: false, count: 0, paths: [] });
 });
+
+// --- modal start state and open-all runner ---
+const { startState, createOpenAll } = await load('src/ui/modal.ts');
+
+test('start state: resume prefills and forces the preview; null or empty resume is a plain search', () => {
+	assert.deepEqual(startState('ai', false, 'sel'), { query: 'ai', previewOpen: true });
+	assert.deepEqual(startState(null, false, 'sel'), { query: 'sel', previewOpen: false });
+	assert.deepEqual(startState('', false, 'sel'), { query: 'sel', previewOpen: false });
+	assert.deepEqual(startState('', true, ''), { query: '', previewOpen: true });
+});
+
+function openAllDeps(openFile) {
+	const log = [];
+	return {
+		log,
+		deps: {
+			resolve: (p) => (p === 'gone.md' ? null : { path: p }),
+			noteOpen: (p) => log.push(['note', p]),
+			openInTab: async (f) => {
+				log.push(['open', f.path]);
+				await openFile(f);
+			},
+			restore: () => log.push(['restore']),
+			close: () => log.push(['close']),
+			notice: (m) => log.push(['notice', m]),
+		},
+	};
+}
+
+test('open all: opens in order, restores focus, closes; a second press while opening is ignored', async () => {
+	let release;
+	const gate = new Promise((r) => (release = r));
+	const { log, deps } = openAllDeps(() => gate);
+	const run = createOpenAll(deps);
+	const first = run(['a.md', 'gone.md', 'b.md']);
+	const second = run(['c.md']);
+	await second;
+	assert.deepEqual(log, [['note', 'a.md'], ['open', 'a.md']]);
+	release();
+	await first;
+	assert.deepEqual(log.slice(2), [['note', 'b.md'], ['open', 'b.md'], ['restore'], ['close']]);
+	await run(['c.md']); // usable again afterwards
+	assert.deepEqual(log.slice(-3), [['open', 'c.md'], ['restore'], ['close']]);
+});
+
+test('open all: a failing open shows a Notice, restores focus and still closes', async () => {
+	const { log, deps } = openAllDeps(async (f) => {
+		if (f.path === 'b.md') throw new Error('boom');
+	});
+	await createOpenAll(deps)(['a.md', 'b.md', 'c.md']);
+	assert.deepEqual(log, [['note', 'a.md'], ['open', 'a.md'], ['note', 'b.md'], ['open', 'b.md'], ['notice', 'Fast Find 10K: open all failed (Error: boom)'], ['restore'], ['close']]);
+});

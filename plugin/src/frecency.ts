@@ -13,6 +13,8 @@ export class FrecencyTracker {
 	/** Access timestamps (seconds, ascending) per path, mirrored from the cache. */
 	private readonly access = new Map<string, number[]>();
 	private lastModalOpen: { path: string; at: number } | null = null;
+	/** One upcoming `file-open` not to count (focus handed back to a note, not a real open). */
+	private suppressed: { path: string; at: number } | null = null;
 	private ref: EventRef | null = null;
 	private disposed = false;
 
@@ -42,12 +44,24 @@ export class FrecencyTracker {
 		this.ref = null;
 	}
 
-	/** One access, unless the modal opened this note within the last 500 ms (already recorded). */
+	/** One access, unless the modal opened this note within the last 500 ms (already recorded)
+	 * or `suppressNext` asked to skip it. */
 	async recordFileOpen(path: string): Promise<void> {
 		if (this.isExcluded(path)) return;
 		const m = this.lastModalOpen;
 		if (m && m.path === path && this.now() - m.at < MODAL_OPEN_WINDOW_MS) return;
+		const s = this.suppressed;
+		if (s && s.path === path && this.now() - s.at < MODAL_OPEN_WINDOW_MS) {
+			this.suppressed = null;
+			return;
+		}
 		await this.record(path);
+	}
+
+	/** The next `file-open` of `path` within 500 ms is not an access (used when the modal gives
+	 * focus back to the note that was active before it). Consumed by that event. */
+	suppressNext(path: string): void {
+		this.suppressed = { path, at: this.now() };
 	}
 
 	/** Called by the modal before it opens `path`: one access plus one combo count for the query

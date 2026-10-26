@@ -1,7 +1,7 @@
 // The search modal: query input, tiered results, data-driven keys, open/create/link actions,
 // help overlay.
 
-import { type App, Modal, Notice, Platform, Scope, TFile } from 'obsidian';
+import { type App, Modal, Notice, Platform, Scope, TFile, type WorkspaceLeaf } from 'obsidian';
 import { createGhostNote, createNote, ghostNotePath, insertLink, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
 import type { Hit, Mode, SearchResponse, SemanticHit } from '../protocol';
@@ -34,6 +34,45 @@ export function openAllTargets(hits: Pick<Hit, 'path' | 'isGhost'>[]): { eligibl
 	const paths = [...new Set(hits.filter((h) => !h.isGhost).map((h) => h.path))];
 	const eligible = paths.length > 0 && paths.length <= OPEN_ALL_MAX;
 	return { eligible, count: paths.length, paths: eligible ? paths : [] };
+}
+
+/** Initial query and preview state: a non-empty `resume` prefills and forces the preview open;
+ * otherwise (null or '') the editor selection and the setting apply, as in a plain search. */
+export function startState(resume: string | null, previewSetting: boolean, selection: string): { query: string; previewOpen: boolean } {
+	return resume ? { query: resume, previewOpen: true } : { query: selection, previewOpen: previewSetting };
+}
+
+export interface OpenAllDeps<F extends { path: string }> {
+	resolve(path: string): F | null;
+	noteOpen(path: string): void;
+	openInTab(file: F): Promise<void>;
+	restore(): void;
+	close(): void;
+	notice(msg: string): void;
+}
+
+/** The open-all runner: opens each resolvable path in a new tab (in order), then restores focus
+ * and closes, also after a failure (with a Notice). A call while a run is in flight is ignored. */
+export function createOpenAll<F extends { path: string }>(deps: OpenAllDeps<F>): (paths: string[]) => Promise<void> {
+	let opening = false;
+	return async (paths) => {
+		if (opening) return;
+		opening = true;
+		try {
+			for (const path of paths) {
+				const file = deps.resolve(path);
+				if (!file) continue;
+				deps.noteOpen(path);
+				await deps.openInTab(file);
+			}
+		} catch (e) {
+			deps.notice(`Fast Find 10K: open all failed (${String(e)})`);
+		} finally {
+			opening = false;
+			deps.restore();
+			deps.close();
+		}
+	};
 }
 
 /** A semantic neighbour as a tier-5 row (opens at the top of the note; badge shows the score). */
@@ -153,7 +192,7 @@ export class FastFindModal extends Modal {
 	/** Pushed while the help overlay is shown (Esc and the help key close it). */
 	private helpScope: Scope | null = null;
 	private openAllHint!: HTMLElement;
-	/** Query to prefill instead of the editor selection ("Search (resume last)"). */
+	/** Query to prefill instead of the editor selection ("Search (resume last)"); null or '' = none. */
 	private readonly resume: string | null;
 
 	/** `resume`: prefill this query and show the preview whatever the setting says. */
@@ -168,7 +207,7 @@ export class FastFindModal extends Modal {
 			selected: 0,
 			totalDocs: 0,
 			elapsedUs: 0,
-			previewOpen: resume !== null || plugin.settings.previewOpen,
+			previewOpen: startState(resume, plugin.settings.previewOpen, '').previewOpen,
 			debug: plugin.settings.debugByDefault,
 		};
 		this.registerKeys(plugin.settings.keymap);
@@ -205,7 +244,8 @@ export class FastFindModal extends Modal {
 		this.helpEl = contentEl.createDiv({ cls: 'ff10k-help' });
 		this.helpEl.hide();
 
-		this.inputEl.value = this.resume ?? this.app.workspace.activeEditor?.editor?.getSelection().trim() ?? '';
+		const selection = this.app.workspace.activeEditor?.editor?.getSelection().trim() ?? '';
+		this.inputEl.value = startState(this.resume, this.state.previewOpen, selection).query;
 		this.inputEl.addEventListener('input', () => {
 			this.leaveSimilar(); // typing ends the create guard
 			this.search();
@@ -629,23 +669,41 @@ export class FastFindModal extends Modal {
 	}
 
 	/** Opens every shown note (≤ OPEN_ALL_MAX, ghosts excluded) in background tabs, then closes. */
+	private readonly runOpenAll = createOpenAll({
+		resolve: (path) => {
+			const f = this.app.vault.getAbstractFileByPath(path);
+			return f instanceof TFile ? f : null;
+		},
+		noteOpen: (path) => this.noteOpen(path),
+		openInTab: async (file) => {
+			if (!this.openAllPrev) {
+				const ws = this.app.workspace;
+				this.openAllPrev = { leaf: ws.getMostRecentLeaf(), path: ws.getActiveFile()?.path ?? null };
+			}
+			await this.app.workspace.getLeaf('tab').openFile(file, { active: false });
+		},
+		// getLeaf('tab') activates each new tab: give focus back to where the user was, without
+		// that note's `file-open` counting as an access
+		restore: () => {
+			const prev = this.openAllPrev;
+			this.openAllPrev = null;
+			if (!prev?.leaf) return;
+			if (prev.path) this.plugin.frecency?.suppressNext(prev.path);
+			this.app.workspace.setActiveLeaf(prev.leaf, { focus: true });
+		},
+		close: () => this.close(),
+		notice: (msg) => new Notice(msg),
+	});
+	/** The leaf (and its note) active before an open-all run. */
+	private openAllPrev: { leaf: WorkspaceLeaf | null; path: string | null } | null = null;
+
 	private async openAll(): Promise<void> {
 		const t = openAllTargets(this.state.hits);
 		if (!t.eligible) {
 			if (t.count > 0) new Notice(`Fast Find 10K: Open all works for ${OPEN_ALL_MAX} or fewer results (${t.count} shown)`);
 			return;
 		}
-		const files = t.paths.map((p) => this.app.vault.getAbstractFileByPath(p)).filter((f): f is TFile => f instanceof TFile);
-		const ws = this.app.workspace;
-		const prev = ws.getMostRecentLeaf();
-		// Obsidian places each new tab after the previous one: result order is kept
-		for (const file of files) {
-			this.noteOpen(file.path);
-			await ws.getLeaf('tab').openFile(file, { active: false });
-		}
-		// getLeaf('tab') activates the new tab: give focus back to where the user was
-		if (prev) ws.setActiveLeaf(prev, { focus: true });
-		this.close();
+		await this.runOpenAll(t.paths);
 	}
 
 	private toggleHelp(): void {

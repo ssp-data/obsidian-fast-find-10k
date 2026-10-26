@@ -36,7 +36,7 @@ export default class FastFindPlugin extends Plugin {
 
 		this.addCommand({ id: 'search', name: 'Search', callback: () => this.openModal('all') });
 		this.addCommand({ id: 'search-files', name: 'Search file names', callback: () => this.openModal('filesOnly') });
-		this.addCommand({ id: 'search-resume', name: 'Search (resume last)', callback: () => this.openModal('all', this.settings.lastQuery) });
+		this.addCommand({ id: 'search-resume', name: 'Search (resume last)', callback: () => this.openModal('all', this.settings.lastQuery || null) });
 		this.addSettingTab(new FastFindSettingTab(this.app, this));
 
 		this.addCommand({

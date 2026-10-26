@@ -211,3 +211,18 @@ test('a modal open whose query normalizes to nothing records no combo', async ()
 	assert.deepEqual(calls.track, [['a.md', 1000]]);
 	assert.deepEqual(calls.bump, []);
 });
+
+test('suppressNext: the next file-open of that path within 500 ms is skipped, once', async () => {
+	const { tracker, calls, clock } = fakeTracker();
+	await tracker.start();
+	tracker.suppressNext('a.md');
+	await tracker.recordFileOpen('b.md'); // another path: counted, suppression kept
+	clock.ms += 100;
+	await tracker.recordFileOpen('a.md'); // consumed
+	await tracker.recordFileOpen('a.md'); // counted again
+	assert.deepEqual(calls.track.map((c) => c[0]), ['b.md', 'a.md']);
+	tracker.suppressNext('a.md');
+	clock.ms += 600;
+	await tracker.recordFileOpen('a.md'); // too late: counted
+	assert.deepEqual(calls.track.map((c) => c[0]), ['b.md', 'a.md', 'a.md']);
+});
