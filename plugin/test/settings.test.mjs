@@ -86,6 +86,11 @@ test('insert link is gone: no default binding, a saved one is dropped', () => {
 	assert.equal('insertLink' in mergeSettings({ keymap: { insertLink: 'Alt+Enter' } }).keymap, false);
 });
 
+test('why ranked defaults to Ctrl+R; a saved binding keeps its value', () => {
+	assert.equal(DEFAULT_KEYMAP.toggleDebug, 'Ctrl+R');
+	assert.equal(mergeSettings({ keymap: { toggleDebug: 'Ctrl+/' } }).keymap.toggleDebug, 'Ctrl+/');
+});
+
 test('the default keymap has no clashes on either platform', () => {
 	assert.deepEqual(conflicts(DEFAULT_KEYMAP, false), []);
 	assert.deepEqual(conflicts(DEFAULT_KEYMAP, true), []);

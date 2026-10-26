@@ -54,7 +54,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 | Ctrl+F | toggle files only |
 | Ctrl+S | add semantic results (Smart Connections) |
 | Ctrl+P | toggle the preview |
-| Ctrl+/ | toggle "why ranked here" (tier, per-term field and match, score parts) |
+| Ctrl+R | toggle "why ranked here" (tier, per-term field and match, score parts); while the search is open Ctrl+R does not reload Obsidian |
 | Ctrl+? (Ctrl+Shift+/) | toggle the key help |
 | Esc | close (or leave the similar panel / help) |
 
@@ -77,7 +77,7 @@ Each query word (and each quoted phrase) must match. A note's **tier** comes fro
 4. **partial**: some words missing but one in the title or an alias (shown when the other tiers have few hits)
 5. **semantic**: Smart Connections neighbours of the query, when enabled
 
-Within a tier the score adds the field weights × match quality (exact 1.0, prefix by length ratio, fuzzy below that), shrinks it for title words the query left unmatched, and adds proximity (words close together or in one section), backlinks, frecency (opens over the last 30 days, decaying) and a sticky bonus for a note opened three times from the same query. Downranked folders and very short notes are multiplied down. Ctrl+/ shows every part for each row.
+Within a tier the score adds the field weights × match quality (exact 1.0, prefix by length ratio, fuzzy below that), shrinks it for title words the query left unmatched, and adds proximity (words close together or in one section), backlinks, frecency (opens over the last 30 days, decaying) and a sticky bonus for a note opened three times from the same query. Downranked folders and very short notes are multiplied down. Ctrl+R shows every part for each row.
 
 ## Smart Connections
 

@@ -218,7 +218,7 @@ Result limit: 50 scored results returned to the UI per query; the UI renders 30 
 
 ### 6.5 "Why ranked here" debug view
 
-Keyboard toggle (default Ctrl+/ in the modal; configurable) shows under each row: tier, per-term field hit and match quality, and the score components. Also the engine returns these in the result payload only when debug is on. This is a tuning tool and should be cheap to keep.
+Keyboard toggle (default Ctrl+R in the modal, was Ctrl+/ until task 23; configurable; the modal swallows the key so Obsidian's "Reload app" never fires while it is open) shows under each row: tier, per-term field hit and match quality, and the score components. Also the engine returns these in the result payload only when debug is on. This is a tuning tool and should be cheap to keep.
 
 ### 6.6 Latency
 
@@ -274,7 +274,7 @@ Keys (modal; all configurable in settings):
 | Ctrl+S | add semantic tier for this query |
 | Ctrl+J / Ctrl+K, ↑ / ↓ | move selection |
 | Ctrl+P | toggle preview |
-| Ctrl+/ | toggle "why ranked" |
+| Ctrl+R | toggle "why ranked" |
 | Tab | focus similar panel (then Enter opens the similar note) |
 | Esc | close |
 

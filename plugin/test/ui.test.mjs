@@ -173,3 +173,15 @@ test('open all: a failing open shows a Notice, restores focus and still closes',
 	await createOpenAll(deps)(['a.md', 'b.md', 'c.md']);
 	assert.deepEqual(log, [['note', 'a.md'], ['open', 'a.md'], ['note', 'b.md'], ['open', 'b.md'], ['notice', 'Fast Find 10K: open all failed (Error: boom)'], ['restore'], ['close']]);
 });
+
+const { swallowKey } = await load('src/ui/modal.ts');
+
+test('a modal key handler runs its action and swallows the event (Ctrl+R never reaches Obsidian reload)', () => {
+	let ran = 0;
+	const calls = [];
+	const evt = { preventDefault: () => calls.push('preventDefault'), stopPropagation: () => calls.push('stopPropagation') };
+	const handler = swallowKey(() => ran++);
+	assert.equal(handler(evt), false);
+	assert.equal(ran, 1);
+	assert.deepEqual(calls.sort(), ['preventDefault', 'stopPropagation']);
+});

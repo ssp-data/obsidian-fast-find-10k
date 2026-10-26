@@ -38,7 +38,8 @@ export const DEFAULT_KEYMAP: Keymap = {
 	moveDown: 'Ctrl+J',
 	moveUp: 'Ctrl+K',
 	togglePreview: 'Ctrl+P',
-	toggleDebug: 'Ctrl+/',
+	// Ctrl+R is Obsidian's "Reload app"; the modal swallows it while open
+	toggleDebug: 'Ctrl+R',
 	focusSimilar: 'Tab',
 	previewDown: 'Shift+J',
 	previewUp: 'Shift+K',

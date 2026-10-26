@@ -28,6 +28,17 @@ export const OPEN_ALL_MAX = 10;
 
 const keyLabel = (spec: string) => keyLabelFor(spec, Platform.isMacOS);
 
+/** Scope handler for a modal binding: runs `fn` and swallows the event, so a key Obsidian also
+ * binds (Ctrl+R reloads the app) never reaches its global hotkey while the modal is open. */
+export function swallowKey(fn: () => void): (evt: Pick<KeyboardEvent, 'preventDefault' | 'stopPropagation'>) => false {
+	return (evt) => {
+		evt.preventDefault();
+		evt.stopPropagation();
+		fn();
+		return false;
+	};
+}
+
 /** The notes "open all" would open: distinct non-ghost paths of every shown hit, in order;
  * not eligible (and no paths) with none or more than `OPEN_ALL_MAX`. */
 export function openAllTargets(hits: Pick<Hit, 'path' | 'isGhost'>[]): { eligible: boolean; count: number; paths: string[] } {
@@ -296,10 +307,7 @@ export class FastFindModal extends Modal {
 		const bind = (spec: string, fn: () => void) => {
 			const k = parseKeySpec(spec);
 			if (!k) return console.warn('Fast Find 10K: invalid key binding', spec);
-			this.scope.register(k.modifiers, k.key, () => {
-				fn();
-				return false;
-			});
+			this.scope.register(k.modifiers, k.key, swallowKey(fn));
 		};
 		for (const name of Object.keys(actions) as (keyof Keymap)[]) bind(km[name], actions[name]);
 		bind('ArrowDown', actions.moveDown);
