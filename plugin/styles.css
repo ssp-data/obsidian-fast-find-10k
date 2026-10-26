@@ -266,6 +266,12 @@
 	overflow-wrap: anywhere;
 }
 
+/* lines well below the scroll target: skip their layout until scrolled near */
+.ff10k-line.ff10k-lazy {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 1.5em;
+}
+
 .ff10k-h1,
 .ff10k-h2,
 .ff10k-h3 {

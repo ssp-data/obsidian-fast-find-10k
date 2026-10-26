@@ -181,5 +181,19 @@ Observed on the test vault, 2026-10-26:
 | Tab, Enter | modal closed, active file `…/RW MLOps Is Mostly Data Engineering..md` |
 | empty query (tier 0 `recent`) | panel `—`, 0 `similar` calls; preview renders (76 lines) |
 
+Preview paint on the largest notes (`Preview.show` with the text cached, including the layout it forces,
+3 runs each; after the review fix: per-line caps of 2,000 chars and 50 styled ranges, a linear
+segmenter, and `content-visibility: auto` on lines from 200 below the scroll anchor):
+
+| Note | Size | Before fix | After fix |
+|---|---|---|---|
+| `book proposal mindmap.excalidraw.md` (52,483 lines, 4,000 rendered) | 897 KB | 77–96 ms | 36–60 ms |
+| `RW Tools of Titans.md` (660 lines, longest 3,093 chars) | 239 KB | 24–66 ms | 10–13 ms |
+| `Productivity Expert … (Transcript).md` (5,000 lines, 4,000 rendered) | 149 KB | 40–42 ms | 29–31 ms |
+
+What is left is DOM creation for 4,000 line divs, plus real layout of every line above the first
+match when that match sits deep in the note. With a target at line 300 or 2,500 the line lands
+0.1–0.2 px from the top. The lazy lines are all below the anchor, so the scroll stays exact.
+
 Ghost rows take the same `—` path but cannot be checked in the app yet: ghosts are not fed to
 the engine before the create-note task.
