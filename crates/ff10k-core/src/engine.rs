@@ -359,6 +359,33 @@ mod tests {
     }
 
     #[test]
+    fn fully_covered_title_beats_longer_title() {
+        let mut e = Engine::new();
+        e.upsert("Obsidian Troubleshoot.md", 0.0, "");
+        e.upsert("Obsidian Trouble Tags Plugin.md", 0.0, "");
+        let r = e.search("obsidian trouble", &opts());
+        let short = hit(&r, "Obsidian Troubleshoot").unwrap();
+        let long = hit(&r, "Obsidian Trouble Tags Plugin").unwrap();
+        assert_eq!((short.tier, long.tier), (1, 1));
+        assert!(short.score > long.score, "{} vs {}", short.score, long.score);
+        assert_eq!(r.hits[0].title, "Obsidian Troubleshoot");
+    }
+
+    #[test]
+    fn distinctive_word_rescues_long_title() {
+        let mut e = Engine::new();
+        e.upsert("Data Engineering.md", 0.0, "the fundamentals of the field");
+        e.upsert("Fundamentals of Data Engineering (Joe Reis, Matt Housley).md", 0.0, "");
+        let long = "Fundamentals of Data Engineering (Joe Reis, Matt Housley)";
+        let r = e.search("data engineering", &opts());
+        assert_eq!(r.hits[0].title, "Data Engineering");
+        let before = hit(&r, long).unwrap().score;
+        let r = e.search("fundamentals data engineering", &opts());
+        assert_eq!((r.hits[0].title.as_str(), r.hits[0].tier), (long, 1));
+        assert!(r.hits[0].score > before, "{} vs {before}", r.hits[0].score);
+    }
+
+    #[test]
     fn does_not_panic_on_syntax_only_queries() {
         let e = corpus();
         for q in ["#", "path:", "\"\"", "-", "   "] {
@@ -417,7 +444,7 @@ mod tests {
     #[test]
     fn recent_note_wins_tie() {
         let mut e = Engine::new();
-        e.upsert("Meeting Notes A.md", 5.0, "");
+        e.upsert("Meeting Notes C.md", 5.0, "");
         e.upsert("Meeting Notes B.md", 5.0, "");
         e.record_access("Meeting Notes B.md", NOW);
         let r = e.search("meeting notes", &now_opts());

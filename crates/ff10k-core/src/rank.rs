@@ -3,7 +3,8 @@
 //! Every query term and every quoted phrase is one AND-ed *unit*. A doc's tier comes from each
 //! unit's best field class (Title/Alias → 1, H1–H3 → 2, anything else → 3); docs missing a unit
 //! but hitting another in Title/Alias are partial (tier 4). Within a tier the score is
-//! `(Σ fields + proximity + structural + frecency + combo) × penalty`. Hit details (badge,
+//! `(Σ fields × title factor + proximity + structural + frecency + combo) × penalty`; the title
+//! factor shrinks with each title word the query left unmatched (tiers 1–3). Hit details (badge,
 //! heading, excerpt, line) are computed only for the returned page.
 
 use std::cmp::Ordering;
@@ -25,7 +26,9 @@ use crate::tokenize::{tokenize, tokenize_query_term, Token};
 const PROXIMITY_WINDOW: u32 = 8;
 const NEAR_BONUS: f32 = 25.0;
 const SECTION_BONUS: f32 = 15.0;
-const SHORT_TITLE_BONUS: f32 = 10.0;
+/// Tiers 1–3: fields × `max(FLOOR, 1 − STEP × unmatched non-stopword title words)`.
+const TITLE_UNMATCHED_STEP: f32 = 0.15;
+const TITLE_UNMATCHED_FLOOR: f32 = 0.5;
 const BACKLINK_BONUS: f32 = 2.0;
 const SHORT_NOTE_WORDS: u32 = 20;
 const SHORT_NOTE_FACTOR: f32 = 0.8;
@@ -216,8 +219,9 @@ struct Scored<'a> {
     tier: u8,
     score: f32,
     slots: Slots,
-    /// fields, proximity, structural, penalty factor, frecency, combo (the last two as added to the score).
-    parts: [f32; 6],
+    /// fields (after the title factor), title factor, proximity, structural, penalty factor,
+    /// frecency, combo (the last two as added to the score).
+    parts: [f32; 7],
     ghost: Option<&'a Ghost>,
 }
 
@@ -455,6 +459,48 @@ fn proximity(units: &[Unit], slots: &Slots) -> f32 {
     }
 }
 
+/// Title words (`spans` into the normalized title) that no unit hit in Title, by range overlap
+/// (so fuzzy hits count too).
+fn unmatched_in_title(spans: &[(u32, u32)], units: &[Unit], slots: &Slots) -> usize {
+    let covered = |s: u32, e: u32| {
+        units.iter().zip(slots).any(|(u, &sl)| {
+            unit_hits(u, sl)
+                .iter()
+                .any(|h| h.field == Field::Title && h.char_ranges.iter().any(|&(a, b)| a < e && s < b))
+        })
+    };
+    spans.iter().filter(|&&(s, e)| !covered(s, e)).count()
+}
+
+/// `(covered, uncovered)` words of one alias: a word is covered when a unit that hit Alias has a
+/// word equal to it (or a prefix of it, where prefixes count). Hit ranges cannot be used here:
+/// they refer to one alias of the doc, not necessarily this one.
+fn alias_coverage(norm: &str, spans: &[(u32, u32)], units: &[Unit], slots: &Slots) -> (usize, usize) {
+    let covered = spans
+        .iter()
+        .filter(|&&(s, e)| {
+            let word = &norm[s as usize..e as usize];
+            units.iter().zip(slots).any(|(u, &sl)| {
+                unit_hits(u, sl).iter().any(|h| h.field == Field::Alias) && word_matches(word, &u.words)
+            })
+        })
+        .count();
+    (covered, spans.len() - covered)
+}
+
+/// Non-stopword title words no unit matched; a matched alias stands in for the title when it is
+/// better covered.
+fn unmatched_title_words(index: &Index, id: DocId, units: &[Unit], slots: &Slots) -> usize {
+    let title = index.title_keys(id).map_or(0, |k| unmatched_in_title(&k.spans, units, slots));
+    index
+        .alias_words(id)
+        .iter()
+        .map(|(norm, spans)| alias_coverage(norm, spans, units, slots))
+        .filter(|&(covered, _)| covered > 0)
+        .map(|(_, uncovered)| uncovered)
+        .fold(title, usize::min)
+}
+
 /// `path_norm` is the doc's cached normalized path; `folders` are pre-normalized. No allocation.
 fn downranked(path_norm: &str, folders: &[String]) -> bool {
     if folders.is_empty() {
@@ -475,7 +521,6 @@ fn score<'a>(
     tier: u8,
     slots: Slots,
     units: &[Unit],
-    n_words: usize,
     cfg: &Config,
     folders: &[String],
     query: &Query,
@@ -483,16 +528,22 @@ fn score<'a>(
     now_secs: f64,
 ) -> Scored<'a> {
     let w = &cfg.weights;
-    let fields: f32 = units
+    let raw_fields: f32 = units
         .iter()
         .zip(&slots)
         .filter_map(|(u, &s)| best_contribution(w, unit_hits(u, s)))
         .map(|h| w.get(h.field) * h.quality)
         .sum();
+    // Fully covered titles keep their score; each unmatched title word costs STEP (spec §6.4).
+    let title_factor = if tier <= 3 {
+        let unmatched = unmatched_title_words(index, id, units, &slots);
+        (1.0 - TITLE_UNMATCHED_STEP * unmatched as f32).max(TITLE_UNMATCHED_FLOOR)
+    } else {
+        1.0
+    };
+    let fields = raw_fields * title_factor;
     let prox = if tier <= 3 { proximity(units, &slots) } else { 0.0 };
-    let extra_title = (index.title_tokens(id) as usize).saturating_sub(n_words);
-    let structural = SHORT_TITLE_BONUS / (1.0 + extra_title as f32)
-        + BACKLINK_BONUS * (1.0 + index.backlinks(id) as f32).ln();
+    let structural = BACKLINK_BONUS * (1.0 + index.backlinks(id) as f32).ln();
     let exact_title = units
         .iter()
         .zip(&slots)
@@ -511,7 +562,7 @@ fn score<'a>(
         tier,
         score: (fields + prox + structural + frecency + combo) * penalty,
         slots,
-        parts: [fields, prox, structural, penalty, frecency, combo],
+        parts: [fields, title_factor, prox, structural, penalty, frecency, combo],
         ghost: None,
     }
 }
@@ -536,7 +587,6 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
     let mut cands = candidates(index, &units);
     apply_filters(index, query, &mut cands);
 
-    let n_words = query.terms.len() + query.phrases.iter().map(Vec::len).sum::<usize>();
     let folders: Vec<String> = cfg
         .downranked_folders
         .iter()
@@ -548,7 +598,7 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
         .filter_map(|(id, slots)| {
             let doc = index.get(id)?;
             let tier = tier_of(&units, &slots)?;
-            Some(score(index, id, doc, tier, slots, &units, n_words, cfg, &folders, query, extras, opts.now_secs))
+            Some(score(index, id, doc, tier, slots, &units, cfg, &folders, query, extras, opts.now_secs))
         })
         .collect();
     // Ghosts are tier-1 candidates; `ghost_units` index into the ghost set's private index.
@@ -556,7 +606,7 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
     if let Some(gs) = extras.ghosts.filter(|_| ghosts_apply(query, &units)) {
         ghost_units = build_units(&gs.index, query, cfg, true);
         let ctx = (cfg, &folders[..], query, extras, opts.now_secs);
-        scored.extend(ghost_scored(index, gs, &ghost_units, n_words, ctx));
+        scored.extend(ghost_scored(index, gs, &ghost_units, ctx));
     }
     let total = scored.len();
 
@@ -599,7 +649,6 @@ fn ghost_scored<'a>(
     index: &Index,
     gs: &'a GhostSet,
     units: &[Unit],
-    n_words: usize,
     (cfg, folders, query, extras, now_secs): (&Config, &[String], &Query, &Extras, f64),
 ) -> Vec<Scored<'a>> {
     let mut cands = candidates(&gs.index, units);
@@ -627,7 +676,7 @@ fn ghost_scored<'a>(
         .filter_map(|(id, slots)| {
             let doc = gs.index.get(id)?;
             let tier = tier_of(units, &slots).filter(|&t| t == 1)?;
-            let mut sc = score(&gs.index, id, doc, tier, slots, units, n_words, cfg, folders, query, extras, now_secs);
+            let mut sc = score(&gs.index, id, doc, tier, slots, units, cfg, folders, query, extras, now_secs);
             sc.ghost = gs.ghosts.get(id as usize);
             Some(sc)
         })
@@ -790,9 +839,10 @@ fn page_hit(s: &Scored, units: &[Unit], cfg: &Config, opts: &SearchOptions) -> H
                 Some((u.label.clone(), h.field, h.kind, h.quality))
             })
             .collect();
-        let [fields, prox, structural, penalty, frecency, combo] = s.parts;
+        let [fields, title_factor, prox, structural, penalty, frecency, combo] = s.parts;
         let components = [
             ("fields", fields),
+            ("titleFactor", title_factor),
             ("proximity", prox),
             ("structural", structural),
             ("penalty", penalty),

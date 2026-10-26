@@ -207,7 +207,7 @@ Worked examples (also golden tests):
 - `proximity`: bonus when all terms fall within one heading section, and a larger bonus when within 8 body tokens of each other. Phrase queries require adjacency instead.
 - `frecency`: fff's formula: `Σ exp(−0.0693 × days_since_access)` over the last 30 days (10-day half-life), capped (`10 + sqrt(x − 10)` above 10), scaled into the score. An "access" is **any** note open in Obsidian (`workspace.on("file-open")`), not only opens through the modal, so the signal is useful from day one and the empty-query list behaves like a recent-files list. Opens triggered by the modal itself are recorded once (not double-counted via `file-open`). Stored in IndexedDB store `access` (`path → [timestamps]`, max 128 per path). "Clear frecency" wipes this store. (Design call, see §16.)
 - `combo`: fff's query tracker. If the same normalized query led to opening the same note ≥ 3 times, that note gets a large boost for that query (effectively sticky top). Store `queries` (`query → {path, count}`).
-- `structural`: small bonus for shorter titles (exact-title hits beat long titles containing the words), and `log(1 + backlinks)` as a hub bonus (tiny).
+- `structural`: titles fully covered by the query win: for tiers 1–3 the fields sum is multiplied by `max(0.5, 1 − 0.15 × unmatched)`, where `unmatched` counts the non-stopword title words (stopwords `a an the in of with for and or to`; hyphenated words count per part) that no query term matched (exact, prefix or fuzzy). A matched alias stands in for the title when it leaves fewer words unmatched. Plus `2 × ln(1 + backlinks)` as a hub bonus (tiny).
 - `penalties`: downranked folders multiply by 0.3; notes under 20 words get a small penalty unless title matched exactly.
 
 Ties: more recent `mtime` first, then path.
@@ -367,3 +367,4 @@ Rulings made during implementation (controller):
 - Fuzzy hits are rejected when the matched span exceeds `needle_chars + 2×max_typos + 1` characters or the score ratio is below 0.5, so scattered subsequences (`airflow` → "AI rules for low budgets") never enter tier 1.
 - The short-term rule applies per compound part (`gen-ai` keeps `ai` exact-only in single-term queries).
 - `data engineer ai` ranks "AI for Data Engineers" first because `engineer`→`engineers` (8/9) outscores `engineer`→`engineering` (8/11); the §6.3 example assumed equal quality.
+- Structural (§6.4): the shorter-title bonus is replaced by an unmatched-title-word factor on the fields sum, `max(0.5, 1 − 0.15 × unmatched)` (step 0.15, floor 0.5), applied to tiers 1–3 with a matched alias standing in for the title, so `obsidian trouble` ranks "Obsidian Troubleshoot" above "Obsidian Trouble Tags Plugin".

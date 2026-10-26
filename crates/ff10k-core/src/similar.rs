@@ -96,6 +96,8 @@ pub struct TitleKeys {
     pub canon: String,
     /// Sorted, deduplicated non-stopword tokens.
     pub tokens: Vec<String>,
+    /// `word_spans(norm)`, for the unmatched-title-word factor in ranking.
+    pub spans: Vec<(u32, u32)>,
 }
 
 impl TitleKeys {
@@ -109,8 +111,23 @@ impl TitleKeys {
             .collect();
         tokens.sort_unstable();
         tokens.dedup();
-        TitleKeys { canon: canonical_title(&norm), norm, tokens }
+        TitleKeys { canon: canonical_title(&norm), spans: word_spans(&norm), norm, tokens }
     }
+}
+
+/// Byte ranges in `norm` (an already normalized string) of its non-stopword words, in order.
+/// Hyphenated and snake_case words count per part (`history-and-state` → `history`, `state`).
+pub fn word_spans(norm: &str) -> Vec<(u32, u32)> {
+    let toks = tokenize(norm);
+    let mut spans = Vec::new();
+    for (i, t) in toks.iter().enumerate() {
+        // A compound is followed by its parts, the first starting inside it: keep only the parts.
+        let compound = toks.get(i + 1).is_some_and(|n| n.byte_start < t.byte_end);
+        if !compound && !STOPWORDS.contains(&t.text.as_str()) {
+            spans.push((t.byte_start, t.byte_end));
+        }
+    }
+    spans
 }
 
 fn folder(path: &str) -> &str {
@@ -232,6 +249,13 @@ mod tests {
     use super::*;
     use crate::engine::{Engine, SearchOptions};
     use crate::index::Index;
+
+    #[test]
+    fn word_spans_skip_stopwords_and_split_compounds() {
+        let norm = "the history-and-state of data";
+        let words: Vec<&str> = word_spans(norm).iter().map(|&(s, e)| &norm[s as usize..e as usize]).collect();
+        assert_eq!(words, ["history", "state", "data"]);
+    }
 
     fn engine(paths: &[&str]) -> Engine {
         let mut e = Engine::new();

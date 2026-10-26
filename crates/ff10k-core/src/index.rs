@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 use crate::doc::{Doc, Field};
 use crate::markdown::title_and_segments;
 use crate::normalize::{normalize, strip_symbols};
-use crate::similar::TitleKeys;
+use crate::similar::{word_spans, TitleKeys};
 use crate::tokenize::tokenize;
 
 pub type DocId = u32;
@@ -58,10 +58,10 @@ struct Keys {
     /// Link-count keys for backlinks: by title and by extension-less path.
     title_key: String,
     path_key: Option<String>,
-    /// Alphanumeric runs in the title (for the short-title bonus).
-    title_tokens: u16,
     /// Normalized/canonical title and sorted non-stopword token set, for near-duplicate lookups.
     sim: TitleKeys,
+    /// Per alias: `normalize(alias)` and its `word_spans`, in `doc.aliases` order.
+    aliases: Vec<(String, Vec<(u32, u32)>)>,
 }
 
 impl Keys {
@@ -71,13 +71,16 @@ impl Keys {
         Keys {
             path_norm: normalize(&strip_symbols(&doc.path)),
             path_key: (path_key != title_key).then_some(path_key),
-            title_tokens: doc
-                .title
-                .split(|c: char| !c.is_alphanumeric())
-                .filter(|s| !s.is_empty())
-                .count()
-                .min(u16::MAX as usize) as u16,
             sim: TitleKeys::of(&doc.title),
+            aliases: doc
+                .aliases
+                .iter()
+                .map(|a| {
+                    let norm = normalize(a);
+                    let spans = word_spans(&norm);
+                    (norm, spans)
+                })
+                .collect(),
             title_key,
         }
     }
@@ -287,9 +290,9 @@ impl Index {
         self.records.get(id as usize)?.as_ref().map(|r| &r.keys.sim)
     }
 
-    /// Number of alphanumeric runs in the doc's title, cached at upsert/rename.
-    pub fn title_tokens(&self, id: DocId) -> u16 {
-        self.records.get(id as usize).and_then(Option::as_ref).map_or(0, |r| r.keys.title_tokens)
+    /// Each alias normalized, with its non-stopword word spans; cached at upsert/rename.
+    pub fn alias_words(&self, id: DocId) -> &[(String, Vec<(u32, u32)>)] {
+        self.records.get(id as usize).and_then(Option::as_ref).map_or(&[], |r| &r.keys.aliases)
     }
 
     pub fn text(&self, id: DocId) -> Option<&str> {
@@ -490,11 +493,11 @@ mod tests {
         let mut ix = Index::new();
         let id = ix.upsert(mk("💡 Area/Old Name.md", ""));
         assert_eq!(ix.path_norm(id), Some("area/old name.md"));
-        assert_eq!(ix.title_tokens(id), 2);
+        assert_eq!(ix.title_keys(id).unwrap().spans.len(), 2);
         assert_eq!(ix.backlinks(id), 0);
         assert!(ix.rename("💡 Area/Old Name.md", "Archive/New-Long Name.md"));
         assert_eq!(ix.path_norm(id), Some("archive/new-long name.md"));
-        assert_eq!(ix.title_tokens(id), 3);
+        assert_eq!(ix.title_keys(id).unwrap().spans.len(), 3);
         // The backlink cache is rebuilt after a mutation adds a link to the renamed doc.
         assert_eq!(ix.backlinks(id), 0);
         ix.upsert(mk("A.md", "see [[New-Long Name]]"));

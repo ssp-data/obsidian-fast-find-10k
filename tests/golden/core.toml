@@ -21,7 +21,7 @@ must_not_top3 = ["Airflow Basics", "aim high", "Airflow for Data Engineering"]
 expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
 
 # Top pick rests on the backlink hub bonus: "AI in Data Engineering" ties "Data Engineering with AI"
-# on fields and title length and wins 333.6 vs 330.0 on backlinks (5 vs 0).
+# on fields and title coverage and wins 328.6 vs 325.0 on backlinks (5 vs 0).
 [[case]]
 query = "data engineering ai"
 expect_top = "AI in Data Engineering"
@@ -35,7 +35,7 @@ expect_top = "AI for Data Engineers"
 expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
 must_not_top3 = ["👉🏻 Data Engineering", "RW Pandas AI — The Future of Data Analysis"]
 
-# Same backlink-bonus tie-break as "data engineering ai" (333.6 vs 330.0).
+# Same backlink-bonus tie-break as "data engineering ai" (328.6 vs 325.0).
 [[case]]
 query = "ai data engineering"
 expect_top = "AI in Data Engineering"
@@ -91,3 +91,14 @@ must_not_top3 = ["Data Platform Engineering"]
 query = "2026-07-01"
 expect_top = "2026-07-01"
 expect_similar_count = { "2026-07-01" = 0 }
+
+# Fully covered short title beats the long title containing the same words (spec §6.4 structural).
+[[case]]
+query = "data engineering"
+# The long title (5 unmatched words, factor floor 0.5) lands 9th here, so no expect_in_top for it.
+expect_top = "👉🏻 Data Engineering"
+
+# The long title wins once its distinctive word is typed.
+[[case]]
+query = "fundamentals data engineering"
+expect_top = "Fundamentals of Data Engineering (Joe Reis, Matt Housley)"
