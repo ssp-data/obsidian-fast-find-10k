@@ -5,7 +5,8 @@ import { EngineClient } from './engine-client';
 import { FrecencyTracker } from './frecency';
 import { Indexer } from './indexer';
 import type { Mode } from './protocol';
-import { DEFAULT_KEYMAP, DEFAULT_SETTINGS, type FastFindSettings, settingsToEngineConfig } from './settings';
+import { DEFAULT_SETTINGS, type FastFindSettings, mergeSettings, settingsToEngineConfig } from './settings';
+import { FastFindSettingTab } from './settings-tab';
 import { SmartConnectionsBridge } from './smart-connections-bridge';
 import { FastFindModal } from './ui/modal';
 import { watchGhosts } from './unresolved';
@@ -20,10 +21,12 @@ export default class FastFindPlugin extends Plugin {
 	private stopGhosts: (() => void) | null = null;
 	private modal: FastFindModal | null = null;
 	private ready: Promise<void> = Promise.resolve();
+	private saveTimer = 0;
+	private globsTimer = 0;
 
 	async onload(): Promise<void> {
-		const saved = (await this.loadData()) as Partial<FastFindSettings> | null;
-		this.settings = { ...DEFAULT_SETTINGS, ...saved, keymap: { ...DEFAULT_KEYMAP, ...saved?.keymap } };
+		// one object for the plugin's lifetime: the bridge and the indexer keep a reference
+		this.settings = mergeSettings(await this.loadData());
 
 		const engine = new EngineClient(workerSource);
 		this.engine = engine;
@@ -33,23 +36,58 @@ export default class FastFindPlugin extends Plugin {
 
 		this.addCommand({ id: 'search', name: 'Search', callback: () => this.openModal('all') });
 		this.addCommand({ id: 'search-files', name: 'Search file names', callback: () => this.openModal('filesOnly') });
+		this.addCommand({ id: 'search-resume', name: 'Search (resume last)', callback: () => this.openModal('all', this.settings.lastQuery) });
+		this.addSettingTab(new FastFindSettingTab(this.app, this));
 
 		this.addCommand({
 			id: 'rebuild-index',
 			name: 'Rebuild index',
-			callback: async () => {
-				try {
-					await this.ready;
-					await this.indexer?.rebuild();
-					new Notice(`Fast Find 10K: rebuilt, ${this.indexer?.status.indexed ?? 0} docs`);
-				} catch (e) {
-					new Notice(`Fast Find 10K: rebuild failed (${String(e)})`);
-				}
-			},
+			callback: () => this.rebuildIndex(),
 		});
 	}
 
-	private async openModal(mode: Mode): Promise<void> {
+	async saveSettings(): Promise<void> {
+		window.clearTimeout(this.saveTimer);
+		this.saveTimer = 0;
+		await this.saveData(this.settings);
+	}
+
+	/** Pushes the ranking settings to the engine (no reindex). */
+	applyEngineConfig(): void {
+		this.engine?.setConfig(settingsToEngineConfig(this.settings));
+	}
+
+	/** After an edit of the ignored globs: rebuilds the index once the edits pause for 1 s. */
+	scheduleIgnoredRebuild(): void {
+		window.clearTimeout(this.globsTimer);
+		this.globsTimer = window.setTimeout(() => {
+			this.globsTimer = 0;
+			void this.rebuildIndex();
+		}, 1000);
+	}
+
+	async rebuildIndex(): Promise<void> {
+		try {
+			await this.ready;
+			this.indexer?.setIgnoredGlobs(this.settings.ignoredGlobs);
+			new Notice('Fast Find 10K: rebuilding the index…');
+			await this.indexer?.rebuild();
+			new Notice(`Fast Find 10K: rebuilt, ${this.indexer?.status.indexed ?? 0} docs`);
+		} catch (e) {
+			new Notice(`Fast Find 10K: rebuild failed (${String(e)})`);
+		}
+	}
+
+	/** Called on every modal close: keeps a non-empty query for "resume last" (saved 1 s later). */
+	rememberQuery(query: string): void {
+		if (!query.trim() || query === this.settings.lastQuery) return;
+		this.settings.lastQuery = query;
+		window.clearTimeout(this.saveTimer);
+		this.saveTimer = window.setTimeout(() => void this.saveSettings(), 1000);
+	}
+
+	/** `resume`: prefill this query with the preview open (the normal search prefills the selection). */
+	private async openModal(mode: Mode, resume: string | null = null): Promise<void> {
 		try {
 			await this.ready;
 		} catch (e) {
@@ -57,7 +95,7 @@ export default class FastFindPlugin extends Plugin {
 			return;
 		}
 		this.modal?.close();
-		this.modal = new FastFindModal(this.app, this, mode);
+		this.modal = new FastFindModal(this.app, this, mode, resume);
 		this.modal.open();
 		this.bridge?.onModalOpen(); // after the modal is up: the vector check yields between slices
 	}
@@ -88,6 +126,8 @@ export default class FastFindPlugin extends Plugin {
 	onunload(): void {
 		this.modal?.close(); // its engine is about to go away
 		this.modal = null;
+		window.clearTimeout(this.globsTimer);
+		if (this.saveTimer) void this.saveSettings(); // a pending lastQuery
 		this.bridge?.dispose();
 		this.bridge = null;
 		this.stopGhosts?.();

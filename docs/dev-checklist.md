@@ -329,3 +329,45 @@ Review fixes (task 20), 2026-10-26. The model was made to hang with
 | hung model, guard `data orchestrators` | lexical rows at once (`Data Orchestrators [title]`, …); still 3 rows after 2 s |
 | hung model, guard `zqyy second hung` (no title match, `semantic` onDemand) | note created after 1,535 ms (the 1.5 s embed timeout); one `[ff10k] smart connections: query embedding timed out …`; note deleted |
 | `semantic` = never, guard `data pipeline` | title/alias rows only, `bridge.embed` called 0 times |
+
+## Settings tab, why-ranked, preview keys, help, resume, open all (task 21)
+
+The settings tab is driven through `app.setting` and its DOM (sliders/textarea fire `input`,
+key fields validate on `blur`). Settings and the modal cannot be open together, so each change is
+checked by reopening the search.
+
+```bash
+o eval code="app.setting.open(); app.setting.openTabById('fast-find-10k'); 'ok'"
+# a slider / textarea / key field by its setting name
+o eval code="const c=app.setting.activeTab.containerEl; const it=[...c.querySelectorAll('.setting-item')].find(i=>i.querySelector('.setting-item-name')?.textContent==='Body weight'); const sl=it.querySelector('input[type=range]'); sl.value='0'; sl.dispatchEvent(new Event('input')); sl.dispatchEvent(new Event('change')); 'ok'"
+o eval code="app.setting.close(); app.commands.executeCommandById('fast-find-10k:search'); 'ok'"
+# why ranked (Ctrl+/), help (Ctrl+Shift+/ arrives as key '?'), preview scroll, open all
+o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'/',ctrlKey:true,bubbles:true,cancelable:true})); 'ok'"
+o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'?',code:'Slash',keyCode:191,ctrlKey:true,shiftKey:true,bubbles:true,cancelable:true})); 'ok'"
+o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'J',shiftKey:true,bubbles:true,cancelable:true})); document.querySelector('.ff10k-preview').scrollTop"
+o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',altKey:true,shiftKey:true,bubbles:true,cancelable:true})); 'sent'"
+o command id=fast-find-10k:search-resume
+```
+
+An `eval` that triggers open all often prints nothing (the workspace changes under it); read the
+result in a second call.
+
+Observed on the test vault, 2026-10-26:
+
+| Check | Result |
+|---|---|
+| settings tab | sections `Indexing \| Ranking \| Semantic \| Behaviour \| Keys \| Debug`, 10 sliders, 17 key fields |
+| `hawaiian goddess`, body weight 10 | `content \| partial`, 16 rows, 1 `body` row |
+| body weight → 0 (slider), reopen, same query | `partial` only, 15 rows, 0 `body` rows; `data.json` `body: 0`; Reset weights → 10 |
+| `obsidian trouble` + Ctrl+/ | `tier 1 · obsidian→title exact 1.00 · trouble→title prefix 0.58 · fields +158 · proximity +25 · structural +3.6 · total 187` |
+| downranked folder `SB_copy/💡 Resources/🗃 Zettelkasten/📬 Inbox` (textarea) | same row `… · penalty ×0.30 · total 56`; the Wiki `Obsidian` (other folder) unchanged at 154 |
+| Clear frecency (button) | frecency map 0, IndexedDB `access` 0 rows; empty query falls back to mtime order; opening a note puts it back on top |
+| ignored glob `generated/**` (textarea) | rebuild 1 s after the edit: 9,383 → 9,083 docs (the 300 in `generated/`); cleared → 9,383 again |
+| Shift+J / Shift+K (`obsidian`, 3rd row, preview 631 px high) | scrollTop 9 → 325 → 9; event `defaultPrevented` true; plain `j` not handled (types into the input) |
+| Shift+J with the preview hidden (Ctrl+P) | no scroll |
+| Ctrl+? | overlay `Navigate / Open / Create & link / Modes & panels / Help`, e.g. `Ctrl+J / ↓ next result`, `Alt+Shift+⏎ open all shown in tabs (≤ 10)`, `Ctrl+? toggle this help`; Esc hides it and the modal stays; Ctrl+? again hides it |
+| togglePreview rebound to `Ctrl+Shift+P` in settings | overlay row `Ctrl+Shift+P toggle preview`; Ctrl+Shift+P hides the preview; `Hyper+P` → red border, `invalid key …; keeping the previous binding`; `Ctrl+J` → `already used by moveDown`; Reset keys → `Ctrl+P` |
+| close with `hawaiian goddess`, plugin reload | `lastQuery` `hawaiian goddess` in `data.json` |
+| `search-resume` with preview off by default | input `hawaiian goddess`, preview shown, `content \| partial` 16 rows; plain `search` → empty input, preview hidden |
+| open all, `obsidian trouble tags` (23 notes) | Notice `Fast Find 10K: Open all works for 10 or fewer results (23 shown)`, modal stays; footer hint hidden |
+| open all, `quickshell` (8 notes, hint shown) | 8 new tabs in result order, active leaf unchanged, modal closed, each note +1 access; tabs closed after |

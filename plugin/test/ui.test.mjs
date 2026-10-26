@@ -1,4 +1,4 @@
-// Pure helpers of the modal: title-range mapping and keymap parsing (no Obsidian runtime).
+// Pure helpers of the modal: title ranges, create guard, why-ranked line, open all (no Obsidian runtime).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import esbuild from 'esbuild';
@@ -20,7 +20,6 @@ async function load(entry) {
 }
 
 const { mapTitleRanges } = await load('src/ui/results.ts');
-const { parseKeySpec } = await load('src/ui/modal.ts');
 
 test('title ranges map case-insensitively onto the display title', () => {
 	assert.deepEqual(mapTitleRanges('Obsidian Troubleshoot', 'obsidian troubleshoot', [[0, 8], [9, 14]]), [[0, 8], [9, 14]]);
@@ -42,15 +41,6 @@ test('repeated substrings map to successive occurrences', () => {
 
 test('bad ranges never throw', () => {
 	assert.deepEqual(mapTitleRanges('abc', 'abc', [[2, 1], [5, 9], [0, 0]]), []);
-});
-
-test('key specs split into modifiers and key', () => {
-	assert.deepEqual(parseKeySpec('Enter'), { modifiers: [], key: 'Enter' });
-	assert.deepEqual(parseKeySpec('Mod+Alt+Enter'), { modifiers: ['Mod', 'Alt'], key: 'Enter' });
-	assert.deepEqual(parseKeySpec('Ctrl+/'), { modifiers: ['Ctrl'], key: '/' });
-	assert.deepEqual(parseKeySpec('Ctrl+F'), { modifiers: ['Ctrl'], key: 'f' });
-	assert.equal(parseKeySpec(''), null);
-	assert.equal(parseKeySpec('Hyper+X'), null);
 });
 
 // --- create guard: semantic candidates and the lexical-first flow ---
@@ -94,4 +84,40 @@ test('guard creates when there are no candidates (a timed-out embedding yields n
 	shown.length = 0;
 	await runGuard([], Promise.resolve([]), { ...ui, current: () => false });
 	assert.deepEqual(shown, [], 'superseded: nothing happens');
+});
+
+// --- why-ranked line and open-all eligibility ---
+const { formatWhy } = await load('src/ui/results.ts');
+const { openAllTargets, OPEN_ALL_MAX } = await load('src/ui/modal.ts');
+
+const dbgHit = (debug, extra = {}) => ({ path: 'a.md', title: 'A', titleNorm: 'a', tier: 1, score: 183.4, badge: 'Title', titleRanges: [], isGhost: false, ghostRefs: 0, similarCount: 0, debug, ...extra });
+
+test('why-ranked: tier, per-term hits, non-zero components, total', () => {
+	const hit = dbgHit({
+		perTerm: [['obsidian', 'Title', 'Exact', 1], ['trouble', 'Title', 'Prefix', 0.4666]],
+		components: [['fields', 163.3], ['titleFactor', 1], ['proximity', 0], ['structural', 8.2], ['penalty', 1], ['frecency', 12.04], ['combo', 0]],
+	});
+	assert.equal(formatWhy(hit), 'tier 1 · obsidian→title exact 1.00 · trouble→title prefix 0.47 · fields +163 · structural +8.2 · frecency +12 · total 183');
+});
+
+test('why-ranked: multipliers below 1 show as ×', () => {
+	const hit = dbgHit({ perTerm: [['ai', 'Body', 'Fuzzy', 0.5]], components: [['fields', 5], ['titleFactor', 0.85], ['penalty', 0.3]] }, { tier: 3, score: 1.5 });
+	assert.equal(formatWhy(hit), 'tier 3 · ai→body fuzzy 0.50 · fields +5.0 · titleFactor ×0.85 · penalty ×0.30 · total 1.5');
+});
+
+test('why-ranked: empty without debug info', () => {
+	assert.equal(formatWhy(dbgHit(null)), '');
+	assert.equal(formatWhy(dbgHit(undefined)), '');
+});
+
+test('open all: up to 10 distinct notes, ghosts excluded', () => {
+	const h = (path, isGhost = false) => ({ path, isGhost });
+	assert.equal(OPEN_ALL_MAX, 10);
+	const few = [h('a.md'), h('ghost', true), h('b.md'), h('a.md')];
+	assert.deepEqual(openAllTargets(few), { eligible: true, count: 2, paths: ['a.md', 'b.md'] });
+	const ten = Array.from({ length: 10 }, (_, i) => h(`${i}.md`)).concat([h('g', true)]);
+	assert.equal(openAllTargets(ten).eligible, true);
+	const eleven = Array.from({ length: 11 }, (_, i) => h(`${i}.md`));
+	assert.deepEqual(openAllTargets(eleven), { eligible: false, count: 11, paths: [] });
+	assert.deepEqual(openAllTargets([h('g', true)]), { eligible: false, count: 0, paths: [] });
 });

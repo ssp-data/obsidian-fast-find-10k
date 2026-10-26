@@ -324,7 +324,8 @@ fn phrase_hits(index: &Index, words: &[String], multi: bool) -> Vec<TermHit> {
 fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> Vec<Unit> {
     let n_words = query.terms.len() + query.phrases.iter().map(Vec::len).sum::<usize>();
     let multi = n_words > 1;
-    let keep = |h: &TermHit| !files_only || class(h.field) == 1;
+    // A field weighted 0 in the settings is not searched at all (not merely scored 0).
+    let keep = |h: &TermHit| (!files_only || class(h.field) == 1) && cfg.weights.get(h.field) > 0.0;
     let mut units = Vec::new();
     for t in &query.terms {
         units.push(Unit {

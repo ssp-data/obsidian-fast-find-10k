@@ -1,4 +1,5 @@
-// Plugin settings: interface, defaults and the mapping to the engine config. The tab comes later.
+// Plugin settings: interface, defaults, merging saved data, and the mapping to the engine config.
+// The settings tab is in settings-tab.ts.
 
 import type { EngineConfig, PartialMode, Weights } from './protocol';
 
@@ -21,6 +22,10 @@ export interface Keymap {
 	togglePreview: string;
 	toggleDebug: string;
 	focusSimilar: string;
+	previewDown: string;
+	previewUp: string;
+	showHelp: string;
+	openAll: string;
 }
 
 export const DEFAULT_KEYMAP: Keymap = {
@@ -37,6 +42,11 @@ export const DEFAULT_KEYMAP: Keymap = {
 	togglePreview: 'Ctrl+P',
 	toggleDebug: 'Ctrl+/',
 	focusSimilar: 'Tab',
+	previewDown: 'Shift+J',
+	previewUp: 'Shift+K',
+	showHelp: 'Ctrl+Shift+/',
+	// Ctrl+Shift+Enter is createTab (Mod+Shift+Enter) off macOS
+	openAll: 'Alt+Shift+Enter',
 };
 
 export interface FastFindSettings {
@@ -55,6 +65,8 @@ export interface FastFindSettings {
 	debugByDefault: boolean;
 	logTimings: boolean;
 	keymap: Keymap;
+	/** Query of the last modal close (non-empty), for "Search (resume last)". */
+	lastQuery: string;
 }
 
 export const DEFAULT_WEIGHTS: Weights = {
@@ -85,7 +97,34 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	debugByDefault: false,
 	logTimings: false,
 	keymap: { ...DEFAULT_KEYMAP },
+	lastQuery: '',
 };
+
+/** Keeps the keys of `defaults`, taking each saved value whose type matches the default's
+ * (arrays: arrays of strings). Unknown keys are dropped. */
+function pick<T extends object>(defaults: T, saved: unknown): T {
+	const out = { ...defaults };
+	if (typeof saved !== 'object' || saved === null) return out;
+	const src = saved as Record<string, unknown>;
+	for (const k of Object.keys(defaults) as (keyof T & string)[]) {
+		const v = src[k];
+		const d = defaults[k];
+		if (Array.isArray(d) ? Array.isArray(v) && v.every((x) => typeof x === 'string') : typeof v === typeof d) out[k] = v as T[typeof k];
+	}
+	return out;
+}
+
+/** Saved plugin data merged over the defaults, deep for `weights` and `keymap`: a key missing
+ * from the saved data keeps its default; unknown or mistyped keys are dropped. */
+export function mergeSettings(saved: unknown): FastFindSettings {
+	const s = pick(DEFAULT_SETTINGS, saved);
+	const src = (typeof saved === 'object' && saved !== null ? saved : {}) as Record<string, unknown>;
+	s.weights = pick(DEFAULT_WEIGHTS, src.weights);
+	s.keymap = pick(DEFAULT_KEYMAP, src.keymap);
+	s.ignoredGlobs = [...s.ignoredGlobs];
+	s.downrankedFolders = [...s.downrankedFolders];
+	return s;
+}
 
 export function settingsToEngineConfig(s: FastFindSettings): EngineConfig {
 	return {

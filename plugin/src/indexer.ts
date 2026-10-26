@@ -56,7 +56,7 @@ type Pending = 'upsert' | 'delete';
 
 export class Indexer {
 	status: IndexStatus = { indexed: 0, total: 0, done: false };
-	private readonly globs: RegExp[];
+	private globs: RegExp[];
 	private readonly listeners = new Set<(s: IndexStatus) => void>();
 	private readonly timers = new Map<string, { kind: Pending; timer: ReturnType<typeof setTimeout> }>();
 	/** Paths currently sent to the engine. */
@@ -71,6 +71,11 @@ export class Indexer {
 		settings: Pick<FastFindSettings, 'ignoredGlobs'>,
 	) {
 		this.globs = settings.ignoredGlobs.map(globToRegExp);
+	}
+
+	/** Replaces the ignored globs; takes effect for the index on the next `rebuild()`. */
+	setIgnoredGlobs(globs: string[]): void {
+		this.globs = globs.map(globToRegExp);
 	}
 
 	isExcluded(path: string): boolean {

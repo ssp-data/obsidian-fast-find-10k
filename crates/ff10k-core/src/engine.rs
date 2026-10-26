@@ -354,6 +354,19 @@ mod tests {
     }
 
     #[test]
+    fn zero_weight_field_is_not_matched() {
+        let mut e = corpus();
+        assert!(titles(&e.search("engineer", &opts())).contains(&"RW Pandas AI"));
+        let mut c = Config::default();
+        c.weights.body = 0.0;
+        e.set_config(c);
+        let r = e.search("engineer", &opts());
+        assert!(!titles(&r).contains(&"RW Pandas AI"), "{:?}", titles(&r));
+        assert!(r.hits.iter().all(|h| h.tier != 3));
+        assert!(titles(&r).contains(&"AI in Data Engineering"));
+    }
+
+    #[test]
     fn debug_info_present_when_requested() {
         let e = corpus();
         let r = e.search("obsidian trouble", &opts());

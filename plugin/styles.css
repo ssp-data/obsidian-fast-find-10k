@@ -238,9 +238,7 @@
 	font-family: var(--font-monospace);
 	font-size: var(--font-ui-smaller);
 	color: var(--text-faint);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	overflow-wrap: anywhere; /* one line, wrapping when long */
 }
 
 .ff10k-empty {
@@ -373,4 +371,58 @@
 	margin-top: 2px;
 	font-size: var(--font-ui-smaller);
 	color: var(--text-faint);
+}
+
+/* Shortcut cheat-sheet overlay */
+.ff10k-modal .ff10k-content {
+	position: relative;
+}
+
+.ff10k-help {
+	position: absolute;
+	inset: var(--size-4-8) 10%;
+	z-index: 10;
+	overflow-y: auto;
+	padding: var(--size-4-4);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-l);
+	font-size: var(--font-ui-small);
+}
+
+.ff10k-help-title {
+	font-weight: var(--font-semibold);
+	margin-bottom: var(--size-4-3);
+}
+
+.ff10k-help-groups {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: var(--size-4-4);
+}
+
+.ff10k-help-group-title {
+	font-size: var(--font-ui-smaller);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	margin-bottom: var(--size-4-1);
+}
+
+.ff10k-help-row {
+	display: flex;
+	gap: var(--size-4-2);
+	padding: 2px 0;
+}
+
+.ff10k-help-keys {
+	flex: 0 0 45%;
+	color: var(--text-muted);
+}
+
+/* Settings tab: rejected key binding */
+input.ff10k-invalid {
+	border-color: var(--text-error);
+	box-shadow: 0 0 0 1px var(--text-error);
 }

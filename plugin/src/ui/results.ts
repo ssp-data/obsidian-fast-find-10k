@@ -81,9 +81,28 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 	}
 	if (hit.similarCount > 0) main.createSpan({ cls: 'ff10k-similar-badge', text: `${hit.similarCount} similar` });
 
-	if (hit.debug) {
-		const terms = hit.debug.perTerm.map(([t, f, k, s]) => `${t}: ${f.toLowerCase()} ${k.toLowerCase()} ${s.toFixed(1)}`);
-		const comps = hit.debug.components.map(([n, v]) => `${n} ${v.toFixed(2)}`);
-		el.createDiv({ cls: 'ff10k-debug', text: `${terms.join(' · ')}  |  ${comps.join(' · ')}  |  score ${hit.score.toFixed(2)}` });
+	const why = formatWhy(hit);
+	if (why) el.createDiv({ cls: 'ff10k-debug', text: why });
+}
+
+/** Score components that multiply (shown as `×0.30` when not 1); the others add. */
+const MULTIPLIERS = new Set(['titleFactor', 'penalty']);
+
+const num = (v: number) => (Math.abs(v) >= 10 ? String(Math.round(v)) : v.toFixed(1));
+
+/** The "why ranked" line: `tier 1 · obsidian→title exact 1.00 · fields +163 · frecency +12 ·
+ * total 183`. Zero additive components and multipliers of 1 are left out; '' without debug info. */
+export function formatWhy(hit: Pick<Hit, 'tier' | 'score' | 'debug'>): string {
+	if (!hit.debug) return '';
+	const parts = [`tier ${hit.tier}`];
+	for (const [t, f, k, q] of hit.debug.perTerm) parts.push(`${t}→${f.toLowerCase()} ${k.toLowerCase()} ${q.toFixed(2)}`);
+	for (const [name, v] of hit.debug.components) {
+		if (MULTIPLIERS.has(name)) {
+			if (Math.abs(v - 1) > 1e-6) parts.push(`${name} ×${v.toFixed(2)}`);
+		} else if (v !== 0) {
+			parts.push(`${name} ${v > 0 ? '+' : '−'}${num(Math.abs(v))}`);
+		}
 	}
+	parts.push(`total ${num(hit.score)}`);
+	return parts.join(' · ');
 }

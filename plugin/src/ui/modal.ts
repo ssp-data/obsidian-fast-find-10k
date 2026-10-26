@@ -1,13 +1,16 @@
-// The search modal: query input, tiered results, data-driven keys, open/create/link actions.
+// The search modal: query input, tiered results, data-driven keys, open/create/link actions,
+// help overlay.
 
-import { type App, Modal, type Modifier, Notice, Platform, Scope } from 'obsidian';
+import { type App, Modal, Notice, Platform, Scope, TFile } from 'obsidian';
 import { createGhostNote, createNote, ghostNotePath, insertLink, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
 import type { Hit, Mode, SearchResponse, SemanticHit } from '../protocol';
 import type { EngineClient } from '../engine-client';
+import { keyLabel as keyLabelFor, parseKeySpec } from '../keys';
 import type { FastFindSettings, Keymap } from '../settings';
 import type { SmartConnectionsBridge } from '../smart-connections-bridge';
 import { Preview, queryTerms } from './preview';
+import { renderHelp } from './help';
 import { renderRow, renderTierLabel } from './results';
 import { type PanelItem, SimilarPanel } from './similar';
 
@@ -20,27 +23,17 @@ const GUARD_SEARCH = 10;
 /** Semantic neighbours asked for: the tier-5 group, and the create guard's share. */
 const SEMANTIC_ROWS = 10;
 const GUARD_SEMANTIC = 3;
-const MODIFIERS: readonly Modifier[] = ['Mod', 'Ctrl', 'Meta', 'Shift', 'Alt'];
+/** Open all shown (Alt+Shift+Enter) works up to this many notes. */
+export const OPEN_ALL_MAX = 10;
 
-/** `Mod+Alt+Enter` → `{ modifiers: ['Mod','Alt'], key: 'Enter' }`; single letters lower-cased.
- * Returns null for an empty spec or an unknown modifier. */
-export function parseKeySpec(spec: string): { modifiers: Modifier[]; key: string } | null {
-	const parts = spec.split('+');
-	const key = parts.pop() ?? '';
-	if (!key) return null;
-	if (!parts.every((p) => (MODIFIERS as string[]).includes(p))) return null;
-	return { modifiers: parts as Modifier[], key: key.length === 1 ? key.toLowerCase() : key };
-}
+const keyLabel = (spec: string) => keyLabelFor(spec, Platform.isMacOS);
 
-/** Key hint text for the footer: `Mod+Enter` → `⌘⏎` on macOS, `Ctrl+⏎` elsewhere. */
-function keyLabel(spec: string): string {
-	const sym: Record<string, string> = Platform.isMacOS
-		? { Mod: '⌘', Ctrl: '⌃', Meta: '⌘', Alt: '⌥', Shift: '⇧', Enter: '⏎' }
-		: { Mod: 'Ctrl+', Ctrl: 'Ctrl+', Meta: 'Win+', Alt: 'Alt+', Shift: 'Shift+', Enter: '⏎' };
-	return spec
-		.split('+')
-		.map((p) => sym[p] ?? p)
-		.join('');
+/** The notes "open all" would open: distinct non-ghost paths of every shown hit, in order;
+ * not eligible (and no paths) with none or more than `OPEN_ALL_MAX`. */
+export function openAllTargets(hits: Pick<Hit, 'path' | 'isGhost'>[]): { eligible: boolean; count: number; paths: string[] } {
+	const paths = [...new Set(hits.filter((h) => !h.isGhost).map((h) => h.path))];
+	const eligible = paths.length > 0 && paths.length <= OPEN_ALL_MAX;
+	return { eligible, count: paths.length, paths: eligible ? paths : [] };
 }
 
 /** A semantic neighbour as a tier-5 row (opens at the top of the note; badge shows the score). */
@@ -155,10 +148,19 @@ export class FastFindModal extends Modal {
 	/** Query for which Ctrl+S asked for the semantic tier (kept across re-renders of that query). */
 	private semanticForced: string | null = null;
 	private emptyEl: HTMLElement | null = null;
+	private previewEl!: HTMLElement;
+	private helpEl!: HTMLElement;
+	/** Pushed while the help overlay is shown (Esc and the help key close it). */
+	private helpScope: Scope | null = null;
+	private openAllHint!: HTMLElement;
+	/** Query to prefill instead of the editor selection ("Search (resume last)"). */
+	private readonly resume: string | null;
 
-	constructor(app: App, plugin: FastFindPlugin, mode: Mode) {
+	/** `resume`: prefill this query and show the preview whatever the setting says. */
+	constructor(app: App, plugin: FastFindPlugin, mode: Mode, resume: string | null = null) {
 		super(app);
 		this.plugin = plugin;
+		this.resume = resume;
 		this.state = {
 			query: '',
 			mode,
@@ -166,7 +168,7 @@ export class FastFindModal extends Modal {
 			selected: 0,
 			totalDocs: 0,
 			elapsedUs: 0,
-			previewOpen: plugin.settings.previewOpen,
+			previewOpen: resume !== null || plugin.settings.previewOpen,
 			debug: plugin.settings.debugByDefault,
 		};
 		this.registerKeys(plugin.settings.keymap);
@@ -190,7 +192,8 @@ export class FastFindModal extends Modal {
 		const body = contentEl.createDiv({ cls: 'ff10k-body' });
 		this.resultsEl = body.createDiv({ cls: 'ff10k-results' });
 		const right = body.createDiv({ cls: 'ff10k-right' });
-		this.preview = new Preview(right.createDiv({ cls: 'ff10k-preview' }));
+		this.previewEl = right.createDiv({ cls: 'ff10k-preview' });
+		this.preview = new Preview(this.previewEl);
 		this.similar = new SimilarPanel(right.createDiv({ cls: 'ff10k-similar' }));
 		this.similar.onOpen((path) => void this.openPath(path));
 		this.resultsEl.addEventListener('scroll', () => {
@@ -199,8 +202,10 @@ export class FastFindModal extends Modal {
 		});
 
 		this.renderFooter(contentEl.createDiv({ cls: 'ff10k-footer' }));
+		this.helpEl = contentEl.createDiv({ cls: 'ff10k-help' });
+		this.helpEl.hide();
 
-		this.inputEl.value = this.app.workspace.activeEditor?.editor?.getSelection().trim() ?? '';
+		this.inputEl.value = this.resume ?? this.app.workspace.activeEditor?.editor?.getSelection().trim() ?? '';
 		this.inputEl.addEventListener('input', () => {
 			this.leaveSimilar(); // typing ends the create guard
 			this.search();
@@ -220,7 +225,9 @@ export class FastFindModal extends Modal {
 
 	onClose(): void {
 		this.closed = true;
+		this.plugin.rememberQuery(this.inputEl.value);
 		cancelAnimationFrame(this.paintFrame);
+		this.hideHelp();
 		this.leaveSimilar();
 		this.unsubscribeStatus?.();
 		this.unsubscribeStatus = null;
@@ -242,6 +249,10 @@ export class FastFindModal extends Modal {
 			moveUp: () => this.select(this.state.selected - 1),
 			togglePreview: () => this.togglePreview(),
 			toggleDebug: () => this.toggleDebug(),
+			previewDown: () => this.scrollPreview(1),
+			previewUp: () => this.scrollPreview(-1),
+			showHelp: () => this.toggleHelp(),
+			openAll: () => void this.openAll(),
 		};
 		const bind = (spec: string, fn: () => void) => {
 			const k = parseKeySpec(spec);
@@ -303,6 +314,7 @@ export class FastFindModal extends Modal {
 		this.rowEls[this.state.selected]?.scrollIntoView({ block: 'nearest' });
 		this.emptyEl = res.hits.length === 0 ? this.resultsEl.createDiv({ cls: 'ff10k-empty', text: this.state.query ? 'No matches' : 'No recent notes' }) : null;
 		this.renderStatus();
+		this.updateOpenAllHint();
 		this.schedulePaint();
 	}
 
@@ -351,6 +363,7 @@ export class FastFindModal extends Modal {
 		this.renderUpTo(this.state.hits.length);
 		if (forced) this.rowEls[first]?.scrollIntoView({ block: 'nearest' });
 		this.renderStatus();
+		this.updateOpenAllHint();
 		if (first === 0) this.schedulePaint(); // nothing was selected before
 	}
 
@@ -398,13 +411,22 @@ export class FastFindModal extends Modal {
 			[[km.togglePreview], 'toggle preview'],
 			[[km.focusSimilar], 'similar notes'],
 			[[km.toggleDebug], 'why ranked'],
+			[[km.openAll], 'open all'],
+			[[km.showHelp], 'help'],
 			[['Esc'], 'close'],
 		];
 		for (const [keys, label] of hints) {
 			const span = el.createSpan({ cls: 'ff10k-hint' });
 			span.createEl('kbd', { text: keys.map(keyLabel).join(' / ') });
 			span.appendText(` ${label}`);
+			if (label === 'open all') this.openAllHint = span;
 		}
+		this.openAllHint.hide();
+	}
+
+	/** The "open all" hint shows only while the shown notes are few enough. */
+	private updateOpenAllHint(): void {
+		this.openAllHint.toggle(openAllTargets(this.state.hits).eligible);
 	}
 
 	private select(i: number): void {
@@ -598,5 +620,54 @@ export class FastFindModal extends Modal {
 	private toggleDebug(): void {
 		this.state.debug = !this.state.debug;
 		this.search();
+	}
+
+	/** Shift+J / Shift+K: the preview by half its visible height; nothing while it is hidden. */
+	private scrollPreview(dir: 1 | -1): void {
+		if (!this.state.previewOpen) return;
+		this.previewEl.scrollBy({ top: (dir * this.previewEl.clientHeight) / 2 });
+	}
+
+	/** Opens every shown note (≤ OPEN_ALL_MAX, ghosts excluded) in background tabs, then closes. */
+	private async openAll(): Promise<void> {
+		const t = openAllTargets(this.state.hits);
+		if (!t.eligible) {
+			if (t.count > 0) new Notice(`Fast Find 10K: Open all works for ${OPEN_ALL_MAX} or fewer results (${t.count} shown)`);
+			return;
+		}
+		const files = t.paths.map((p) => this.app.vault.getAbstractFileByPath(p)).filter((f): f is TFile => f instanceof TFile);
+		const ws = this.app.workspace;
+		const prev = ws.getMostRecentLeaf();
+		// Obsidian places each new tab after the previous one: result order is kept
+		for (const file of files) {
+			this.noteOpen(file.path);
+			await ws.getLeaf('tab').openFile(file, { active: false });
+		}
+		// getLeaf('tab') activates the new tab: give focus back to where the user was
+		if (prev) ws.setActiveLeaf(prev, { focus: true });
+		this.close();
+	}
+
+	private toggleHelp(): void {
+		if (this.helpScope) return this.hideHelp();
+		renderHelp(this.helpEl, this.plugin.settings.keymap, Platform.isMacOS);
+		this.helpEl.show();
+		const scope = new Scope(this.scope);
+		const hide = () => {
+			this.hideHelp();
+			return false;
+		};
+		scope.register([], 'Escape', hide);
+		const k = parseKeySpec(this.plugin.settings.keymap.showHelp);
+		if (k) scope.register(k.modifiers, k.key, hide);
+		this.helpScope = scope;
+		this.app.keymap.pushScope(scope);
+	}
+
+	private hideHelp(): void {
+		if (!this.helpScope) return;
+		this.app.keymap.popScope(this.helpScope);
+		this.helpScope = null;
+		this.helpEl.hide();
 	}
 }
