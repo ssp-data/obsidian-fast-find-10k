@@ -6,6 +6,7 @@ import { FrecencyTracker } from './frecency';
 import { Indexer } from './indexer';
 import type { Mode } from './protocol';
 import { DEFAULT_KEYMAP, DEFAULT_SETTINGS, type FastFindSettings, settingsToEngineConfig } from './settings';
+import { SmartConnectionsBridge } from './smart-connections-bridge';
 import { FastFindModal } from './ui/modal';
 import { watchGhosts } from './unresolved';
 
@@ -15,6 +16,7 @@ export default class FastFindPlugin extends Plugin {
 	cache: NoteCache | null = null;
 	indexer: Indexer | null = null;
 	frecency: FrecencyTracker | null = null;
+	bridge: SmartConnectionsBridge | null = null;
 	private stopGhosts: (() => void) | null = null;
 	private modal: FastFindModal | null = null;
 	private ready: Promise<void> = Promise.resolve();
@@ -25,6 +27,7 @@ export default class FastFindPlugin extends Plugin {
 
 		const engine = new EngineClient(workerSource);
 		this.engine = engine;
+		this.bridge = new SmartConnectionsBridge(this.app, engine, this.settings);
 		this.ready = this.startIndexing(engine);
 		this.ready.catch((e: unknown) => console.error('Fast Find 10K: startup failed', e));
 
@@ -56,6 +59,7 @@ export default class FastFindPlugin extends Plugin {
 		this.modal?.close();
 		this.modal = new FastFindModal(this.app, this, mode);
 		this.modal.open();
+		this.bridge?.onModalOpen(); // after the modal is up: the vector check yields between slices
 	}
 
 	/** Engine init, cache open, then the indexer; resolves once the engine is searchable. */
@@ -77,11 +81,15 @@ export default class FastFindPlugin extends Plugin {
 		});
 		this.stopGhosts = watchGhosts(this.app, engine, indexer);
 		indexer.start().catch((e: unknown) => console.error('Fast Find 10K: indexing failed', e));
+		// Smart Connections loads its env late; the bridge polls for it and then hands over the vectors
+		this.app.workspace.onLayoutReady(() => this.bridge?.start());
 	}
 
 	onunload(): void {
 		this.modal?.close(); // its engine is about to go away
 		this.modal = null;
+		this.bridge?.dispose();
+		this.bridge = null;
 		this.stopGhosts?.();
 		this.stopGhosts = null;
 		this.frecency?.dispose();

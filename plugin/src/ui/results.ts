@@ -59,7 +59,8 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 	el.setAttr('title', hit.path);
 	const main = el.createDiv({ cls: 'ff10k-row-main' });
 
-	const badge = hit.isGhost ? 'link' : hit.badge.toLowerCase();
+	// semantic rows (tier 5) show their cosine as Smart Connections does
+	const badge = hit.isGhost ? 'link' : hit.tier === 5 ? hit.score.toFixed(2) : hit.badge.toLowerCase();
 	main.createSpan({ cls: `ff10k-badge ff10k-badge-t${Math.min(hit.tier, 5)}`, text: badge });
 
 	const title = main.createSpan({ cls: 'ff10k-title' });

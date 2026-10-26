@@ -3,6 +3,8 @@
 import type { EngineConfig, PartialMode, Weights } from './protocol';
 
 export type FuzzySetting = 'off' | 'normal' | 'loose';
+/** Semantic tier: automatically when few lexical hits (and on Ctrl+S), only on Ctrl+S, or never. */
+export type SemanticSetting = 'auto' | 'onDemand' | 'never';
 
 /** Modal key bindings as `Mod+Alt+Enter` style strings (`Mod` = Cmd on macOS, Ctrl elsewhere). */
 export interface Keymap {
@@ -45,6 +47,7 @@ export interface FastFindSettings {
 	fuzzy: FuzzySetting;
 	partial: PartialMode;
 	fewThreshold: number;
+	semantic: SemanticSetting;
 	useSmartConnections: boolean;
 	minSimilarity: number;
 	createGuard: boolean;
@@ -74,6 +77,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	fuzzy: 'normal',
 	partial: 'whenFew',
 	fewThreshold: 5,
+	semantic: 'auto',
 	useSmartConnections: true,
 	minSimilarity: 0.7,
 	createGuard: true,

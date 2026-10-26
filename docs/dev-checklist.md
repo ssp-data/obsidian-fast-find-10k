@@ -266,3 +266,55 @@ Review fixes (task 19), 2026-10-26:
 
 Ghosts set by hand for a check (`engine.setGhosts([...])`) last until the next metadata
 `resolved` refresh. A test ghost with 1 ref can fall outside the 5,000 cap on this vault.
+
+## Smart Connections bridge, semantic tier (task 20)
+
+`plugin/src/smart-connections-bridge.ts` is the only code that reads `window.smart_env` or the
+Smart Connections plugin object. Property paths read live on Smart Connections 4.7.2:
+
+| Path | Found |
+|---|---|
+| `app.plugins.plugins['smart-connections'].manifest.version` | `4.7.2` |
+| `app.plugins.enabledPlugins.has('smart-connections')` | not reliable: the Lazy Plugin Loader starts it with `enablePlugin` and after a reload it is loaded (`_loaded true`) but missing from `enabledPlugins`, so the bridge accepts either |
+| `smart_env.smart_sources.items` | plain object keyed by vault path (9,368 items) |
+| `item.path` / `item.key` | vault path (`fixtures/all-forms.md`) |
+| `item.vec` | getter (`collection.embeddings.get_item_vector`), `Float32Array(384)`, norm 1.0; 8,383 of 9,368 items have one; ~20 µs per read (~250 ms for all), so the bridge reads it in slices of 500 |
+| `item.data.last_read.hash` | content hash (`1yxrmmy`) |
+| `item.data.embedding.default` | `{ mf_ccarbz: { file, file_i, read_hash, at } }`: used with `last_read.hash` for the fingerprint (no getter, ~4 µs per item) |
+| `smart_sources.embed_model.dims` / `.model_key` | `384` / `TaylorAI/bge-micro-v2` |
+| `embed_model.embed_batch([{ embed_input, purpose: 'query' }])` | `[{ embed_input, purpose, vec: Float32Array(384), tokens }]`, ~7-10 ms |
+
+Smart Connections loads after its items: `items` exist before `vec` is readable. The bridge polls
+(1, 2, 4, 8, 16, 29 s) until the plugin is loaded and one of the first items with an embedding
+reference has a `vec`, then syncs.
+
+```bash
+o plugin:reload id=fast-find-10k
+o dev:console | grep ff10k                       # → [ff10k] vectors: 8383 notes (dims 384, skipped 0)
+o eval code="const b=app.plugins.plugins['fast-find-10k'].bridge; b.available()+' '+b.hasVectors()"   # → true true
+```
+
+The CLI's window does not render frames here (`requestAnimationFrame` never fires, cursor-smith
+reports "no frame"), so the preview/similar paint is triggered by hand for checks:
+`app.plugins.plugins['fast-find-10k'].modal.paint()`.
+
+Test vault, 2026-10-26:
+
+| Check | Result |
+|---|---|
+| plugin reload | `[ff10k] vectors: 8383 notes (dims 384, skipped 0)` |
+| full vault reload (SC lazy-loaded "long") | vectors in the engine 34.8 s after reload, by the poll |
+| `generated/note-201.md`: engine `similar` vs SC `find_connections({exclude_blocks_from_source_connections: true})` | note-060 0.9865 / 0.9865, note-002 0.9859 / 0.9859, note-028 0.9847 / 0.9847 (and a hand dot product gives the same) |
+| SC pane default (blocks included) | lists block keys (`note-076.md#` 0.9843): different items, not different scores |
+| select `idempotency-retry-pattern` | panel `idempotency 0.81, data-lineage 0.80, observability-monitoring-pattern 0.80, …`, hint hidden |
+| `notes about making pipelines resilient` (3 content rows, then partial) | groups `content \| partial \| semantic`; `0.77 RW How to Design Resilient and Large Scale Data Systems`, `0.73 Restate`, `0.73 RW How to Build a Resilient DAG`, … |
+| `duckdb` + Ctrl+S | `title · alias \| semantic`; `0.75 RW AI That Quacks …`, … |
+| `obsidian trouble` + Ctrl+S | no group: the only neighbour ≥ 0.70 is already a lexical hit |
+| embed + `semantic` for a new query | 7 ms + 1 ms |
+| vector sync, unchanged | 54 ms wall, longest UI block 6 ms |
+| vector sync, changed (full rebuild) | 408 ms wall, longest UI block 65 ms |
+| guard `keeping pipelines resilient` (no title match) | `Already have?` `RW How to Design Resilient … [0.71]`, `Restate [0.71]` |
+| guard `resilient data systems` | `RW How to Design Resilient … [title]` (the semantic hit is the same note: deduped) |
+| SC disabled (`app.plugins.disablePlugin`), ff10k reloaded | no ff10k warnings or errors; no semantic group; Ctrl+S → Notice `Smart Connections embeddings not available`; hint `Smart Connections off: title similarity only` shown |
+| SC re-enabled at runtime (`plugin:enable`) | SC itself is broken until an app reload (every `vec` getter throws `reading 'embedding_models'`); the bridge logs one `[ff10k] smart connections: reading vectors failed (…)` and stays off |
+| `o reload` | SC back (lazy loader), vectors back, `available true`, `hasVectors true` |

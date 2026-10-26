@@ -3,7 +3,7 @@
 import { type App, Modal, type Modifier, Notice, Platform, Scope } from 'obsidian';
 import { createGhostNote, createNote, ghostNotePath, insertLink, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
-import type { Hit, Mode, SearchResponse } from '../protocol';
+import type { Hit, Mode, SearchResponse, SemanticHit } from '../protocol';
 import type { Keymap } from '../settings';
 import { Preview, queryTerms } from './preview';
 import { renderRow, renderTierLabel } from './results';
@@ -15,7 +15,9 @@ const INITIAL_ROWS = 30;
  * (ghosts are tier 1 too and get filtered out). */
 const GUARD_ROWS = 3;
 const GUARD_SEARCH = 10;
-const LATER = 'Fast Find 10K: coming in a later task';
+/** Semantic neighbours asked for: the tier-5 group, and the create guard's share. */
+const SEMANTIC_ROWS = 10;
+const GUARD_SEMANTIC = 3;
 const MODIFIERS: readonly Modifier[] = ['Mod', 'Ctrl', 'Meta', 'Shift', 'Alt'];
 
 /** `Mod+Alt+Enter` → `{ modifiers: ['Mod','Alt'], key: 'Enter' }`; single letters lower-cased.
@@ -37,6 +39,25 @@ function keyLabel(spec: string): string {
 		.split('+')
 		.map((p) => sym[p] ?? p)
 		.join('');
+}
+
+/** A semantic neighbour as a tier-5 row (opens at the top of the note; badge shows the score). */
+function semanticHit(h: SemanticHit): Hit {
+	return {
+		path: h.path,
+		title: h.title,
+		titleNorm: '',
+		tier: 5,
+		score: h.score,
+		badge: 'Body',
+		titleRanges: [],
+		heading: null,
+		excerpt: null,
+		line: null,
+		isGhost: false,
+		ghostRefs: 0,
+		similarCount: 0,
+	};
 }
 
 interface State {
@@ -76,6 +97,13 @@ export class FastFindModal extends Modal {
 	private guard: { name: string; ghost: string | null } | null = null;
 	/** Bumped per create request; a slower guard lookup that lost the race is dropped. */
 	private createSeq = 0;
+	/** Bumped per `render`; a semantic lookup for an older render is dropped. */
+	private renderSeq = 0;
+	/** The semantic group is in `state.hits` for the current render. */
+	private semanticShown = false;
+	/** Query for which Ctrl+S asked for the semantic tier (kept across re-renders of that query). */
+	private semanticForced: string | null = null;
+	private emptyEl: HTMLElement | null = null;
 
 	constructor(app: App, plugin: FastFindPlugin, mode: Mode) {
 		super(app);
@@ -149,7 +177,6 @@ export class FastFindModal extends Modal {
 	}
 
 	private registerKeys(km: Keymap): void {
-		const later = () => new Notice(LATER, 1500);
 		const actions: Record<keyof Keymap, () => void> = {
 			open: () => void this.openSelected('same'),
 			openTab: () => void this.openSelected('tab'),
@@ -157,7 +184,7 @@ export class FastFindModal extends Modal {
 			create: () => void this.startCreate('same'),
 			createTab: () => void this.startCreate('tab'),
 			insertLink: () => this.insertLinkSelected(),
-			semantic: later,
+			semantic: () => this.forceSemantic(),
 			focusSimilar: () => this.enterSimilar(km),
 			filesOnly: () => this.setMode(this.state.mode === 'all' ? 'filesOnly' : 'all'),
 			moveDown: () => this.select(this.state.selected + 1),
@@ -191,6 +218,8 @@ export class FastFindModal extends Modal {
 				this.render(res);
 				const paintMs = performance.now() - t0;
 				if (this.plugin.settings.logTimings) console.log('[ff10k] search', query, res.elapsedUs, 'us', paintMs);
+				// after the lexical paint, never before it
+				void this.addSemantic(this.semanticForced === query);
 			},
 			(err: unknown) => {
 				if (err !== 'stale') this.engineDead(err);
@@ -208,6 +237,9 @@ export class FastFindModal extends Modal {
 		// same query re-run (debug/indexing refresh): keep the selected note selected
 		const keep = this.renderedQuery === this.state.query ? this.state.hits[this.state.selected]?.path : undefined;
 		this.renderedQuery = this.state.query;
+		this.renderSeq++;
+		this.semanticShown = false;
+		if (this.semanticForced !== this.state.query) this.semanticForced = null;
 		this.state.hits = res.hits;
 		this.state.totalDocs = res.totalDocs;
 		this.state.elapsedUs = res.elapsedUs;
@@ -218,9 +250,57 @@ export class FastFindModal extends Modal {
 		this.lastTier = -1;
 		this.renderUpTo(Math.min(Math.max(INITIAL_ROWS, this.state.selected + 1), res.hits.length));
 		this.rowEls[this.state.selected]?.scrollIntoView({ block: 'nearest' });
-		if (res.hits.length === 0) this.resultsEl.createDiv({ cls: 'ff10k-empty', text: this.state.query ? 'No matches' : 'No recent notes' });
+		this.emptyEl = res.hits.length === 0 ? this.resultsEl.createDiv({ cls: 'ff10k-empty', text: this.state.query ? 'No matches' : 'No recent notes' }) : null;
 		this.renderStatus();
 		this.schedulePaint();
+	}
+
+	/** Ctrl+S: the semantic tier for the current query (unless the setting says never). */
+	private forceSemantic(): void {
+		if (!this.state.query.trim() || this.plugin.settings.semantic === 'never') return;
+		const bridge = this.plugin.bridge;
+		if (!this.plugin.settings.useSmartConnections || !bridge?.available() || !bridge.hasVectors()) {
+			new Notice('Fast Find 10K: Smart Connections embeddings not available', 2000);
+			return;
+		}
+		this.semanticForced = this.state.query;
+		void this.addSemantic(true);
+	}
+
+	/** Appends the `semantic` group (tier 5) for the rendered query: automatically when the
+	 * lexical hits are few, or when `forced` (Ctrl+S). Dropped when the query or render changed. */
+	private async addSemantic(forced: boolean): Promise<void> {
+		const { settings, bridge, engine } = this.plugin;
+		const query = this.state.query;
+		// "few" counts full lexical matches (tiers 1-3), not the partial tier shown because of them (spec 6.3)
+		const full = this.state.hits.filter((h) => h.tier >= 1 && h.tier <= 3).length;
+		const auto = settings.semantic === 'auto' && full < settings.fewThreshold;
+		if (this.semanticShown || !query.trim() || settings.semantic === 'never' || !(forced || auto)) return;
+		if (!settings.useSmartConnections || !bridge?.available() || !bridge.hasVectors() || !engine) return;
+		const gen = this.renderSeq;
+		const current = () => !this.closed && gen === this.renderSeq && query === this.inputEl.value && !this.semanticShown;
+		const vec = await bridge.embed(query);
+		if (!vec || !current()) return;
+		let found: SemanticHit[];
+		try {
+			found = await engine.semantic(vec, SEMANTIC_ROWS, settings.minSimilarity);
+		} catch {
+			return;
+		}
+		if (!current()) return;
+		const lexical = new Set(this.state.hits.map((h) => h.path));
+		const rows = found.filter((f) => !lexical.has(f.path)).map(semanticHit);
+		this.semanticShown = true;
+		if (rows.length === 0) return;
+		const first = this.state.hits.length;
+		this.state.hits.push(...rows);
+		this.emptyEl?.remove();
+		this.emptyEl = null;
+		// at most LIMIT lexical rows: render the rest so the group is reachable without scrolling first
+		this.renderUpTo(this.state.hits.length);
+		if (forced) this.rowEls[first]?.scrollIntoView({ block: 'nearest' });
+		this.renderStatus();
+		if (first === 0) this.schedulePaint(); // nothing was selected before
 	}
 
 	/** Appends rows (and tier labels) until `n` hits are rendered. */
@@ -262,6 +342,7 @@ export class FastFindModal extends Modal {
 			[[km.createTab], 'create in tab'],
 			[[km.insertLink], 'insert [[link]]'],
 			[[km.filesOnly], 'files only'],
+			[[km.semantic], 'semantic'],
 			[[km.moveDown, km.moveUp], 'move'],
 			[[km.togglePreview], 'toggle preview'],
 			[[km.focusSimilar], 'similar notes'],
@@ -307,9 +388,8 @@ export class FastFindModal extends Modal {
 			this.similar.clear();
 			return;
 		}
-		// hasVectors: false until the Smart Connections bridge exists (Task 20)
 		void this.preview.show(engine, hit, queryTerms(this.state.query));
-		void this.similar.show(engine, hit, this.plugin.settings.minSimilarity, false);
+		void this.similar.show(engine, hit, this.plugin.settings.minSimilarity, this.plugin.bridge?.hasVectors() ?? false);
 	}
 
 	/** Tab: keyboard focus into the similar panel; its own scope handles move/open/leave.
@@ -401,19 +481,39 @@ export class FastFindModal extends Modal {
 		this.enterSimilar(this.plugin.settings.keymap, true);
 	}
 
-	/** Existing notes whose title/alias matches `name` (tier 1, no ghosts). Null when a newer
-	 * search superseded the lookup (the user kept typing): then nothing is created. */
+	/** Existing notes whose title/alias matches `name` (tier 1, no ghosts), then semantic
+	 * neighbours of the name's embedding (when available) labelled with their score.
+	 * Null when a newer search superseded the lookup (the user kept typing): then nothing is created. */
 	private async guardCandidates(name: string): Promise<PanelItem[] | null> {
 		const engine = this.plugin.engine;
 		if (!engine) return [];
+		const semantic = this.guardSemantic(name);
+		let lexical: PanelItem[];
 		try {
 			const res = await engine.search(name, 'filesOnly', GUARD_SEARCH, false);
-			return res.hits
+			lexical = res.hits
 				.filter((h) => h.tier === 1 && !h.isGhost)
 				.slice(0, GUARD_ROWS)
 				.map((h) => ({ path: h.path, title: h.title, note: h.badge.toLowerCase() }));
 		} catch (e) {
-			return e === 'stale' ? null : [];
+			if (e === 'stale') return null;
+			lexical = [];
+		}
+		const seen = new Set(lexical.map((i) => i.path));
+		return [...lexical, ...(await semantic).filter((i) => !seen.has(i.path))];
+	}
+
+	/** Up to 3 semantic neighbours of `name`; empty without Smart Connections or on any failure. */
+	private async guardSemantic(name: string): Promise<PanelItem[]> {
+		const { settings, bridge, engine } = this.plugin;
+		if (!settings.useSmartConnections || !bridge?.available() || !bridge.hasVectors() || !engine) return [];
+		const vec = await bridge.embed(name);
+		if (!vec) return [];
+		try {
+			const hits = await engine.semantic(vec, GUARD_SEMANTIC, settings.minSimilarity);
+			return hits.map((h) => ({ path: h.path, title: h.title, note: h.score.toFixed(2) }));
+		} catch {
+			return [];
 		}
 	}
 
