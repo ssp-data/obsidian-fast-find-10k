@@ -131,13 +131,9 @@ fn sorted_intersection(a: &[String], b: &[String]) -> usize {
     n
 }
 
-/// Calls `emit(candidate, reason, score)` for every lexical neighbour of `id`. No strings are
-/// allocated per candidate.
-fn scan(index: &Index, id: DocId, mut emit: impl FnMut(DocId, SimilarReason, f32)) {
-    let (Some(doc), Some(keys)) = (index.get(id), index.title_keys(id)) else { return };
-    if keys.tokens.is_empty() {
-        return;
-    }
+/// Candidate docs for `id` with their shared-token counts, capped at `MAX_CANDIDATES` (most
+/// shared first is kept; order within the result is unspecified).
+fn candidates(index: &Index, id: DocId, keys: &TitleKeys) -> Vec<(DocId, u32)> {
     let lists: Vec<_> = keys.tokens.iter().map(|t| index.exact(Field::Title, t)).collect();
     let all_common = lists.iter().all(|l| l.len() > COMMON_TOKEN_DOCS);
     let mut shared: HashMap<DocId, u32> = HashMap::new();
@@ -160,6 +156,17 @@ fn scan(index: &Index, id: DocId, mut emit: impl FnMut(DocId, SimilarReason, f32
         cands.select_nth_unstable_by(MAX_CANDIDATES, |a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         cands.truncate(MAX_CANDIDATES);
     }
+    cands
+}
+
+/// Calls `emit(candidate, reason, score)` for every lexical neighbour of `id`. No strings are
+/// allocated per candidate.
+fn scan(index: &Index, id: DocId, mut emit: impl FnMut(DocId, SimilarReason, f32)) {
+    let (Some(doc), Some(keys)) = (index.get(id), index.title_keys(id)) else { return };
+    if keys.tokens.is_empty() {
+        return;
+    }
+    let cands = candidates(index, id, keys);
     let na = keys.tokens.len();
     for (cid, _) in cands {
         let (Some(other), Some(ok)) = (index.get(cid), index.title_keys(cid)) else { continue };
@@ -214,6 +221,7 @@ pub fn similar_for(index: &Index, id: DocId, limit: usize) -> Vec<SimilarHit> {
 mod tests {
     use super::*;
     use crate::engine::{Engine, SearchOptions};
+    use crate::index::Index;
 
     fn engine(paths: &[&str]) -> Engine {
         let mut e = Engine::new();
@@ -305,19 +313,43 @@ mod tests {
         }
     }
 
-    #[test]
-    fn candidate_cap_keeps_working() {
-        // All tokens common and more than MAX_CANDIDATES docs sharing them.
-        let e = big_vault(2500);
-        assert!(e.similar("Data Engineering Roadmap.md", 10).len() <= 10);
-        assert_eq!(e.similar("Data Engineering 7.md", 10).len(), 0);
+    /// `n` titles built only from a small common vocabulary (every token has > 500 postings, no
+    /// unique token), spread over folders so titles repeat.
+    fn common_block(n: usize) -> Vec<String> {
+        const V: [&str; 4] = ["Data", "Engineering", "Topic", "Notes"];
+        (0..n).map(|i| {
+            let (a, b, c) = (i % 4, (i / 4) % 4, (i / 16) % 4);
+            let t = if a == b || b == c || a == c {
+                format!("{} {}", V[a], V[b])
+            } else {
+                format!("{} {} {}", V[a], V[b], V[c])
+            };
+            format!("Folder {}/{t}.md", i % 97)
+        })
+        .collect()
     }
 
+    #[test]
+    fn candidate_cap_applies_when_all_tokens_common() {
+        let mut index = Index::new();
+        for p in common_block(3000) {
+            index.upsert(crate::markdown::extract(&p, "", 0.0));
+        }
+        let id = index.ids().find(|&i| index.title_keys(i).unwrap().tokens.len() == 2).unwrap();
+        let keys = index.title_keys(id).unwrap();
+        assert!(keys.tokens.iter().all(|t| index.exact(Field::Title, t).len() > COMMON_TOKEN_DOCS));
+        assert_eq!(candidates(&index, id, keys).len(), MAX_CANDIDATES);
+        assert!(!similar_for(&index, id, 5).is_empty());
+    }
+
+    /// 7,000 unrelated notes plus the worst case: 3,000 titles made only of common tokens.
     fn timed_vault() -> Engine {
         let mut e = Engine::new();
-        for i in 0..10_000 {
-            let t = if i % 10 < 3 { format!("Data Engineering Topic {i}") } else { format!("Other Note {i}") };
-            e.upsert(&format!("Folder {}/{t}.md", i % 20), i as f64, "");
+        for i in 0..7000 {
+            e.upsert(&format!("Folder {}/Other Note {i}.md", i % 20), i as f64, "");
+        }
+        for p in common_block(3000) {
+            e.upsert(&p, 0.0, "");
         }
         e
     }
