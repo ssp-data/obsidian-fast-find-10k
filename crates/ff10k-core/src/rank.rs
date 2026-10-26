@@ -20,7 +20,7 @@ use crate::index::{DocId, Index};
 use crate::matcher::{body_docs, match_term, match_term_scoped, DocSet, FuzzyLevel, MatchKind, Scope, TermHit};
 use crate::normalize::{normalize, strip_symbols};
 use crate::query::{Query, Term};
-use crate::tokenize::{tokenize, tokenize_query_term, Token};
+use crate::tokenize::tokenize_query_term;
 
 /// Proximity: bonus when all units share a heading section, larger when within this many body tokens.
 const PROXIMITY_WINDOW: u32 = 8;
@@ -224,6 +224,8 @@ struct Unit {
 type Slots = SmallVec<[Option<(u32, u32)>; 4]>;
 
 struct Scored<'a> {
+    /// The doc's id in its index (the ghost set's private index for ghosts).
+    id: DocId,
     doc: &'a Doc,
     tier: u8,
     score: f32,
@@ -611,6 +613,7 @@ fn score<'a>(
     let frecency = extras.frecency(&doc.path, now_secs) * FRECENCY_WEIGHT;
     let combo = if extras.combo_count(&query.normalized, &doc.path) >= COMBO_MIN_COUNT { COMBO_BONUS } else { 0.0 };
     Scored {
+        id,
         doc,
         tier,
         score: (fields + prox + structural + frecency + combo) * penalty,
@@ -682,7 +685,10 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
     scored.sort_by(cmp_scored);
     let hits = scored
         .iter()
-        .map(|s| page_hit(s, if s.ghost.is_some() { &ghost_units } else { &units }, cfg, opts))
+        .map(|s| match (s.ghost, extras.ghosts) {
+            (Some(_), Some(gs)) => page_hit(&gs.index, s, &ghost_units, cfg, opts),
+            _ => page_hit(index, s, &units, cfg, opts),
+        })
         .collect();
     Ranked { hits, candidates: total }
 }
@@ -802,27 +808,6 @@ fn title_display(s: &Scored, units: &[Unit], badge: Field) -> (String, Vec<(u32,
     (normalize(&strip_symbols(&s.doc.title)), merge_ranges(title))
 }
 
-/// Tokens of `body` up to and including position `pos`, plus `radius` bytes past it. Tokenizes
-/// a growing prefix cut at whitespace (a word boundary, so positions match the full tokenization).
-fn tokens_around(body: &str, pos: u32, radius: usize) -> Vec<Token> {
-    let mut cut = 512;
-    loop {
-        let end = if cut >= body.len() {
-            body.len()
-        } else {
-            let at = floor_boundary(body, cut);
-            body[at..].find(char::is_whitespace).map_or(body.len(), |i| at + i)
-        };
-        let toks = tokenize(&body[..end]);
-        let done = end == body.len()
-            || toks.iter().find(|t| t.pos == pos).is_some_and(|t| t.byte_end as usize + radius < end);
-        if done {
-            return toks;
-        }
-        cut *= 4;
-    }
-}
-
 fn floor_boundary(s: &str, mut i: usize) -> usize {
     i = i.min(s.len());
     while !s.is_char_boundary(i) {
@@ -844,17 +829,20 @@ fn word_matches(tok: &str, words: &[(String, bool)]) -> bool {
 }
 
 /// Excerpt and body line around the first body match of the first unit with body positions.
-fn body_context(s: &Scored, units: &[Unit]) -> Option<(Excerpt, u32)> {
+/// Works on a window of whole body lines around the match (`Index::body_window`); its margin
+/// covers the radius plus a char-boundary step, so the excerpt equals the one cut from the
+/// whole body.
+fn body_context(index: &Index, s: &Scored, units: &[Unit]) -> Option<(Excerpt, u32)> {
     let (ui, pos) = units.iter().zip(&s.slots).enumerate().find_map(|(i, (u, &sl))| {
         let h = unit_hits(u, sl).iter().find(|h| h.field == Field::Body)?;
         Some((i, *h.positions.first()?))
     })?;
-    let body = &s.doc.body;
-    let toks = tokens_around(body, pos, EXCERPT_RADIUS);
+    let w = index.body_window(s.id, pos, EXCERPT_RADIUS + 4)?;
+    let (body, toks) = (&w.text, &w.tokens);
     let at = toks.iter().filter(|t| t.pos == pos);
     let tok = at.clone().find(|t| word_matches(&t.text, &units[ui].words)).or_else(|| at.clone().next())?;
     let (bs, be) = (tok.byte_start as usize, tok.byte_end as usize);
-    let body_line = s.doc.body_line_starts.partition_point(|&x| x as usize <= bs).saturating_sub(1);
+    let body_line = w.first_line + body[..bs].bytes().filter(|&b| b == b'\n').count();
     let line = s.doc.body_line_src.get(body_line).copied().unwrap_or(body_line as u32);
     let start = floor_boundary(body, bs.saturating_sub(EXCERPT_RADIUS));
     let end = ceil_boundary(body, be + EXCERPT_RADIUS);
@@ -867,7 +855,7 @@ fn body_context(s: &Scored, units: &[Unit]) -> Option<(Excerpt, u32)> {
     Some((Excerpt { text: body[start..end].to_string(), ranges: merge_ranges(ranges) }, line))
 }
 
-fn page_hit(s: &Scored, units: &[Unit], cfg: &Config, opts: &SearchOptions) -> Hit {
+fn page_hit(index: &Index, s: &Scored, units: &[Unit], cfg: &Config, opts: &SearchOptions) -> Hit {
     let badge = badge(s, units);
     let heading = if is_heading(badge) {
         units
@@ -881,7 +869,7 @@ fn page_hit(s: &Scored, units: &[Unit], cfg: &Config, opts: &SearchOptions) -> H
         None
     };
     let (title_norm, title_ranges) = title_display(s, units, badge);
-    let context = body_context(s, units);
+    let context = body_context(index, s, units);
     let line = heading.as_ref().map(|h| h.line).or(context.as_ref().map(|c| c.1));
     let debug = opts.debug.then(|| {
         let per_term = units

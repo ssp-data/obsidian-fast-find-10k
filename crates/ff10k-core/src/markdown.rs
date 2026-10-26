@@ -19,14 +19,19 @@ pub(crate) fn title_and_segments(path: &str) -> (String, Vec<String>) {
 }
 
 pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
-    let mut doc = extract_uncounted(path, text, mtime);
+    let (mut doc, _) = extract_note(path, text, mtime);
     doc.word_count = count_tokens(&doc.body) as u32;
     doc
 }
 
-/// `extract` with `word_count` left at 0: the index counts body tokens while indexing them, so
-/// the engine skips this extra tokenizer pass.
-pub(crate) fn extract_uncounted(path: &str, text: &str, mtime: f64) -> Doc {
+/// Flag on a `extract_note` body-line source: the line is copied verbatim (fenced code).
+pub(crate) const VERBATIM: u32 = 1 << 31;
+
+/// `extract` with `word_count` left at 0 (the index counts body tokens while indexing them),
+/// plus each body line's source: the byte offset of its line in `text`, `| VERBATIM` for
+/// fenced lines. `body_line(text, src)` rebuilds the body line from it, so the index can keep
+/// only the raw text.
+pub(crate) fn extract_note(path: &str, text: &str, mtime: f64) -> (Doc, Vec<u32>) {
     let (title, path_segments) = title_and_segments(path);
 
     // Lines of the original text with their byte offsets (`\r` stripped from content).
@@ -48,6 +53,7 @@ pub(crate) fn extract_uncounted(path: &str, text: &str, mtime: f64) -> Doc {
     let mut sc = Scanner::default();
     let mut body_lines: Vec<String> = Vec::new();
     let mut body_line_src: Vec<u32> = Vec::new();
+    let mut body_line_off: Vec<u32> = Vec::new();
     let mut headings: Vec<Heading> = Vec::new();
     let mut fence: Option<(char, usize)> = None;
     for (idx, &(start, line)) in lines.iter().enumerate().skip(first_body_line) {
@@ -70,8 +76,10 @@ pub(crate) fn extract_uncounted(path: &str, text: &str, mtime: f64) -> Doc {
         if fence.is_some() {
             body_lines.push(line.to_string());
             body_line_src.push(idx as u32);
+            body_line_off.push(start as u32 | VERBATIM);
             continue;
         }
+        body_line_off.push(start as u32);
         let content = match atx_heading(line) {
             Some((level, htext)) => {
                 if level <= 3 {
@@ -113,7 +121,7 @@ pub(crate) fn extract_uncounted(path: &str, text: &str, mtime: f64) -> Doc {
     }
     let body = body_lines.join("\n");
 
-    Doc {
+    let doc = Doc {
         path: path.to_string(),
         title,
         aliases,
@@ -127,7 +135,20 @@ pub(crate) fn extract_uncounted(path: &str, text: &str, mtime: f64) -> Doc {
         mtime,
         size: text.len() as u32,
         word_count: 0,
+    };
+    (doc, body_line_off)
+}
+
+/// The body line whose source `extract_note` reported as `src`.
+pub(crate) fn body_line(text: &str, src: u32) -> String {
+    let start = (src & !VERBATIM) as usize;
+    let line = text[start..].split('\n').next().unwrap_or("");
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    if src & VERBATIM != 0 {
+        return line.to_string();
     }
+    let content = atx_heading(line).map_or(line, |(_, h)| h);
+    Scanner::default().inline(content)
 }
 
 /// Index of the closing `---`/`...` line, if the text opens with a `---` line.
@@ -462,6 +483,16 @@ fn is_data_uri(after: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn body_lines_rebuild_from_source() {
+        let text = "---\naliases: [x]\n---\n# Title #\r\nsee [[A|b]] and ![[img.png]] `c`\n```rust\nlet [[x]] = 1;\n```\n\n## Sub\ndata:image/png;base64,AAAA tail";
+        let (doc, src) = extract_note("n.md", text, 0.0);
+        let rebuilt: Vec<String> = src.iter().map(|&s| body_line(text, s)).collect();
+        assert_eq!(rebuilt.join("\n"), doc.body);
+        assert_eq!(src.len(), doc.body_line_src.len());
+        assert!(src.iter().filter(|&&s| s & VERBATIM != 0).count() == 1);
+    }
 
     fn link(target: &str, alias: Option<&str>, heading: Option<&str>) -> LinkRef {
         LinkRef {

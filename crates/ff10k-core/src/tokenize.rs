@@ -26,10 +26,10 @@ fn is_word_char(c: char) -> bool {
 }
 
 /// Byte ranges of maximal runs of word characters, with leading/trailing joiners trimmed.
-fn words(raw: &str) -> Vec<(usize, usize)> {
-    let mut out = Vec::new();
+fn words(raw: &str, out: &mut Vec<(usize, usize)>) {
+    out.clear();
     let mut start: Option<usize> = None;
-    let push = |s: usize, e: usize, out: &mut Vec<(usize, usize)>| {
+    let mut push = |s: usize, e: usize| {
         let w = &raw[s..e];
         let t = w.trim_start_matches(['-', '_']);
         let s2 = s + (w.len() - t.len());
@@ -42,13 +42,12 @@ fn words(raw: &str) -> Vec<(usize, usize)> {
         if is_word_char(c) {
             start.get_or_insert(i);
         } else if let Some(s) = start.take() {
-            push(s, i, &mut out);
+            push(s, i);
         }
     }
     if let Some(s) = start {
-        push(s, raw.len(), &mut out);
+        push(s, raw.len());
     }
-    out
 }
 
 /// Split a separator-free piece before an uppercase letter following a lowercase letter (digits
@@ -74,35 +73,61 @@ fn has_alnum(s: &str) -> bool {
 
 /// Calls `f(text, pos, byte_start, byte_end)` for every token of `raw`, in `tokenize` order.
 /// `text` borrows a buffer reused between calls, so callers copy it only when they keep it.
-pub fn for_each_token(raw: &str, mut f: impl FnMut(&str, u32, u32, u32)) {
-    let mut buf = String::new();
-    let mut leaves: Vec<(usize, usize)> = Vec::new();
-    let mut pos: u32 = 0;
+pub fn for_each_token(raw: &str, f: impl FnMut(&str, u32, u32, u32)) {
+    for_each_token_at(raw, 0, f);
+}
+
+/// `for_each_token` with positions counted from `start_pos`; returns the position after the
+/// last word. Words never span a `\n`, so tokenizing a text line by line, each line starting
+/// at the previous line's return value, yields the same tokens and positions as the whole text.
+pub fn for_each_token_at(raw: &str, start_pos: u32, f: impl FnMut(&str, u32, u32, u32)) -> u32 {
+    for_each_token_with(&mut Scratch::default(), raw, start_pos, f)
+}
+
+/// Scratch buffers reused across `for_each_token_with` calls (tokenizing many short strings).
+#[derive(Default)]
+pub struct Scratch {
+    buf: String,
+    leaves: Vec<(usize, usize)>,
+    words: Vec<(usize, usize)>,
+}
+
+/// `for_each_token_at` with caller-owned scratch buffers.
+pub fn for_each_token_with(
+    scratch: &mut Scratch,
+    raw: &str,
+    start_pos: u32,
+    mut f: impl FnMut(&str, u32, u32, u32),
+) -> u32 {
+    let Scratch { buf, leaves, words: spans } = scratch;
+    words(raw, spans);
+    let mut pos: u32 = start_pos;
     let mut emit = |s: usize, e: usize, pos: u32, buf: &mut String| {
         normalize_into(&raw[s..e], buf);
         if has_alnum(buf) {
             f(buf, pos, s as u32, e as u32);
         }
     };
-    for (ws, we) in words(raw) {
+    for &(ws, we) in spans.iter() {
         let word = &raw[ws..we];
         // Leaves: hyphen/underscore parts, each further split at camelCase boundaries.
         leaves.clear();
         let mut off = 0;
         for part in word.split(['-', '_']) {
             if !part.is_empty() {
-                camel_pieces(part, ws + off, &mut leaves);
+                camel_pieces(part, ws + off, leaves);
             }
             off += part.len() + 1;
         }
         if leaves.len() > 1 {
-            emit(ws, we, pos, &mut buf);
+            emit(ws, we, pos, buf);
         }
         for (k, &(s, e)) in leaves.iter().enumerate() {
-            emit(s, e, pos + k as u32, &mut buf);
+            emit(s, e, pos + k as u32, buf);
         }
         pos += leaves.len().max(1) as u32;
     }
+    pos
 }
 
 pub fn tokenize(raw: &str) -> Vec<Token> {
@@ -170,6 +195,18 @@ mod tests {
     #[test]
     fn wikilink_text_is_tokenized_without_brackets() {
         assert_eq!(texts("[[Data Mesh|mesh]]"), ["data", "mesh", "mesh"]);
+    }
+
+    #[test]
+    fn line_by_line_matches_whole_text() {
+        let raw = "Data-Engineering notes\n\n--- ¶ ---\nCamelCase 10K, ok\nlast";
+        let whole: Vec<_> = tokenize(raw).into_iter().map(|t| (t.text, t.pos)).collect();
+        let mut lines = Vec::new();
+        let mut pos = 0;
+        for line in raw.split('\n') {
+            pos = for_each_token_at(line, pos, |t, p, _, _| lines.push((t.to_string(), p)));
+        }
+        assert_eq!(lines, whole);
     }
 
     #[test]

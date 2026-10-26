@@ -1,7 +1,8 @@
 //! Index: doc table plus one inverted index (sorted term dictionary) per field.
 
+use std::borrow::Cow;
 use std::cell::OnceCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::ops::Bound;
 use std::rc::Rc;
 
@@ -9,10 +10,10 @@ use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 use crate::doc::{Doc, Field};
-use crate::markdown::title_and_segments;
+use crate::markdown::{body_line, extract_note, title_and_segments};
 use crate::normalize::{normalize, strip_symbols};
 use crate::similar::{word_spans, TitleKeys};
-use crate::tokenize::for_each_token;
+use crate::tokenize::{for_each_token_at, for_each_token_with, Scratch, Token};
 
 pub type DocId = u32;
 
@@ -147,8 +148,53 @@ fn fidx(f: Field) -> usize {
 
 struct Record {
     doc: Doc,
+    /// Raw note text (`upsert_note`); empty for `upsert`.
     text: String,
     keys: Keys,
+    body: BodySrc,
+    /// Token position at the start of each body line (`\n`-separated), for excerpt windows.
+    line_pos: Vec<u32>,
+}
+
+/// Where a record's body lines come from.
+enum BodySrc {
+    /// `doc.body` as given (`upsert`).
+    Kept,
+    /// `doc.body` and its line starts were dropped (`upsert_note`): body line `i` is
+    /// `markdown::body_line(text, src[i])`, so the body is not stored next to the raw text.
+    Text(Vec<u32>),
+}
+
+impl Record {
+    fn body_lines(&self) -> usize {
+        match &self.body {
+            BodySrc::Kept => self.line_pos.len(),
+            BodySrc::Text(src) => src.len().min(self.line_pos.len()),
+        }
+    }
+
+    fn body_line(&self, i: usize) -> Cow<'_, str> {
+        match &self.body {
+            BodySrc::Kept => Cow::Borrowed(self.doc.body.split('\n').nth(i).unwrap_or("")),
+            BodySrc::Text(src) => Cow::Owned(body_line(&self.text, src[i])),
+        }
+    }
+
+    /// The doc with its body (re-extracted from the raw text when it was dropped).
+    fn full_doc(&self) -> Cow<'_, Doc> {
+        match &self.body {
+            BodySrc::Kept => Cow::Borrowed(&self.doc),
+            BodySrc::Text(_) => Cow::Owned(extract_note(&self.doc.path, &self.text, self.doc.mtime).0),
+        }
+    }
+}
+
+/// Body text around one token position: whole body lines `first_line..` joined by `\n`, with
+/// every token in it (`byte_start`/`byte_end` relative to `text`, `pos` as in the postings).
+pub struct BodyWindow {
+    pub text: String,
+    pub first_line: usize,
+    pub tokens: Vec<Token>,
 }
 
 /// Per-doc normalized strings, computed once per upsert/rename so queries never re-normalize.
@@ -267,8 +313,8 @@ fn push_pos(map: &mut TermMap, term: &str, p: Option<u32>) {
     list.extend(p);
 }
 
-fn add_tokens(map: &mut TermMap, raw: &str, hidx: Option<usize>) {
-    for_each_token(raw, |text, pos, _, _| {
+fn add_tokens(map: &mut TermMap, raw: &str, hidx: Option<usize>, scratch: &mut Scratch) {
+    for_each_token_with(scratch, raw, 0, |text, pos, _, _| {
         let p = match hidx {
             Some(h) => ((h as u32) << 16) | (pos & 0xFFFF),
             None => pos,
@@ -277,13 +323,21 @@ fn add_tokens(map: &mut TermMap, raw: &str, hidx: Option<usize>) {
     });
 }
 
-/// Derive every (field, term -> positions) of a doc, and its body token count (its
-/// `word_count`). Deterministic, so `remove` can re-derive it.
-fn derive(doc: &Doc) -> (Vec<TermMap>, u32) {
+/// A doc's postings per field (term -> positions), its body token count (its `word_count`) and
+/// the token position at the start of each body line. Deterministic, so `unindex` can
+/// re-derive it.
+struct Derived {
+    maps: Vec<TermMap>,
+    words: u32,
+    line_pos: Vec<u32>,
+}
+
+fn derive(doc: &Doc) -> Derived {
+    let mut scratch = Scratch::default();
     let mut maps: Vec<TermMap> = (0..FIELDS.len()).map(|_| TermMap::default()).collect();
-    add_tokens(&mut maps[fidx(Field::Title)], &strip_symbols(&doc.title), None);
+    add_tokens(&mut maps[fidx(Field::Title)], &strip_symbols(&doc.title), None, &mut scratch);
     for a in &doc.aliases {
-        add_tokens(&mut maps[fidx(Field::Alias)], a, None);
+        add_tokens(&mut maps[fidx(Field::Alias)], a, None, &mut scratch);
     }
     for (i, h) in doc.headings.iter().enumerate() {
         let f = match h.level {
@@ -292,7 +346,7 @@ fn derive(doc: &Doc) -> (Vec<TermMap>, u32) {
             3 => Field::H3,
             _ => continue,
         };
-        add_tokens(&mut maps[fidx(f)], &h.text, Some(i));
+        add_tokens(&mut maps[fidx(f)], &h.text, Some(i), &mut scratch);
     }
     for (i, t) in doc.tags.iter().enumerate() {
         let n = normalize(t);
@@ -301,21 +355,26 @@ fn derive(doc: &Doc) -> (Vec<TermMap>, u32) {
         }
     }
     for l in &doc.links {
-        add_tokens(&mut maps[fidx(Field::Link)], &l.target, None);
+        add_tokens(&mut maps[fidx(Field::Link)], &l.target, None, &mut scratch);
         if let Some(a) = &l.alias {
-            add_tokens(&mut maps[fidx(Field::Link)], a, None);
+            add_tokens(&mut maps[fidx(Field::Link)], a, None, &mut scratch);
         }
     }
     for s in &doc.path_segments {
-        add_tokens(&mut maps[fidx(Field::Path)], &strip_symbols(s), None);
+        add_tokens(&mut maps[fidx(Field::Path)], &strip_symbols(s), None, &mut scratch);
     }
     let body = &mut maps[fidx(Field::Body)];
-    let mut i = 0;
-    for_each_token(&doc.body, |text, pos, _, _| {
-        push_pos(body, text, (i < BODY_POSITION_CAP).then_some(pos));
-        i += 1;
-    });
-    (maps, i as u32)
+    let (mut i, mut pos) = (0, 0);
+    let mut line_pos = Vec::with_capacity(doc.body_line_src.len());
+    // Line by line (same tokens and positions as the whole body), recording each line's start.
+    for line in doc.body.split('\n') {
+        line_pos.push(pos);
+        pos = for_each_token_with(&mut scratch, line, pos, |text, p, _, _| {
+            push_pos(body, text, (i < BODY_POSITION_CAP).then_some(p));
+            i += 1;
+        });
+    }
+    Derived { maps, words: i as u32, line_pos }
 }
 
 fn stem(path: &str) -> &str {
@@ -331,23 +390,33 @@ impl Index {
         Index::default()
     }
 
+    /// Insert or replace a doc by path, as given (its body is kept; no raw text).
     pub fn upsert(&mut self, doc: Doc) -> DocId {
-        self.upsert_with_text(doc, String::new())
+        self.upsert_inner(doc, String::new(), None, None)
     }
 
-    /// Insert or replace by path, keeping the raw note text for previews.
-    pub fn upsert_with_text(&mut self, doc: Doc, text: String) -> DocId {
-        self.upsert_inner(doc, text, None)
+    /// Insert or replace a note by path from its raw text: extracts the doc, keeps the raw text
+    /// for previews, and rebuilds body lines from it on demand instead of storing the body.
+    pub fn upsert_note(&mut self, path: &str, mtime: f64, text: &str) -> DocId {
+        let (doc, src) = extract_note(path, text, mtime);
+        self.upsert_inner(doc, text.to_owned(), Some(src), None)
     }
 
-    /// `upsert_with_text`, adding each phase's wall time to `prof` (dev profiling only).
-    pub fn upsert_profiled(&mut self, doc: Doc, text: String, prof: &mut UpsertProfile) -> DocId {
-        self.upsert_inner(doc, text, Some(prof))
+    /// `upsert_note`, adding each phase's wall time to `prof` (dev profiling only).
+    pub fn upsert_note_profiled(&mut self, path: &str, mtime: f64, text: &str, prof: &mut UpsertProfile) -> DocId {
+        let (doc, src) = timed(Some(&mut prof.extract), || extract_note(path, text, mtime));
+        self.upsert_inner(doc, text.to_owned(), Some(src), Some(prof))
     }
 
-    /// `doc.word_count` is (re)set from the body tokens counted while indexing, so callers may
-    /// pass a doc from `markdown::extract_uncounted`.
-    fn upsert_inner(&mut self, mut doc: Doc, text: String, mut prof: Option<&mut UpsertProfile>) -> DocId {
+    /// `doc.word_count` is (re)set from the body tokens counted while indexing. With `src`
+    /// (body-line sources into `text`), the body is dropped after indexing.
+    fn upsert_inner(
+        &mut self,
+        mut doc: Doc,
+        text: String,
+        src: Option<Vec<u32>>,
+        mut prof: Option<&mut UpsertProfile>,
+    ) -> DocId {
         let id = match self.path_to_id.get(&doc.path).copied() {
             Some(id) => {
                 timed(prof.as_deref_mut().map(|p| &mut p.unindex), || self.unindex(id));
@@ -362,20 +431,28 @@ impl Index {
             },
         };
         self.path_to_id.insert(doc.path.clone(), id);
-        let (maps, words) = timed(prof.as_deref_mut().map(|p| &mut p.derive), || derive(&doc));
-        doc.word_count = words;
-        timed(prof.as_deref_mut().map(|p| &mut p.insert), || self.insert(id, &doc, maps));
+        let d = timed(prof.as_deref_mut().map(|p| &mut p.derive), || derive(&doc));
+        doc.word_count = d.words;
+        timed(prof.as_deref_mut().map(|p| &mut p.insert), || self.insert(id, &doc, d.maps));
         if self.records[id as usize].is_none() {
             self.live += 1;
         }
         let keys = timed(prof.map(|p| &mut p.keys), || Keys::of(&doc));
-        self.records[id as usize] = Some(Record { keys, doc, text });
+        let body = match src {
+            Some(src) => {
+                doc.body = String::new();
+                doc.body_line_starts = Vec::new();
+                BodySrc::Text(src)
+            }
+            None => BodySrc::Kept,
+        };
+        self.records[id as usize] = Some(Record { keys, doc, text, body, line_pos: d.line_pos });
         self.clear_strings();
         id
     }
 
     fn index(&mut self, id: DocId, doc: &Doc) {
-        let (maps, _) = derive(doc);
+        let maps = derive(doc).maps;
         self.insert(id, doc, maps);
     }
 
@@ -394,7 +471,7 @@ impl Index {
     /// (cost bounded by the doc's distinct terms times their list lengths).
     fn unindex(&mut self, id: DocId) {
         let Some(rec) = self.records[id as usize].as_ref() else { return };
-        let (maps, _) = derive(&rec.doc);
+        let maps = derive(&rec.full_doc()).maps;
         for (fi, map) in maps.into_iter().enumerate() {
             for term in map.keys() {
                 self.dicts[fi].remove_doc(term, id);
@@ -435,7 +512,7 @@ impl Index {
         rec.doc.title = title;
         rec.doc.path_segments = segs;
         rec.keys = Keys::of(&rec.doc);
-        let doc = rec.doc.clone();
+        let doc = rec.full_doc().into_owned();
         self.index(id, &doc);
         self.path_to_id.remove(old);
         self.path_to_id.insert(new.to_string(), id);
@@ -460,6 +537,47 @@ impl Index {
     /// Each alias normalized, with its non-stopword word spans; cached at upsert/rename.
     pub fn alias_words(&self, id: DocId) -> &[(String, Vec<(u32, u32)>)] {
         self.records.get(id as usize).and_then(Option::as_ref).map_or(&[], |r| &r.keys.aliases)
+    }
+
+    /// Body lines around the token at `pos` (a Body posting position of the doc), reaching at
+    /// least `margin` bytes before the first and after the last token at `pos`, or the body's
+    /// start/end. Costs one line rebuild per line in the window.
+    pub fn body_window(&self, id: DocId, pos: u32, margin: usize) -> Option<BodyWindow> {
+        let rec = self.records.get(id as usize)?.as_ref()?;
+        let n = rec.body_lines();
+        let l = rec.line_pos[..n].partition_point(|&p| p <= pos).checked_sub(1)?;
+        let line = rec.body_line(l);
+        let (mut lo, mut hi) = (usize::MAX, 0);
+        for_each_token_at(&line, rec.line_pos[l], |_, p, s, e| {
+            if p == pos {
+                lo = lo.min(s as usize);
+                hi = hi.max(e as usize);
+            }
+        });
+        if lo == usize::MAX {
+            return None;
+        }
+        let (mut before, mut after) = (lo, line.len() - hi);
+        let (mut first, mut last) = (l, l);
+        let mut lines: VecDeque<Cow<str>> = VecDeque::from([line]);
+        while before < margin && first > 0 {
+            first -= 1;
+            let t = rec.body_line(first);
+            before += t.len() + 1;
+            lines.push_front(t);
+        }
+        while after < margin && last + 1 < n {
+            last += 1;
+            let t = rec.body_line(last);
+            after += t.len() + 1;
+            lines.push_back(t);
+        }
+        let text = lines.into_iter().collect::<Vec<_>>().join("\n");
+        let mut tokens = Vec::new();
+        for_each_token_at(&text, rec.line_pos[first], |t, pos, byte_start, byte_end| {
+            tokens.push(Token { text: t.to_owned(), pos, byte_start, byte_end })
+        });
+        Some(BodyWindow { text, first_line: first, tokens })
     }
 
     pub fn text(&self, id: DocId) -> Option<&str> {
@@ -752,7 +870,7 @@ mod tests {
     fn word_count_filled_while_indexing() {
         let text = "# H\nOne two-three [[Link|alias]]\n```\ncode here\n```";
         let mut ix = Index::new();
-        let id = ix.upsert(crate::markdown::extract_uncounted("w.md", text, 0.0));
+        let id = ix.upsert_note("w.md", 0.0, text);
         assert_eq!(ix.get(id).unwrap().word_count, mk("w.md", text).word_count);
         assert!(ix.get(id).unwrap().word_count > 0);
     }
@@ -769,12 +887,50 @@ mod tests {
     }
 
     #[test]
+    fn note_body_survives_rename_and_replace() {
+        let mut ix = Index::new();
+        let id = ix.upsert_note("a/x.md", 0.0, "---\ntags: [t]\n---\nhello [[World|planet]]\n```\ncode line\n```");
+        assert!(ix.rename("a/x.md", "b/y.md"));
+        for w in ["hello", "world", "planet", "code"] {
+            assert_eq!(ix.exact(Field::Body, w).len(), 1, "{w}");
+        }
+        ix.upsert_note("b/y.md", 0.0, "fresh");
+        assert!(ix.exact(Field::Body, "hello").is_empty());
+        assert_eq!(ix.exact(Field::Body, "fresh").get(0).unwrap().doc, id);
+        assert!(ix.remove("b/y.md").is_some());
+        assert!(ix.exact(Field::Body, "fresh").is_empty());
+    }
+
+    #[test]
+    fn body_window_matches_the_whole_body() {
+        let filler: String = (0..40).map(|i| format!("line {i} with [[Link {i}|alias]] words\n")).collect();
+        let text = format!("# Head\n{filler}needle here\n```\nfenced needle2\n```\n{filler}");
+        let doc = mk("w.md", &text);
+        let mut ix = Index::new();
+        let id = ix.upsert_note("w.md", 0.0, &text);
+        let kept = ix.upsert(mk("k.md", &text));
+        for t in crate::tokenize::tokenize(&doc.body) {
+            for (i, margin) in [(id, 64), (kept, 64), (id, 0)] {
+                let w = ix.body_window(i, t.pos, margin).unwrap();
+                let off = doc.body_line_starts[w.first_line] as usize;
+                assert_eq!(&doc.body[off..off + w.text.len()], w.text);
+                let at: Vec<_> = w.tokens.iter().filter(|x| x.pos == t.pos).collect();
+                assert!(at.iter().any(|x| x.text == t.text && (x.byte_start as usize + off) == t.byte_start as usize));
+                let first = at.iter().map(|x| x.byte_start as usize).min().unwrap();
+                assert!(first >= margin || w.first_line == 0);
+            }
+        }
+    }
+
+    #[test]
     fn tags_and_text() {
         let mut ix = Index::new();
-        let id = ix.upsert_with_text(mk("t.md", "---\ntags: [a/b]\n---\nx"), "RAW".into());
+        let raw = "---\ntags: [a/b]\n---\nx";
+        let id = ix.upsert_note("t.md", 0.0, raw);
         assert_eq!(ix.docs_with_tag("a"), vec![id]);
         assert_eq!(ix.docs_with_tag("a/b"), vec![id]);
         assert!(ix.docs_with_tag("b2").is_empty());
-        assert_eq!(ix.text(id), Some("RAW"));
+        assert_eq!(ix.text(id), Some(raw));
+        assert!(ix.get(id).unwrap().body.is_empty(), "body not stored next to the raw text");
     }
 }
