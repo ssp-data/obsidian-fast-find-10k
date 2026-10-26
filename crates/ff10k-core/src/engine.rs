@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::index::Index;
 use crate::markdown::extract;
 use crate::query::Query;
-use crate::similar::{similar_count_for, similar_for, SimilarHit};
+use crate::similar::{similar_count_for, similar_for, similar_ids_for, SimilarHit, SimilarReason};
+use crate::vectors::{top, SemanticHit, VectorError, Vectors};
 use crate::rank::{rank, Extras, GhostSet};
 pub use crate::rank::{
     Config, DebugInfo, Excerpt, Ghost, HeadingHit, Hit, Mode, PartialMode, SearchOptions,
@@ -31,12 +32,21 @@ pub struct Engine {
     access: HashMap<String, VecDeque<f64>>,
     /// normalized query -> note path -> times opened from that query.
     combos: HashMap<String, HashMap<String, u32>>,
+    /// Optional embedding matrix (keyed by path).
+    vectors: Option<Vectors>,
 }
 
 /// Most access timestamps kept per path.
 const MAX_ACCESS: usize = 128;
 /// Page hits that get a `similar_count` (bounds the per-keystroke cost).
 const SIMILAR_COUNT_HITS: usize = 30;
+/// Page hits that also count semantic neighbours: one 10k x 384 scan costs ~0.3 ms in release
+/// (30 scans ~9 ms, over the ~3 ms budget), so only the first 10 hits pay for it.
+const SEMANTIC_COUNT_HITS: usize = 10;
+/// Semantic neighbours merged into `similar`.
+const SEMANTIC_NEIGHBOURS: usize = 5;
+/// Cosine at or above which a semantic neighbour counts toward `similar_count`.
+const SEMANTIC_COUNT_MIN: f32 = 0.80;
 
 impl Engine {
     pub fn new() -> Self {
@@ -105,9 +115,75 @@ impl Engine {
         self.index.text(self.index.id_of(path)?)
     }
 
-    /// Title-based near-duplicates of the note at `path`, best first.
-    pub fn similar(&self, path: &str, limit: usize) -> Vec<SimilarHit> {
-        self.index.id_of(path).map_or_else(Vec::new, |id| similar_for(&self.index, id, limit))
+    /// Replaces the embedding matrix. On error the old matrix is kept.
+    pub fn set_vectors(&mut self, dims: usize, paths: Vec<String>, data: Vec<f32>) -> Result<(), VectorError> {
+        self.vectors = Some(Vectors::new(dims, paths, data)?);
+        Ok(())
+    }
+
+    pub fn clear_vectors(&mut self) {
+        self.vectors = None;
+    }
+
+    pub fn has_vectors(&self) -> bool {
+        self.vectors.is_some()
+    }
+
+    /// Top `limit` indexed notes by cosine to `query_vec` with `score >= min_score`. Empty
+    /// without vectors or on a dimension mismatch.
+    pub fn semantic(&self, query_vec: &[f32], limit: usize, min_score: f32) -> Vec<SemanticHit> {
+        let Some(v) = &self.vectors else { return Vec::new() };
+        let found = v.scan(query_vec, min_score, |p| self.index.id_of(p).is_some());
+        top(found, limit)
+            .into_iter()
+            .filter_map(|(p, score)| {
+                let d = self.index.get(self.index.id_of(p)?)?;
+                Some(SemanticHit { path: p.to_string(), title: d.title.clone(), score })
+            })
+            .collect()
+    }
+
+    /// Near-duplicates of the note at `path`: title-based reasons first, then (with vectors) the
+    /// top 5 semantic neighbours with `cos >= min_score`. A path with both keeps its lexical
+    /// reason and gets `score = max(lexical, cos)`. Sorted by score, at most `limit`.
+    pub fn similar(&self, path: &str, limit: usize, min_score: f32) -> Vec<SimilarHit> {
+        let Some(id) = self.index.id_of(path) else { return Vec::new() };
+        if limit == 0 {
+            return Vec::new();
+        }
+        let mut out = similar_for(&self.index, id, usize::MAX);
+        if let Some((v, q)) = self.vectors.as_ref().and_then(|v| Some((v, v.get(path)?))) {
+            let found = v.scan(q, min_score, |p| p != path && self.index.id_of(p).is_some());
+            for (p, cos) in top(found, SEMANTIC_NEIGHBOURS) {
+                if let Some(h) = out.iter_mut().find(|h| h.path == p) {
+                    h.score = h.score.max(cos);
+                } else if let Some(d) = self.index.id_of(p).and_then(|i| self.index.get(i)) {
+                    out.push(SimilarHit {
+                        path: p.to_string(),
+                        title: d.title.clone(),
+                        reason: SimilarReason::Semantic(cos),
+                        score: cos,
+                    });
+                }
+            }
+        }
+        out.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.path.cmp(&b.path)));
+        out.truncate(limit);
+        out
+    }
+
+    /// Lexical neighbours plus semantic neighbours (`cos >= 0.80`) not already counted.
+    fn similar_count(&self, id: crate::index::DocId, path: &str, semantic: bool) -> u32 {
+        let vq = self.vectors.as_ref().filter(|_| semantic).and_then(|v| Some((v, v.get(path)?)));
+        let Some((v, q)) = vq else {
+            return similar_count_for(&self.index, id);
+        };
+        let lexical: Vec<&str> = similar_ids_for(&self.index, id)
+            .into_iter()
+            .filter_map(|i| self.index.get(i).map(|d| d.path.as_str()))
+            .collect();
+        let sem = v.scan(q, SEMANTIC_COUNT_MIN, |p| p != path && self.index.id_of(p).is_some());
+        (lexical.len() + sem.iter().filter(|(p, _)| !lexical.contains(p)).count()) as u32
     }
 
     pub fn search(&self, raw_query: &str, opts: &SearchOptions) -> SearchResponse {
@@ -118,9 +194,9 @@ impl Engine {
         let ranked = rank(&self.index, &query, &self.config, opts, &extras);
         let (mut hits, candidates) = (ranked.hits, ranked.candidates);
         // Neighbour counts only for the first page hits; the recent list (tier 0) stays instant.
-        for h in hits.iter_mut().take(SIMILAR_COUNT_HITS).filter(|h| !h.is_ghost && h.tier != 0) {
+        for (n, h) in hits.iter_mut().enumerate().take(SIMILAR_COUNT_HITS).filter(|(_, h)| !h.is_ghost && h.tier != 0) {
             if let Some(id) = self.index.id_of(&h.path) {
-                h.similar_count = similar_count_for(&self.index, id);
+                h.similar_count = self.similar_count(id, &h.path, n < SEMANTIC_COUNT_HITS);
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
@@ -522,5 +598,164 @@ mod tests {
             .collect();
         eprintln!("{times:?}");
         assert!(times.iter().all(|t| t.1 < 10_000), "{times:?}");
+    }
+
+    // ---- vectors ----
+
+    /// Unit vector in 3 dims from an angle.
+    fn unit(deg: f32) -> [f32; 3] {
+        let r = deg.to_radians();
+        [r.cos(), r.sin(), 0.0]
+    }
+
+    fn with_vectors(rows: &[(&str, f32)]) -> Engine {
+        let mut e = corpus();
+        let paths = rows.iter().map(|r| r.0.to_string()).collect();
+        let data = rows.iter().flat_map(|r| unit(r.1)).collect();
+        e.set_vectors(3, paths, data).unwrap();
+        e
+    }
+
+    #[test]
+    fn semantic_filters_to_indexed_paths() {
+        let e = with_vectors(&[("AI in Data Engineering.md", 0.0), ("Not In Index.md", 1.0), ("Airflow Basics.md", 30.0)]);
+        let r = e.semantic(&unit(0.0), 10, 0.0);
+        let paths: Vec<&str> = r.iter().map(|h| h.path.as_str()).collect();
+        assert_eq!(paths, ["AI in Data Engineering.md", "Airflow Basics.md"]);
+        assert_eq!(r[0].title, "AI in Data Engineering");
+        assert!((r[0].score - 1.0).abs() < 1e-5);
+        assert_eq!(e.semantic(&unit(0.0), 1, 0.0).len(), 1);
+        assert_eq!(e.semantic(&unit(0.0), 10, 0.95).len(), 1);
+    }
+
+    #[test]
+    fn similar_merges_semantic() {
+        let e = with_vectors(&[
+            ("AI in Data Engineering.md", 0.0),
+            ("Data Engineering with AI.md", 10.0), // lexical + cos 0.985
+            ("RW Pandas AI.md", 20.0),             // semantic only, 0.94
+            ("Airflow Basics.md", 80.0),           // below 0.70
+        ]);
+        let r = e.similar("AI in Data Engineering.md", 10, 0.70);
+        let by: Vec<(&str, String)> = r.iter().map(|h| (h.path.as_str(), format!("{:?}", h.reason))).collect();
+        assert_eq!(by.len(), 3, "{by:?}"); // + lexical SimilarTitle for the emoji note
+        assert_eq!(by[0], ("Data Engineering with AI.md", "SameWordsReordered".to_string()));
+        assert!(matches!(r[1].reason, SimilarReason::Semantic(s) if s >= 0.70));
+        assert!(r.iter().all(|h| h.path != "Airflow Basics.md"));
+        assert!(r[0].score > 0.98 && r[0].score <= 1.0);
+        let mut ps: Vec<&str> = r.iter().map(|h| h.path.as_str()).collect();
+        ps.sort();
+        ps.dedup();
+        assert_eq!(ps.len(), r.len());
+        assert_eq!(e.similar("AI in Data Engineering.md", 1, 0.70).len(), 1);
+    }
+
+    #[test]
+    fn similar_count_includes_uncounted_semantic() {
+        let e = with_vectors(&[
+            ("AI in Data Engineering.md", 0.0),
+            ("Data Engineering with AI.md", 10.0), // lexical, also >= 0.80: counted once
+            ("RW Pandas AI.md", 20.0),             // semantic only >= 0.80
+            ("Airflow Basics.md", 40.0),           // 0.77: not counted
+        ]);
+        let r = e.search("ai in data engineering", &opts());
+        let h = hit(&r, "AI in Data Engineering").unwrap();
+        assert_eq!(h.similar_count, 3); // 2 lexical + RW Pandas AI
+        let mut e = e;
+        e.clear_vectors();
+        let r = e.search("ai in data engineering", &opts());
+        assert_eq!(hit(&r, "AI in Data Engineering").unwrap().similar_count, 2);
+    }
+
+    #[test]
+    fn engine_without_vectors_still_searches() {
+        let e = corpus();
+        assert!(!e.has_vectors());
+        assert!(e.semantic(&[1.0, 0.0, 0.0], 5, 0.0).is_empty());
+        assert!(!e.search("airflow", &opts()).hits.is_empty());
+    }
+
+    #[test]
+    fn set_vectors_error_keeps_old_matrix() {
+        let mut e = with_vectors(&[("AI in Data Engineering.md", 0.0)]);
+        assert_eq!(e.set_vectors(0, vec![], vec![]), Err(VectorError::BadDims));
+        assert_eq!(
+            e.set_vectors(3, vec!["a.md".into()], vec![1.0]),
+            Err(VectorError::DimsMismatch { expected: 3, got_len: 1 })
+        );
+        assert!(e.has_vectors());
+        assert_eq!(e.semantic(&unit(0.0), 5, 0.0).len(), 1);
+    }
+
+    #[test]
+    fn semantic_dims_mismatch_returns_empty() {
+        let e = with_vectors(&[("AI in Data Engineering.md", 0.0)]);
+        assert!(e.semantic(&[1.0, 0.0], 5, 0.0).is_empty());
+        assert!(e.semantic(&[1.0, 0.0, 0.0, 0.0], 5, 0.0).is_empty());
+    }
+
+    /// Synthetic 10k x 384 matrix over a 10k-note index.
+    fn big_vector_engine() -> Engine {
+        let mut e = Engine::new();
+        let mut paths = Vec::new();
+        for i in 0..10_000 {
+            let p = format!("Folder {}/Note {i}.md", i % 50);
+            e.upsert(&p, 0.0, "");
+            paths.push(p);
+        }
+        let mut x: u64 = 0x9E3779B97F4A7C15;
+        let mut data = Vec::with_capacity(10_000 * 384);
+        for _ in 0..10_000 {
+            let row: Vec<f32> = (0..384)
+                .map(|_| {
+                    x ^= x << 13;
+                    x ^= x >> 7;
+                    x ^= x << 17;
+                    (x % 2001) as f32 / 1000.0 - 1.0
+                })
+                .collect();
+            let n = row.iter().map(|v| v * v).sum::<f32>().sqrt();
+            data.extend(row.iter().map(|v| v / n));
+        }
+        e.set_vectors(384, paths, data).unwrap();
+        e
+    }
+
+    #[cfg(not(debug_assertions))]
+    fn best_us(mut f: impl FnMut()) -> u128 {
+        f();
+        (0..7).map(|_| {
+            let t = std::time::Instant::now();
+            f();
+            t.elapsed().as_micros()
+        })
+        .min()
+        .unwrap()
+    }
+
+    #[test]
+    fn semantic_timing_smoke() {
+        let e = big_vector_engine();
+        let q: Vec<f32> = (0..384).map(|i| (i % 7) as f32 - 3.0).collect();
+        assert_eq!(e.semantic(&q, 10, -1.0).len(), 10);
+    }
+
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn release_budget_semantic_10k() {
+        let e = big_vector_engine();
+        let q: Vec<f32> = (0..384).map(|i| (i % 7) as f32 - 3.0).collect();
+        let us = best_us(|| {
+            std::hint::black_box(e.semantic(&q, 10, 0.3));
+        });
+        eprintln!("semantic() 10k x 384: {us} us");
+        assert!(us < 2_000, "{us}");
+        // similar_count semantic path for 30 hits = 10 scans (timing note, not asserted).
+        let us30 = best_us(|| {
+            for i in 0..10 {
+                std::hint::black_box(e.similar_count(e.index.id_of(&format!("Folder {}/Note {i}.md", i % 50)).unwrap(), &format!("Folder {}/Note {i}.md", i % 50), true));
+            }
+        });
+        eprintln!("similar_count x10 with vectors: {us30} us");
     }
 }

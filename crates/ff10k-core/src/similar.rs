@@ -201,6 +201,13 @@ pub fn similar_count_for(index: &Index, id: DocId) -> u32 {
     n
 }
 
+/// Docs that are lexical neighbours of `id`.
+pub fn similar_ids_for(index: &Index, id: DocId) -> Vec<DocId> {
+    let mut out = Vec::new();
+    scan(index, id, |cid, _, _| out.push(cid));
+    out
+}
+
 /// Lexical (title-based) neighbours of `id`, best first, at most `limit`.
 pub fn similar_for(index: &Index, id: DocId, limit: usize) -> Vec<SimilarHit> {
     let mut out = Vec::new();
@@ -232,7 +239,7 @@ mod tests {
     }
 
     fn reasons(e: &Engine, path: &str) -> Vec<(String, String)> {
-        e.similar(path, 10).into_iter().map(|h| (h.path, format!("{:?}", h.reason))).collect()
+        e.similar(path, 10, 0.70).into_iter().map(|h| (h.path, format!("{:?}", h.reason))).collect()
     }
 
     #[test]
@@ -276,17 +283,17 @@ mod tests {
     #[test]
     fn unrelated_not_similar() {
         let e = engine(&["Obsidian Troubleshooting.md", "Neovim Troubleshooting.md"]);
-        assert!(e.similar("Obsidian Troubleshooting.md", 10).is_empty());
-        assert!(e.similar("missing.md", 10).is_empty());
+        assert!(e.similar("Obsidian Troubleshooting.md", 10, 0.70).is_empty());
+        assert!(e.similar("missing.md", 10, 0.70).is_empty());
     }
 
     #[test]
     fn similar_title_band_and_limit() {
         // 3 of 4 shared tokens: 0.75.
         let e = engine(&["alpha beta gamma.md", "alpha beta gamma delta.md", "alpha beta gamma delta 2.md"]);
-        let r = e.similar("alpha beta gamma.md", 10);
+        let r = e.similar("alpha beta gamma.md", 10, 0.70);
         assert!(r.iter().any(|h| matches!(h.reason, SimilarReason::SimilarTitle(j) if (j - 0.75).abs() < 1e-6)));
-        assert_eq!(e.similar("alpha beta gamma.md", 1).len(), 1);
+        assert_eq!(e.similar("alpha beta gamma.md", 1, 0.70).len(), 1);
     }
 
     fn big_vault(n: usize) -> Engine {
@@ -306,7 +313,7 @@ mod tests {
             ("Data Engineering Roadmap.md", "Roadmap for Data Engineering.md"),
             ("Roadmap for Data Engineering.md", "Data Engineering Roadmap.md"),
         ] {
-            let r = e.similar(a, 10);
+            let r = e.similar(a, 10, 0.70);
             assert_eq!(r.len(), 1, "{r:?}");
             assert_eq!(r[0].path, b);
             assert!(matches!(r[0].reason, SimilarReason::SameWordsReordered));
