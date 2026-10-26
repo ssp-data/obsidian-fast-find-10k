@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::index::Index;
 use crate::markdown::extract;
 use crate::query::Query;
+use crate::similar::{similar_for, SimilarHit};
 use crate::rank::{rank, Extras, GhostSet};
 pub use crate::rank::{
     Config, DebugInfo, Excerpt, Ghost, HeadingHit, Hit, Mode, PartialMode, SearchOptions,
@@ -34,6 +35,8 @@ pub struct Engine {
 
 /// Most access timestamps kept per path.
 const MAX_ACCESS: usize = 128;
+/// Page hits that get a `similar_count` (bounds the per-keystroke cost).
+const SIMILAR_COUNT_HITS: usize = 30;
 
 impl Engine {
     pub fn new() -> Self {
@@ -102,13 +105,24 @@ impl Engine {
         self.index.text(self.index.id_of(path)?)
     }
 
+    /// Title-based near-duplicates of the note at `path`, best first.
+    pub fn similar(&self, path: &str, limit: usize) -> Vec<SimilarHit> {
+        self.index.id_of(path).map_or_else(Vec::new, |id| similar_for(&self.index, id, limit))
+    }
+
     pub fn search(&self, raw_query: &str, opts: &SearchOptions) -> SearchResponse {
         #[cfg(not(target_arch = "wasm32"))]
         let start = std::time::Instant::now();
         let query = Query::parse(raw_query);
         let extras = Extras { ghosts: Some(&self.ghosts), access: Some(&self.access), combos: Some(&self.combos) };
         let ranked = rank(&self.index, &query, &self.config, opts, &extras);
-        let (hits, candidates) = (ranked.hits, ranked.candidates);
+        let (mut hits, candidates) = (ranked.hits, ranked.candidates);
+        // Neighbour counts only for the first page hits; the recent list (tier 0) stays instant.
+        for h in hits.iter_mut().take(SIMILAR_COUNT_HITS).filter(|h| !h.is_ghost && h.tier != 0) {
+            if let Some(id) = self.index.id_of(&h.path) {
+                h.similar_count = similar_for(&self.index, id, usize::MAX).len() as u32;
+            }
+        }
         #[cfg(not(target_arch = "wasm32"))]
         let elapsed_us = start.elapsed().as_micros() as u64;
         #[cfg(target_arch = "wasm32")]
