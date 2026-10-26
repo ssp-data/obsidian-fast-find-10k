@@ -23,6 +23,29 @@ function eng(): WasmEngine {
 	return engine;
 }
 
+/** Rewrites UTF-8 byte ranges into `s` as UTF-16 code-unit ranges (what JS `slice` expects). */
+function toUtf16Ranges(s: string, ranges: [number, number][]): [number, number][] {
+	if (ranges.length === 0) return ranges;
+	const map = new Map<number, number>([[0, 0]]);
+	let bytes = 0;
+	let units = 0;
+	for (const ch of s) {
+		const cp = ch.codePointAt(0) ?? 0;
+		bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+		units += ch.length;
+		map.set(bytes, units);
+	}
+	const at = (b: number) => map.get(b) ?? units;
+	return ranges.map(([a, b]) => [at(a), at(b)]);
+}
+
+function rangesToUtf16(res: SearchResponse): void {
+	for (const h of res.hits) {
+		h.titleRanges = toUtf16Ranges(h.titleNorm, h.titleRanges);
+		if (h.excerpt) h.excerpt.ranges = toUtf16Ranges(h.excerpt.text, h.excerpt.ranges);
+	}
+}
+
 /** Parses engine JSON, turning an `{"error": ...}` payload into a thrown string. */
 function parse<T>(json: string): T {
 	const v = JSON.parse(json) as T | { error: string };
@@ -67,6 +90,7 @@ async function handle(m: Req): Promise<void> {
 			const elapsedUs = Math.round((performance.now() - t0) * 1000);
 			const res = parse<SearchResponse>(json);
 			res.elapsedUs = elapsedUs;
+			rangesToUtf16(res);
 			post({ t: 'results', id: m.id, res });
 			return;
 		}

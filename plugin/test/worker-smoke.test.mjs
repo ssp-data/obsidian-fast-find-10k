@@ -23,11 +23,13 @@ const config = {
 test('worker bundle answers init, upsert, search, stale and errors', async () => {
 	const w = new Worker(SHIM + (await buildWorker()), { eval: true });
 	const replies = [];
-	const waitFor = (pred) =>
-		new Promise((resolve) => {
+	const waitFor = (pred, ms = 2000) =>
+		new Promise((resolve, reject) => {
+			const deadline = Date.now() + ms;
 			const check = () => {
 				const r = replies.find(pred);
 				if (r) resolve(r);
+				else if (Date.now() > deadline) reject(new Error(`no matching reply within ${ms} ms`));
 				else setTimeout(check, 5);
 			};
 			check();
@@ -35,7 +37,13 @@ test('worker bundle answers init, upsert, search, stale and errors', async () =>
 	w.on('message', (m) => replies.push(m));
 	try {
 		w.postMessage({ t: 'init', id: 1, config });
-		w.postMessage({ t: 'upsert', docs: [{ path: 'a/Obsidian Troubleshooting.md', mtime: 1, text: '# x' }] });
+		w.postMessage({
+			t: 'upsert',
+			docs: [
+				{ path: 'a/Obsidian Troubleshooting.md', mtime: 1, text: '# x' },
+				{ path: 'b/Søren Café Notes.md', mtime: 1, text: '💡 Grüße zum airflow scheduler' },
+			],
+		});
 		w.postMessage({ t: 'search', id: 2, query: 'obsidian', mode: 'all', limit: 10, debug: false });
 		w.postMessage({ t: 'search', id: 3, query: 'obsidian trouble', mode: 'all', limit: 10, debug: false });
 		w.postMessage({ t: 'ghosts', ghosts: 'not an array' });
@@ -43,14 +51,24 @@ test('worker bundle answers init, upsert, search, stale and errors', async () =>
 		w.postMessage({ t: 'stats', id: 4 });
 
 		assert.deepEqual(await waitFor((m) => m.t === 'ready'), { t: 'ready', id: 1 });
-		assert.deepEqual(await waitFor((m) => m.t === 'upserted'), { t: 'upserted', count: 1, total: 1 });
+		assert.deepEqual(await waitFor((m) => m.t === 'upserted'), { t: 'upserted', count: 2, total: 2 });
 		assert.equal((await waitFor((m) => m.t === 'results' && m.id === 2)).stale, true);
 		const res = (await waitFor((m) => m.t === 'results' && m.id === 3)).res;
 		assert.equal(res.hits[0].title, 'Obsidian Troubleshooting');
 		assert.ok(res.elapsedUs > 0, `elapsedUs measured: ${res.elapsedUs}`);
 		assert.equal(typeof (await waitFor((m) => m.t === 'error')).message, 'string');
 		assert.equal((await waitFor((m) => m.t === 'vectorsSet')).ok, false);
-		assert.deepEqual(await waitFor((m) => m.t === 'stats'), { t: 'stats', id: 4, docs: 1 });
+		assert.deepEqual(await waitFor((m) => m.t === 'stats'), { t: 'stats', id: 4, docs: 2 });
+
+		// Ranges arrive as UTF-16 offsets: 'ø' is 2 UTF-8 bytes, '💡' and 'ü'/'ß' shift the excerpt.
+		w.postMessage({ t: 'search', id: 5, query: 'cafe', mode: 'all', limit: 10, debug: false });
+		const title = (await waitFor((m) => m.t === 'results' && m.id === 5)).res.hits[0];
+		assert.equal(title.titleNorm, 'søren cafe notes');
+		assert.deepEqual(title.titleRanges.map(([a, b]) => title.titleNorm.slice(a, b)), ['cafe']);
+		w.postMessage({ t: 'search', id: 6, query: 'scheduler', mode: 'all', limit: 10, debug: false });
+		const body = (await waitFor((m) => m.t === 'results' && m.id === 6)).res.hits[0];
+		assert.ok(body.excerpt, 'body hit has an excerpt');
+		assert.deepEqual(body.excerpt.ranges.map(([a, b]) => body.excerpt.text.slice(a, b)), ['scheduler']);
 	} finally {
 		await w.terminate();
 	}

@@ -40,6 +40,7 @@ export interface HeadingHit {
 	level: number;
 }
 
+/** `ranges`: UTF-16 code-unit offsets into `text` (the worker converts from Rust's UTF-8 bytes). */
 export interface Excerpt {
 	text: string;
 	ranges: [number, number][];
@@ -50,6 +51,7 @@ export interface DebugInfo {
 	components: [string, number][];
 }
 
+/** `titleRanges`: UTF-16 code-unit offsets into `titleNorm` as delivered to the UI (converted by the worker). */
 export interface Hit {
 	path: string;
 	title: string;

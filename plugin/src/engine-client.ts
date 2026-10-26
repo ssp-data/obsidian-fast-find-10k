@@ -28,12 +28,15 @@ export class EngineClient {
 	/** set_vectors replies carry no id; the worker answers in order. */
 	private readonly vectorWaiters: ((ok: boolean) => void)[] = [];
 	private progress: ((count: number, total: number) => void) | null = null;
+	/** Set once the worker died or was disposed; every later request rejects with it. */
+	private dead: string | null = null;
 
 	constructor(workerSource: string) {
 		this.url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
 		this.worker = new Worker(this.url);
 		this.worker.onmessage = (ev: MessageEvent<Res>) => this.onMessage(ev.data);
-		this.worker.onerror = (ev) => console.error('Fast Find 10K: worker error', ev.message);
+		this.worker.onerror = (ev) => this.fail(`worker error: ${ev.message}`);
+		this.worker.onmessageerror = () => this.fail('worker message could not be deserialized');
 	}
 
 	init(config: EngineConfig): Promise<void> {
@@ -89,6 +92,7 @@ export class EngineClient {
 	}
 
 	setVectors(dims: number, paths: string[], data: Float32Array): Promise<boolean> {
+		if (this.dead) return Promise.resolve(false);
 		return new Promise((resolve) => {
 			this.vectorWaiters.push(resolve);
 			this.send({ t: 'vectors', dims, paths, data });
@@ -115,17 +119,26 @@ export class EngineClient {
 	}
 
 	dispose(): void {
-		this.worker.terminate();
+		this.fail('disposed');
 		URL.revokeObjectURL(this.url);
-		for (const id of [...this.pending.keys()]) this.reject(id, 'disposed');
+	}
+
+	/** Marks the client dead: terminates the worker and settles everything still waiting. */
+	private fail(reason: string): void {
+		if (this.dead) return;
+		this.dead = reason;
+		if (reason !== 'disposed') console.error('Fast Find 10K:', reason);
+		this.worker.terminate();
+		for (const id of [...this.pending.keys()]) this.reject(id, reason);
 		for (const w of this.vectorWaiters.splice(0)) w(false);
 	}
 
 	private send(msg: Req): void {
-		this.worker.postMessage(msg);
+		if (!this.dead) this.worker.postMessage(msg);
 	}
 
 	private request<T>(id: number, msg: Req): Promise<T> {
+		if (this.dead) return Promise.reject(this.dead);
 		return new Promise<T>((resolve, reject) => {
 			this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
 			this.send(msg);
