@@ -1,11 +1,13 @@
 //! Index: doc table plus one inverted index (sorted term dictionary) per field.
 
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Bound;
 
 use smallvec::SmallVec;
 
 use crate::doc::{Doc, Field};
+use crate::markdown::title_and_segments;
 use crate::normalize::{normalize, strip_symbols};
 use crate::tokenize::tokenize;
 
@@ -55,9 +57,8 @@ pub struct Index {
     dicts: [BTreeMap<String, Vec<Posting>>; 9],
     /// normalized link target -> number of links with that target.
     link_counts: HashMap<String, u32>,
-    /// Cached `field_strings` arrays (Title, Alias, H1, H2, H3); rebuilt lazily after a mutation.
-    strings: [Vec<(DocId, u16, String)>; 5],
-    strings_dirty: bool,
+    /// Lazily built `field_strings` caches (Title, Alias, H1, H2, H3); every mutator clears them.
+    strings: [OnceCell<Vec<(DocId, u16, String)>>; 5],
     live: usize,
 }
 
@@ -118,15 +119,6 @@ fn stem(path: &str) -> &str {
     path.strip_suffix(".md").unwrap_or(path)
 }
 
-fn title_and_segments(path: &str) -> (String, Vec<String>) {
-    let (dir, file) = match path.rfind('/') {
-        Some(i) => (&path[..i], &path[i + 1..]),
-        None => ("", path),
-    };
-    let segs = dir.split('/').filter(|s| !s.is_empty()).map(String::from).collect();
-    (stem(file).to_string(), segs)
-}
-
 fn link_key(target: &str) -> String {
     normalize(stem(target.trim()))
 }
@@ -161,7 +153,7 @@ impl Index {
             self.live += 1;
         }
         self.records[id as usize] = Some(Record { doc, text });
-        self.strings_dirty = true;
+        self.clear_strings();
         id
     }
 
@@ -219,7 +211,7 @@ impl Index {
         self.records[id as usize] = None;
         self.free.push(id);
         self.live -= 1;
-        self.strings_dirty = true;
+        self.clear_strings();
         Some(id)
     }
 
@@ -240,7 +232,7 @@ impl Index {
         self.index(id, &doc);
         self.path_to_id.remove(old);
         self.path_to_id.insert(new.to_string(), id);
-        self.strings_dirty = true;
+        self.clear_strings();
         true
     }
 
@@ -280,41 +272,45 @@ impl Index {
             .collect()
     }
 
-    /// Normalized strings for fuzzy matching, as `(doc, heading_idx, string)`; `heading_idx` is 0
-    /// for Title/Alias. Other fields yield an empty slice. Call `refresh_strings` after mutations.
-    pub fn field_strings(&self, field: Field) -> &[(DocId, u16, String)] {
-        debug_assert!(!self.strings_dirty, "call refresh_strings() after mutating the index");
-        match field {
-            Field::Title => &self.strings[0],
-            Field::Alias => &self.strings[1],
-            Field::H1 => &self.strings[2],
-            Field::H2 => &self.strings[3],
-            Field::H3 => &self.strings[4],
-            _ => &[],
+    fn clear_strings(&mut self) {
+        for c in &mut self.strings {
+            c.take();
         }
     }
 
-    /// Rebuild the cached `field_strings` arrays if a mutation happened since the last rebuild.
-    pub fn refresh_strings(&mut self) {
-        if !self.strings_dirty {
-            return;
-        }
-        let mut out: [Vec<(DocId, u16, String)>; 5] = Default::default();
-        for (id, rec) in self.records.iter().enumerate() {
-            let Some(rec) = rec else { continue };
-            let id = id as DocId;
-            out[0].push((id, 0, normalize(&strip_symbols(&rec.doc.title))));
-            for a in &rec.doc.aliases {
-                out[1].push((id, 0, normalize(a)));
-            }
-            for (i, h) in rec.doc.headings.iter().enumerate() {
-                if (1..=3).contains(&h.level) {
-                    out[1 + h.level as usize].push((id, i as u16, normalize(&h.text)));
+    /// Normalized strings for fuzzy matching, as `(doc, heading_idx, string)`; `heading_idx` is 0
+    /// for Title/Alias. Other fields yield an empty slice. Built lazily and cached until the next
+    /// mutation; each rebuild is O(N docs) for the requested field.
+    pub fn field_strings(&self, field: Field) -> &[(DocId, u16, String)] {
+        let (slot, level) = match field {
+            Field::Title => (0, 0),
+            Field::Alias => (1, 0),
+            Field::H1 => (2, 1),
+            Field::H2 => (3, 2),
+            Field::H3 => (4, 3),
+            _ => return &[],
+        };
+        self.strings[slot].get_or_init(|| {
+            let mut out = Vec::new();
+            for (id, rec) in self.records.iter().enumerate() {
+                let Some(rec) = rec else { continue };
+                let id = id as DocId;
+                match field {
+                    Field::Title => out.push((id, 0, normalize(&strip_symbols(&rec.doc.title)))),
+                    Field::Alias => {
+                        out.extend(rec.doc.aliases.iter().map(|a| (id, 0, normalize(a))))
+                    }
+                    _ => {
+                        for (i, h) in rec.doc.headings.iter().enumerate() {
+                            if h.level == level {
+                                out.push((id, i as u16, normalize(&h.text)));
+                            }
+                        }
+                    }
                 }
             }
-        }
-        self.strings = out;
-        self.strings_dirty = false;
+            out
+        })
     }
 
     pub fn backlinks(&self, id: DocId) -> u32 {
@@ -442,15 +438,35 @@ mod tests {
     fn field_strings_and_headings() {
         let mut ix = Index::new();
         let id = ix.upsert(mk("n.md", "---\naliases: [Foo Bar]\n---\n# Top\n## Sub Heading\n"));
-        ix.refresh_strings();
         assert_eq!(ix.field_strings(Field::Title), &[(id, 0, "n".to_string())]);
         assert_eq!(ix.field_strings(Field::Alias), &[(id, 0, "foo bar".to_string())]);
         assert_eq!(ix.field_strings(Field::H2), &[(id, 1, "sub heading".to_string())]);
         let p = &ix.exact(Field::H2, "sub")[0];
         assert_eq!(p.positions.as_slice(), &[1u32 << 16]);
         ix.remove("n.md");
-        ix.refresh_strings();
         assert!(ix.field_strings(Field::Title).is_empty());
+    }
+
+    #[test]
+    fn field_strings_not_stale_after_id_reuse() {
+        let mut ix = Index::new();
+        ix.upsert(mk("A.md", ""));
+        assert_eq!(ix.field_strings(Field::Title)[0].2, "a");
+        ix.remove("A.md");
+        let id = ix.upsert(mk("B.md", ""));
+        assert_eq!(ix.field_strings(Field::Title), &[(id, 0, "b".to_string())]);
+    }
+
+    #[test]
+    fn rename_matches_extract() {
+        let mut ix = Index::new();
+        let id = ix.upsert(mk("old.md", ""));
+        let new = "💡 Resources/🧮 Zettelkasten/New Name.md";
+        assert!(ix.rename("old.md", new));
+        let e = mk(new, "");
+        let d = ix.get(id).unwrap();
+        assert_eq!(d.title, e.title);
+        assert_eq!(d.path_segments, e.path_segments);
     }
 
     #[test]

@@ -3,17 +3,23 @@
 use crate::doc::{Doc, Heading, LinkRef};
 use crate::tokenize::tokenize;
 
-pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
+/// File stem (without `.md`) and parent directory segments of a vault-relative path.
+pub(crate) fn title_and_segments(path: &str) -> (String, Vec<String>) {
     let (dir, file) = match path.rfind('/') {
         Some(i) => (&path[..i], &path[i + 1..]),
         None => ("", path),
     };
     let title = file.strip_suffix(".md").unwrap_or(file).to_string();
-    let path_segments = dir
+    let segments = dir
         .split('/')
         .filter(|s| !s.is_empty())
         .map(String::from)
         .collect();
+    (title, segments)
+}
+
+pub fn extract(path: &str, text: &str, mtime: f64) -> Doc {
+    let (title, path_segments) = title_and_segments(path);
 
     // Lines of the original text with their byte offsets (`\r` stripped from content).
     let mut lines: Vec<(usize, &str)> = Vec::new();
