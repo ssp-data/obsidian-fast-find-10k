@@ -64,6 +64,12 @@ impl fmt::Display for Failure {
 /// Indexes every `.md` file under `vault_dir` (dot-folders skipped; paths relative with `/`;
 /// mtime in seconds) and sets ghosts for wikilink targets that resolve to no note.
 pub fn load_vault(vault_dir: &Path) -> std::io::Result<Engine> {
+    load_vault_with(vault_dir, &|_| false)
+}
+
+/// Like [`load_vault`], skipping every vault-relative path (`/`-separated) for which `exclude`
+/// returns true.
+pub fn load_vault_with(vault_dir: &Path, exclude: &dyn Fn(&str) -> bool) -> std::io::Result<Engine> {
     let mut engine = Engine::new();
     let mut notes: Vec<(String, String)> = Vec::new();
     let walker = WalkDir::new(vault_dir).sort_by_file_name().into_iter();
@@ -75,6 +81,9 @@ pub fn load_vault(vault_dir: &Path) -> std::io::Result<Engine> {
         }
         let rel = entry.path().strip_prefix(vault_dir).expect("walkdir yields paths under its root");
         let path = rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/");
+        if exclude(&path) {
+            continue;
+        }
         let mtime = entry
             .metadata()?
             .modified()?
@@ -126,7 +135,12 @@ fn matches(h: &Hit, name: &str) -> bool {
 ///
 /// Panics when the vault or the golden file cannot be read or parsed (it is a test harness).
 pub fn run_golden(vault_dir: &Path, golden: &Path) -> Vec<Failure> {
-    let engine = load_vault(vault_dir).unwrap_or_else(|e| panic!("cannot load vault {}: {e}", vault_dir.display()));
+    run_golden_with(vault_dir, golden, &|_| false)
+}
+
+/// Like [`run_golden`], loading the vault through [`load_vault_with`] with `exclude`.
+pub fn run_golden_with(vault_dir: &Path, golden: &Path, exclude: &dyn Fn(&str) -> bool) -> Vec<Failure> {
+    let engine = load_vault_with(vault_dir, exclude).unwrap_or_else(|e| panic!("cannot load vault {}: {e}", vault_dir.display()));
     let text = std::fs::read_to_string(golden).unwrap_or_else(|e| panic!("cannot read {}: {e}", golden.display()));
     let file: GoldenFile = toml::from_str(&text).unwrap_or_else(|e| panic!("cannot parse {}: {e}", golden.display()));
     file.cases.iter().flat_map(|c| run_case(&engine, c)).collect()

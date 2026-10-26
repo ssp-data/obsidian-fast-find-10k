@@ -1,0 +1,15 @@
+[package]
+name = "ff10k-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ff10k"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ff10k-core = { path = "../ff10k-core", features = ["golden"] }
+regex = "1"
+serde_json = "1"
