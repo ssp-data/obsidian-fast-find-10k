@@ -8,7 +8,7 @@ use std::time::Instant;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use ff10k_core::engine::{Engine, Hit, Mode, SearchOptions};
-use ff10k_core::golden::{load_vault_with, run_golden_with};
+use ff10k_core::golden::{load_vault_with, run_golden_with, VaultStats};
 use ff10k_core::similar::SimilarReason;
 use regex::Regex;
 
@@ -52,17 +52,31 @@ enum Cmd {
     Bench { vault: PathBuf },
 }
 
-/// Obsidian "Excluded files": `/regex/` entries match the vault-relative path, others are prefixes.
+/// Reads `<vault>/.obsidian/app.json` once and builds the exclusion predicate.
 fn exclusion(vault: &Path) -> Result<Box<dyn Fn(&str) -> bool>> {
-    let Ok(text) = std::fs::read_to_string(vault.join(".obsidian/app.json")) else {
-        return Ok(Box::new(|_| false));
-    };
-    let json: serde_json::Value = serde_json::from_str(&text).context("parsing .obsidian/app.json")?;
+    match std::fs::read_to_string(vault.join(".obsidian/app.json")) {
+        Ok(text) => build_exclusion(&text),
+        Err(_) => Ok(Box::new(|_| false)),
+    }
+}
+
+/// Obsidian "Excluded files": `/regex/` entries match the vault-relative path, others are prefixes.
+/// Regexes Rust cannot compile (JS lookahead, backreferences) and empty ones are skipped with a warning.
+fn build_exclusion(app_json: &str) -> Result<Box<dyn Fn(&str) -> bool>> {
+    let json: serde_json::Value = serde_json::from_str(app_json).context("parsing .obsidian/app.json")?;
     let mut prefixes = Vec::new();
     let mut regexes = Vec::new();
     for e in json["userIgnoreFilters"].as_array().into_iter().flatten().filter_map(|v| v.as_str()) {
         if e.len() >= 2 && e.starts_with('/') && e.ends_with('/') {
-            regexes.push(Regex::new(&e[1..e.len() - 1]).with_context(|| format!("bad ignore regex {e}"))?);
+            let body = &e[1..e.len() - 1];
+            if body.is_empty() {
+                eprintln!("warning: skipping empty excluded-files regex {e:?}");
+                continue;
+            }
+            match Regex::new(body) {
+                Ok(r) => regexes.push(r),
+                Err(err) => eprintln!("warning: skipping excluded-files regex {e:?}: {err}"),
+            }
         } else if !e.is_empty() {
             prefixes.push(e.to_string());
         }
@@ -70,9 +84,8 @@ fn exclusion(vault: &Path) -> Result<Box<dyn Fn(&str) -> bool>> {
     Ok(Box::new(move |p| prefixes.iter().any(|x| p.starts_with(x.as_str())) || regexes.iter().any(|r| r.is_match(p))))
 }
 
-fn load(vault: &Path) -> Result<Engine> {
-    let ex = exclusion(vault)?;
-    load_vault_with(vault, &*ex).with_context(|| format!("loading {}", vault.display()))
+fn load(vault: &Path, ex: &dyn Fn(&str) -> bool) -> Result<(Engine, VaultStats)> {
+    load_vault_with(vault, ex).with_context(|| format!("loading {}", vault.display()))
 }
 
 fn attach_vectors(engine: &mut Engine, vault: &Path) -> Result<()> {
@@ -88,32 +101,6 @@ fn attach_vectors(engine: &mut Engine, vault: &Path) -> Result<()> {
 fn rss_kb() -> Option<u64> {
     let s = std::fs::read_to_string("/proc/self/status").ok()?;
     s.lines().find(|l| l.starts_with("VmRSS:"))?.split_whitespace().nth(1)?.parse().ok()
-}
-
-/// Total size of the `.md` files the indexer sees (same walk rules and exclusions).
-fn total_bytes(vault: &Path) -> u64 {
-    fn walk(dir: &Path, root: &Path, ex: &dyn Fn(&str) -> bool, sum: &mut u64) {
-        let Ok(rd) = std::fs::read_dir(dir) else { return };
-        for e in rd.flatten() {
-            let p = e.path();
-            if e.file_name().to_string_lossy().starts_with('.') {
-                continue;
-            }
-            if p.is_dir() {
-                walk(&p, root, ex, sum);
-            } else if p.extension().is_some_and(|x| x == "md") {
-                let rel = p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
-                if !ex(&rel) {
-                    *sum += e.metadata().map_or(0, |m| m.len());
-                }
-            }
-        }
-    }
-    let mut sum = 0;
-    if let Ok(ex) = exclusion(vault) {
-        walk(vault, vault, &*ex, &mut sum);
-    }
-    sum
 }
 
 fn now_secs() -> f64 {
@@ -150,17 +137,19 @@ fn main() -> Result<()> {
     match Cli::parse().cmd {
         Cmd::Index { vault } => {
             let t = Instant::now();
-            let engine = load(&vault)?;
+            let ex = exclusion(&vault)?;
+            let (_engine, stats) = load(&vault, &*ex)?;
             let el = t.elapsed();
-            println!("docs: {}", engine.doc_count());
-            println!("bytes: {}", total_bytes(&vault));
+            println!("docs: {}", stats.docs);
+            println!("bytes: {}", stats.bytes);
             println!("index time: {:.2?}", el);
             if let Some(kb) = rss_kb() {
                 println!("rss: {:.1} MB", kb as f64 / 1024.0);
             }
         }
         Cmd::Query { vault, query, files, debug, limit, smart_env } => {
-            let mut engine = load(&vault)?;
+            let ex = exclusion(&vault)?;
+            let (mut engine, _) = load(&vault, &*ex)?;
             if smart_env {
                 attach_vectors(&mut engine, &vault)?;
             }
@@ -178,7 +167,8 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Similar { vault, path, smart_env } => {
-            let mut engine = load(&vault)?;
+            let ex = exclusion(&vault)?;
+            let (mut engine, _) = load(&vault, &*ex)?;
             if smart_env {
                 attach_vectors(&mut engine, &vault)?;
             }
@@ -203,8 +193,9 @@ fn main() -> Result<()> {
             println!("golden: all passed");
         }
         Cmd::Bench { vault } => {
-            let engine = load(&vault)?;
-            println!("docs: {}, bytes: {}", engine.doc_count(), total_bytes(&vault));
+            let ex = exclusion(&vault)?;
+            let (engine, stats) = load(&vault, &*ex)?;
+            println!("docs: {}, bytes: {}", stats.docs, stats.bytes);
             let opts = SearchOptions { now_secs: now_secs(), ..SearchOptions::default() };
             for q in ["ai", "data engineering", "data engineer ai", "obsidian troubelshoot", "path:resources"] {
                 let mut us = Vec::with_capacity(200);
@@ -219,4 +210,19 @@ fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exclusion_entries() {
+        let json = r#"{"userIgnoreFilters":["templates/","/\\.tmp$/","/^(?!x)/","//"]}"#;
+        let ex = build_exclusion(json).unwrap();
+        assert!(ex("templates/a.md"));
+        assert!(ex("notes/a.tmp"));
+        assert!(!ex("notes/a.md"));
+        assert!(!ex("x.md"));
+    }
 }

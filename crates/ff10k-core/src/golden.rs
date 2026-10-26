@@ -64,14 +64,23 @@ impl fmt::Display for Failure {
 /// Indexes every `.md` file under `vault_dir` (dot-folders skipped; paths relative with `/`;
 /// mtime in seconds) and sets ghosts for wikilink targets that resolve to no note.
 pub fn load_vault(vault_dir: &Path) -> std::io::Result<Engine> {
-    load_vault_with(vault_dir, &|_| false)
+    load_vault_with(vault_dir, &|_| false).map(|(engine, _)| engine)
+}
+
+/// What a vault load indexed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VaultStats {
+    pub docs: usize,
+    /// Total size of the indexed note texts in bytes.
+    pub bytes: u64,
 }
 
 /// Like [`load_vault`], skipping every vault-relative path (`/`-separated) for which `exclude`
-/// returns true.
-pub fn load_vault_with(vault_dir: &Path, exclude: &dyn Fn(&str) -> bool) -> std::io::Result<Engine> {
+/// returns true. Also returns the indexed document and byte counts.
+pub fn load_vault_with(vault_dir: &Path, exclude: &dyn Fn(&str) -> bool) -> std::io::Result<(Engine, VaultStats)> {
     let mut engine = Engine::new();
     let mut notes: Vec<(String, String)> = Vec::new();
+    let mut bytes = 0u64;
     let walker = WalkDir::new(vault_dir).sort_by_file_name().into_iter();
     for entry in walker.filter_entry(|e| e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.')) {
         let entry = entry?;
@@ -90,11 +99,13 @@ pub fn load_vault_with(vault_dir: &Path, exclude: &dyn Fn(&str) -> bool) -> std:
             .duration_since(UNIX_EPOCH)
             .map_or(0.0, |d| d.as_secs_f64());
         let text = std::fs::read_to_string(entry.path())?;
+        bytes += text.len() as u64;
         engine.upsert(&path, mtime, &text);
         notes.push((path, text));
     }
     engine.set_ghosts(ghosts(&notes));
-    Ok(engine)
+    let stats = VaultStats { docs: notes.len(), bytes };
+    Ok((engine, stats))
 }
 
 /// Unresolved wikilink targets, with the number of distinct notes linking to each.
@@ -140,7 +151,7 @@ pub fn run_golden(vault_dir: &Path, golden: &Path) -> Vec<Failure> {
 
 /// Like [`run_golden`], loading the vault through [`load_vault_with`] with `exclude`.
 pub fn run_golden_with(vault_dir: &Path, golden: &Path, exclude: &dyn Fn(&str) -> bool) -> Vec<Failure> {
-    let engine = load_vault_with(vault_dir, exclude).unwrap_or_else(|e| panic!("cannot load vault {}: {e}", vault_dir.display()));
+    let engine = load_vault_with(vault_dir, exclude).map(|(e, _)| e).unwrap_or_else(|e| panic!("cannot load vault {}: {e}", vault_dir.display()));
     let text = std::fs::read_to_string(golden).unwrap_or_else(|e| panic!("cannot read {}: {e}", golden.display()));
     let file: GoldenFile = toml::from_str(&text).unwrap_or_else(|e| panic!("cannot parse {}: {e}", golden.display()));
     file.cases.iter().flat_map(|c| run_case(&engine, c)).collect()
@@ -181,4 +192,23 @@ fn run_case(engine: &Engine, case: &Case) -> Vec<Failure> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_vault_with_reports_docs_and_bytes() {
+        let dir = std::env::temp_dir().join(format!("ff10k-stats-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("skip")).unwrap();
+        std::fs::write(dir.join("a.md"), "12345").unwrap();
+        std::fs::write(dir.join("skip/b.md"), "xx").unwrap();
+        std::fs::write(dir.join("c.txt"), "zzz").unwrap();
+        let (engine, stats) = load_vault_with(&dir, &|p| p.starts_with("skip/")).unwrap();
+        assert_eq!(engine.doc_count(), 1);
+        assert_eq!(stats, VaultStats { docs: 1, bytes: 5 });
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

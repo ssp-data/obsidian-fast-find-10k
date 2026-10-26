@@ -59,43 +59,47 @@ fn number_after(s: &str, key: &str) -> Option<usize> {
     digits.parse().ok()
 }
 
-/// `"smart_sources:<path>": {... "embedding":{... "file":"mf_x","file_i":N ...} ...}` -> (path, file, N).
+/// `"smart_sources:<path>": {...}` -> (path, file, file_i) from `embedding.default.<first key>`.
 fn parse_line(line: &str) -> Option<(String, String, usize)> {
-    let rest = line.trim_start().strip_prefix("\"smart_sources:")?;
-    let mut path = String::new();
-    let mut chars = rest.char_indices();
+    let rest = line.trim().strip_prefix("\"smart_sources:")?;
+    // The key is a JSON string; find its closing quote (skipping escapes).
     let mut end = None;
-    while let Some((i, c)) = chars.next() {
-        match c {
-            '\\' => match chars.next() {
-                Some((_, 'n')) => path.push('\n'),
-                Some((_, c2)) => path.push(c2),
-                None => return None,
-            },
-            '"' => {
-                end = Some(i + 1);
+    let mut esc = false;
+    for (i, c) in rest.char_indices() {
+        match (esc, c) {
+            (true, _) => esc = false,
+            (false, '\\') => esc = true,
+            (false, '"') => {
+                end = Some(i);
                 break;
             }
-            c => path.push(c),
+            _ => {}
         }
     }
-    let body = &rest[end?..];
-    if !body.trim_start().starts_with(':') {
-        return None;
-    }
+    let end = end?;
+    let path: String = serde_json::from_str(&format!("\"{}\"", &rest[..end])).ok()?;
     if !path.ends_with(".md") {
         return None;
     }
-    let emb = &body[body.find("\"embedding\"")?..];
-    let row = number_after(emb, "\"file_i\":")?;
-    let f = &emb[emb.find("\"file\":\"")? + 8..];
-    let file = f[..f.find('"')?].to_string();
+    let value = rest[end + 1..].trim_start().strip_prefix(':')?.trim().trim_end_matches(',');
+    let v: serde_json::Value = serde_json::from_str(value).ok()?;
+    let (_, entry) = v.get("embedding")?.get("default")?.as_object()?.iter().next()?;
+    let file = entry.get("file")?.as_str()?.to_string();
+    let row = usize::try_from(entry.get("file_i")?.as_u64()?).ok()?;
     Some((path, file, row))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_i_in_sibling_object_is_not_used() {
+        let line = "\"smart_sources:a.md\": {\"embedding\":{\"history\":[]},\"blocks_data\":{\"x\":{\"file\":\"mf_x\",\"file_i\":7}}},";
+        assert!(parse_line(line).is_none());
+        let ok = "\"smart_sources:a.md\": {\"embedding\":{\"default\":{\"mf_x\":{\"file\":\"mf_x\",\"file_i\":2}}}},";
+        assert_eq!(parse_line(ok), Some(("a.md".into(), "mf_x".into(), 2)));
+    }
 
     #[test]
     fn loads_two_rows() {
