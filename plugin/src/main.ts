@@ -2,16 +2,20 @@ import { Notice, Plugin } from 'obsidian';
 import workerSource from 'virtual:worker-source';
 import { NoteCache } from './cache';
 import { EngineClient } from './engine-client';
+import { FrecencyTracker } from './frecency';
 import { Indexer } from './indexer';
 import type { Mode } from './protocol';
 import { DEFAULT_KEYMAP, DEFAULT_SETTINGS, type FastFindSettings, settingsToEngineConfig } from './settings';
 import { FastFindModal } from './ui/modal';
+import { watchGhosts } from './unresolved';
 
 export default class FastFindPlugin extends Plugin {
 	settings: FastFindSettings = { ...DEFAULT_SETTINGS };
 	engine: EngineClient | null = null;
 	cache: NoteCache | null = null;
 	indexer: Indexer | null = null;
+	frecency: FrecencyTracker | null = null;
+	private stopGhosts: (() => void) | null = null;
 	private modal: FastFindModal | null = null;
 	private ready: Promise<void> = Promise.resolve();
 
@@ -63,15 +67,25 @@ export default class FastFindPlugin extends Plugin {
 		this.cache = cache;
 		const indexer = new Indexer(this.app, engine, cache, this.settings);
 		this.indexer = indexer;
+		const frecency = new FrecencyTracker(this.app, engine, cache, (p) => indexer.isExcluded(p));
+		this.frecency = frecency;
+		// before the indexer, so the empty query shows recent notes from the first batch on
+		await frecency.start().catch((e: unknown) => console.error('Fast Find 10K: loading frecency failed', e));
+		if (!this.engine) return; // unloaded meanwhile
 		this.app.workspace.onLayoutReady(() => {
 			for (const ref of indexer.handleEvents()) this.registerEvent(ref);
 		});
+		this.stopGhosts = watchGhosts(this.app, engine, indexer);
 		indexer.start().catch((e: unknown) => console.error('Fast Find 10K: indexing failed', e));
 	}
 
 	onunload(): void {
 		this.modal?.close(); // its engine is about to go away
 		this.modal = null;
+		this.stopGhosts?.();
+		this.stopGhosts = null;
+		this.frecency?.dispose();
+		this.frecency = null;
 		this.indexer?.dispose();
 		this.indexer = null;
 		this.engine?.dispose();

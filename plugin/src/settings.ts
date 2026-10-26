@@ -10,6 +10,7 @@ export interface Keymap {
 	openTab: string;
 	openSplit: string;
 	create: string;
+	createTab: string;
 	insertLink: string;
 	filesOnly: string;
 	semantic: string;
@@ -25,6 +26,7 @@ export const DEFAULT_KEYMAP: Keymap = {
 	openTab: 'Mod+Enter',
 	openSplit: 'Mod+Alt+Enter',
 	create: 'Shift+Enter',
+	createTab: 'Mod+Shift+Enter',
 	insertLink: 'Alt+Enter',
 	filesOnly: 'Ctrl+F',
 	semantic: 'Ctrl+S',

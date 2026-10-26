@@ -8,7 +8,7 @@ const obsidianStub = {
 	setup(build) {
 		build.onResolve({ filter: /^obsidian$/ }, () => ({ path: 'obsidian', namespace: 'stub' }));
 		build.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-			contents: 'export class Modal {} export class Notice {} export class MarkdownView {} export class TFile {} export class Scope {} export const Platform = {};',
+			contents: 'export class Modal {} export class Notice {} export class MarkdownView {} export class TFile {} export class Scope {} export const Platform = {}; export const normalizePath = (p) => p;',
 			loader: 'js',
 		}));
 	},

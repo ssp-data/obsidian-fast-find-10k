@@ -1,16 +1,20 @@
-// The search modal: query input, tiered results, data-driven keys, open actions.
+// The search modal: query input, tiered results, data-driven keys, open/create/link actions.
 
 import { type App, Modal, type Modifier, Notice, Platform, Scope } from 'obsidian';
-import { open, type OpenWhere } from '../actions';
+import { createNote, insertLink, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
 import type { Hit, Mode, SearchResponse } from '../protocol';
 import type { Keymap } from '../settings';
 import { Preview, queryTerms } from './preview';
 import { renderRow, renderTierLabel } from './results';
-import { SimilarPanel } from './similar';
+import { type PanelItem, SimilarPanel } from './similar';
 
 const LIMIT = 50;
 const INITIAL_ROWS = 30;
+/** Existing notes the create guard shows at most, and how many files-only hits it asks for
+ * (ghosts are tier 1 too and get filtered out). */
+const GUARD_ROWS = 3;
+const GUARD_SEARCH = 10;
 const LATER = 'Fast Find 10K: coming in a later task';
 const MODIFIERS: readonly Modifier[] = ['Mod', 'Ctrl', 'Meta', 'Shift', 'Alt'];
 
@@ -67,6 +71,10 @@ export class FastFindModal extends Modal {
 	private paintFrame = 0;
 	/** Pushed while keyboard focus is in the similar panel. */
 	private similarScope: Scope | null = null;
+	/** Create guard ("Already have?") in progress for this note name. */
+	private guard: { name: string } | null = null;
+	/** Bumped per create request; a slower guard lookup that lost the race is dropped. */
+	private createSeq = 0;
 
 	constructor(app: App, plugin: FastFindPlugin, mode: Mode) {
 		super(app);
@@ -113,7 +121,10 @@ export class FastFindModal extends Modal {
 		this.renderFooter(contentEl.createDiv({ cls: 'ff10k-footer' }));
 
 		this.inputEl.value = this.app.workspace.activeEditor?.editor?.getSelection().trim() ?? '';
-		this.inputEl.addEventListener('input', () => this.search());
+		this.inputEl.addEventListener('input', () => {
+			this.leaveSimilar(); // typing ends the create guard
+			this.search();
+		});
 		this.inputEl.addEventListener('focus', () => this.leaveSimilar());
 		this.unsubscribeStatus =
 			this.plugin.indexer?.onStatus((s) => {
@@ -142,8 +153,9 @@ export class FastFindModal extends Modal {
 			open: () => void this.openSelected('same'),
 			openTab: () => void this.openSelected('tab'),
 			openSplit: () => void this.openSelected('split'),
-			create: later,
-			insertLink: later,
+			create: () => void this.startCreate('same'),
+			createTab: () => void this.startCreate('tab'),
+			insertLink: () => this.insertLinkSelected(),
 			semantic: later,
 			focusSimilar: () => this.enterSimilar(km),
 			filesOnly: () => this.setMode(this.state.mode === 'all' ? 'filesOnly' : 'all'),
@@ -246,6 +258,7 @@ export class FastFindModal extends Modal {
 			[[km.openTab], 'new tab'],
 			[[km.openSplit], 'split'],
 			[[km.create], 'create note'],
+			[[km.createTab], 'create in tab'],
 			[[km.insertLink], 'insert [[link]]'],
 			[[km.filesOnly], 'files only'],
 			[[km.moveDown, km.moveUp], 'move'],
@@ -298,9 +311,10 @@ export class FastFindModal extends Modal {
 		void this.similar.show(engine, hit, this.plugin.settings.minSimilarity, false);
 	}
 
-	/** Tab: keyboard focus into the similar panel; its own scope handles move/open/leave. */
-	private enterSimilar(km: Keymap): void {
-		if (this.similarScope || !this.state.previewOpen || !this.similar.focus()) return;
+	/** Tab: keyboard focus into the similar panel; its own scope handles move/open/leave.
+	 * In the create guard the same scope also confirms creation. */
+	private enterSimilar(km: Keymap, guard = false): void {
+		if (this.similarScope || (!guard && !this.state.previewOpen) || !this.similar.focus()) return;
 		const scope = new Scope(this.scope);
 		const bind = (spec: string, fn: () => void) => {
 			const k = parseKeySpec(spec);
@@ -311,7 +325,12 @@ export class FastFindModal extends Modal {
 				});
 		};
 		const leave = () => this.leaveSimilar();
-		bind(km.focusSimilar, leave);
+		if (guard) {
+			bind(km.create, () => void this.confirmCreate('same'));
+			bind(km.createTab, () => void this.confirmCreate('tab'));
+		} else {
+			bind(km.focusSimilar, leave);
+		}
 		bind('Escape', leave);
 		bind(km.moveDown, () => this.similar.move(1));
 		bind(km.moveUp, () => this.similar.move(-1));
@@ -322,16 +341,28 @@ export class FastFindModal extends Modal {
 		this.app.keymap.pushScope(scope);
 	}
 
-	/** Leaves the similar panel (if focused) and gives keyboard focus back to the input. */
+	/** Leaves the similar panel (if focused) and gives keyboard focus back to the input.
+	 * Also ends the create guard, restoring the panel. */
 	private leaveSimilar(): void {
 		if (!this.similarScope) return;
 		this.app.keymap.popScope(this.similarScope);
 		this.similarScope = null;
 		this.similar.blur();
 		this.inputEl.focus();
+		if (this.guard) {
+			this.guard = null;
+			this.modalEl.toggleClass('ff10k-preview-hidden', !this.state.previewOpen);
+			this.schedulePaint();
+		}
+	}
+
+	/** Records the open for frecency (synchronously, so the `file-open` that follows is deduplicated). */
+	private noteOpen(path: string): void {
+		this.plugin.frecency?.noteModalOpen(path, this.inputEl.value).catch((e: unknown) => console.error('[ff10k] frecency', e));
 	}
 
 	private async openPath(path: string): Promise<void> {
+		this.noteOpen(path);
 		const file = await open(this.app, { path, line: null, heading: null }, 'same');
 		if (file) this.close();
 	}
@@ -339,12 +370,64 @@ export class FastFindModal extends Modal {
 	private async openSelected(where: OpenWhere): Promise<void> {
 		const hit = this.state.hits[this.state.selected];
 		if (!hit) return;
-		if (hit.isGhost) {
-			new Notice(LATER, 1500);
-			return;
-		}
+		if (hit.isGhost) return this.startCreate(where);
+		this.noteOpen(hit.path);
 		const file = await open(this.app, hit, where);
 		if (file) this.close();
+	}
+
+	/** Shift+Enter: name = the selected ghost's target, else the query. With the guard on and
+	 * existing notes close to the name, shows them first ("Already have?"); else creates now. */
+	private async startCreate(where: OpenWhere): Promise<void> {
+		if (this.guard) return this.confirmCreate(where);
+		const hit = this.state.hits[this.state.selected];
+		const query = this.inputEl.value;
+		const name = sanitizeName(hit?.isGhost ? hit.title : query);
+		if (!name) {
+			new Notice('Fast Find 10K: type a name to create a note');
+			return;
+		}
+		this.leaveSimilar();
+		const seq = ++this.createSeq;
+		const candidates = this.plugin.settings.createGuard ? await this.guardCandidates(name) : [];
+		if (candidates === null || this.closed || seq !== this.createSeq || this.inputEl.value !== query) return;
+		if (candidates.length === 0) return this.create(name, where);
+		cancelAnimationFrame(this.paintFrame);
+		this.guard = { name };
+		this.modalEl.removeClass('ff10k-preview-hidden');
+		this.similar.showGuard(candidates);
+		this.enterSimilar(this.plugin.settings.keymap, true);
+	}
+
+	/** Existing notes whose title/alias matches `name` (tier 1, no ghosts). Null when a newer
+	 * search superseded the lookup (the user kept typing): then nothing is created. */
+	private async guardCandidates(name: string): Promise<PanelItem[] | null> {
+		const engine = this.plugin.engine;
+		if (!engine) return [];
+		try {
+			const res = await engine.search(name, 'filesOnly', GUARD_SEARCH, false);
+			return res.hits
+				.filter((h) => h.tier === 1 && !h.isGhost)
+				.slice(0, GUARD_ROWS)
+				.map((h) => ({ path: h.path, title: h.title, note: h.badge.toLowerCase() }));
+		} catch (e) {
+			return e === 'stale' ? null : [];
+		}
+	}
+
+	private async confirmCreate(where: OpenWhere): Promise<void> {
+		if (this.guard) await this.create(this.guard.name, where);
+	}
+
+	private async create(name: string, where: OpenWhere): Promise<void> {
+		const file = await createNote(this.app, name, where);
+		if (file) this.close();
+	}
+
+	/** Alt+Enter: link to the selected result at the editor cursor, then close. */
+	private insertLinkSelected(): void {
+		const hit = this.state.hits[this.state.selected];
+		if (hit && insertLink(this.app, hit)) this.close();
 	}
 
 	private setMode(mode: Mode): void {

@@ -197,3 +197,57 @@ match when that match sits deep in the note. With a target at line 300 or 2,500 
 
 Ghost rows take the same `—` path but cannot be checked in the app yet: ghosts are not fed to
 the engine before the create-note task.
+
+## Frecency, ghosts, create note, insert link (task 19)
+
+Frecency: every `file-open` of an indexed note appends a timestamp (seconds, newest 128 kept) to
+the `access` store and the engine; an open through the modal is recorded by the modal (plus one
+combo count in `queries` under the normalized query) and the `file-open` that follows within
+500 ms is skipped. Ghosts: `metadataCache.unresolvedLinks` (targets without `#…`/`|…`, missing
+attachments dropped, sources the indexer excludes skipped), refreshed after each indexer run and
+on `metadataCache 'resolved'`, at most every 2 s, capped at 5,000 (one console line when capped).
+
+```bash
+# open notes outside the modal (fires file-open), then read the recent list
+o eval code="const fs=app.vault.getMarkdownFiles().slice(0,3); (async()=>{for(const f of fs){await app.workspace.getLeaf(false).openFile(f); await new Promise(r=>setTimeout(r,300));}})(); 'ok'"
+o command id=fast-find-10k:search; o dev:screenshot path=$S/f.png
+o eval code="[...document.querySelectorAll('.ff10k-row')].slice(0,4).map(r=>r.textContent).join('\n')"
+# access store / combo store
+o eval code="app.plugins.plugins['fast-find-10k'].cache.getAccess().then(a=>window.__acc=a.map(x=>x.path+':'+x.ts.length)); 'ok'"
+o eval code="JSON.stringify(window.__acc)"
+o eval code="const r=indexedDB.open('ff10k/'+app.appId); r.onsuccess=()=>{const q=r.result.transaction('queries').objectStore('queries').getAll(); q.onsuccess=()=>window.__q=JSON.stringify(q.result)}; 'ok'"
+o eval code="window.__q"
+# create / guard / insert link: Shift+Enter, Ctrl+Shift+Enter, Alt+Enter
+o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:true,bubbles:true,cancelable:true})); 'ok'"
+o eval code="const s=document.querySelector('.ff10k-similar'); s.querySelector('.ff10k-similar-label').textContent+': '+[...s.querySelectorAll('.ff10k-similar-title')].map(e=>e.textContent).join(', ')"
+o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',altKey:true,bubbles:true,cancelable:true})); 'ok'"
+o eval code="JSON.stringify(app.workspace.activeEditor.editor.getValue())"
+```
+
+Observed on the test vault, 2026-10-26 (6,097 ghost targets → capped to 5,000; top by refs:
+`_The Bible (NKJV)` 71, `Writing` 50, `Why are we here on Earth` 32,
+`🌵 My Values, Principles and Purpose` 31, `2025-01-14` 31):
+
+| Check | Result |
+|---|---|
+| open 3 notes through the workspace, empty query | `recent`: the 3 notes, newest first, then the older recent ones |
+| plugin reload, empty query | same 3 on top (access store → `setAccess` on start) |
+| open a note through the modal (Enter) | access count 1 → 2 (the `file-open` is not counted again) |
+| same query (`Why you  need an orchestrator`, mixed case/spaces) → same note 3× | `queries` count 3; debug `combo 1000.00` on the top row |
+| `smart note taking` | first row ghost, italic, `link` badge, `Smart Note Taking · not created · linked from 27 notes` |
+| Shift+Enter on it | panel `Already have?`: Process of Smart Note-Taking, RW How to Take Smart Notes…, How To Take Smart Notes-…; first row selected, focus in the panel |
+| Esc | panel back to `similar notes · possible duplicates`, focus on the input, modal open |
+| Shift+Enter, Shift+Enter (new-note location = folder `ff10k-new`) | `ff10k-new/Smart Note Taking.md` created and active, modal closed |
+| 2 s later, `smart note taking` | 0 ghost rows; the new note is the first title row |
+| Alt+Enter on `Process of Smart Note-Taking` | editor text `[[Process of Smart Note-Taking]]`, modal closed |
+| Alt+Enter on h3 `### Smart Note Taking` in Zettelkasten | `[[Zettelkasten#Smart Note Taking]]` |
+| Alt+Enter on ghost `Writers Block` | `[[Writers Block]]` |
+| `Index`, Shift+Enter (no note named Index yet) | guard `_index, LlamaIndex, CocoIndex`; Shift+Enter → `ff10k-new/Index.md` |
+| `Index` again, folder now `ff10k-idx`, Shift+Enter then Ctrl+Shift+Enter | guard lists `ff10k-new/Index.md` first; `ff10k-idx/Index.md` created in a new tab (4 → 5 leaves) |
+| `index`: both rows | `ff10k-idx/Index.md`, `ff10k-new/Index.md` (distinct paths) |
+| Alt+Enter on `ff10k-new/Index.md` from `ff10k-idx/Index.md` | `[[ff10k-new/Index]]`, `getFirstLinkpathDest` → `ff10k-new/Index.md` |
+| guard on, Enter on a guard row | opens that existing note, nothing created |
+| `createGuard` false, Shift+Enter | created at once |
+
+All notes and folders created for these checks were deleted afterwards and the new-note location
+restored (`root`).
