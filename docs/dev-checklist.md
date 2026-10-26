@@ -143,3 +143,43 @@ Observed on the test vault, 2026-10-26:
 | typing `obsidian troubl` at 15 ms/char | 12/15 painted (3 superseded as stale); engine 2.2–14.1 ms, render 2.5–3.9 ms; final top row correct |
 
 First query after a plugin reload takes 59–68 ms in the engine (cold); later queries 2–18 ms.
+
+## Preview pane and similar panel (task 18)
+
+Preview and similar panel paint in one `requestAnimationFrame` per selection change. A window
+that is not composited (Obsidian on another Hyprland workspace) produces no frames, so after a
+synthetic key press force one with `o dev:screenshot` before reading the DOM.
+
+```bash
+S=/tmp/ff10k; mkdir -p $S
+K() { o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'$1',bubbles:true,cancelable:true})); 'ok'"; }
+o command id=fast-find-10k:search
+o eval code="const i=document.querySelector('.ff10k-input'); i.value='RW MLOps is mostly data engineering'; i.dispatchEvent(new Event('input')); 'ok'"
+o dev:screenshot path=$S/f.png; K ArrowDown; o dev:screenshot path=$S/f.png
+# similar rows: title ~ path ~ reason
+o eval code="[...document.querySelectorAll('.ff10k-similar-row')].map(r=>[...r.children].map(c=>c.textContent).join(' ~ ')).join('\n')"
+# preview: first visible line (heading hits scroll their heading to the top)
+o eval code="const p=document.querySelector('.ff10k-preview'); const l=[...p.querySelectorAll('.ff10k-line')]; const t=l.find(x=>x.offsetTop-p.offsetTop>=p.scrollTop-1); l.indexOf(t)+' '+t.className+' '+t.textContent"
+# coalescing: wrap docText/similar with counters, then 20 moves in one burst
+o eval code="const e=app.plugins.plugins['fast-find-10k'].engine; e.__o=e.docText; window.__c={doc:0}; e.docText=function(p){window.__c.doc++; return e.__o.call(this,p)}; for(let n=0;n<20;n++) document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true})); 'ok'"
+o dev:screenshot path=$S/f.png; o eval code="JSON.stringify(window.__c)"
+K Tab; K Enter                   # similar panel: focus first row, open it
+```
+
+Observed on the test vault, 2026-10-26:
+
+| Check | Result |
+|---|---|
+| select `RW MLOps is mostly data engineering` | panel: `RW MLOps Is Mostly Data Engineering.` · `copy / punctuation variant`; footer `Smart Connections off: title similarity only` |
+| select `rust data engineering` top hit | 4 rows: 3 × `same words, different order`, 1 × `similar title` |
+| `troubleshooting`, h3 hit `### Troubleshooting` in Obsidian.md | preview top line = line 223, class `ff10k-h3`, text `Troubleshooting`; modal ancestors not scrolled |
+| Ctrl+P | `ff10k-preview-hidden`, right column `display:none`, results 443 → 805 px (full body width); Ctrl+P again restores |
+| 20 × ↓ in one burst | `docText` 1, `similar` 1 for 20 selection moves |
+| key handler cost | 0.28 ms per move; preview paint incl. worker round trip 0.2–9.5 ms over 20 notes |
+| Tab | first similar row `is-selected`, focus on `.ff10k-similar-list`; ↓ stays on the only row |
+| Esc / Tab in panel | selection cleared, focus back on `.ff10k-input`, modal stays open |
+| Tab, Enter | modal closed, active file `…/RW MLOps Is Mostly Data Engineering..md` |
+| empty query (tier 0 `recent`) | panel `—`, 0 `similar` calls; preview renders (76 lines) |
+
+Ghost rows take the same `—` path but cannot be checked in the app yet: ghosts are not fed to
+the engine before the create-note task.

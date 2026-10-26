@@ -1,11 +1,13 @@
 // The search modal: query input, tiered results, data-driven keys, open actions.
 
-import { type App, Modal, type Modifier, Notice, Platform } from 'obsidian';
+import { type App, Modal, type Modifier, Notice, Platform, Scope } from 'obsidian';
 import { open, type OpenWhere } from '../actions';
 import type FastFindPlugin from '../main';
 import type { Hit, Mode, SearchResponse } from '../protocol';
 import type { Keymap } from '../settings';
+import { Preview, queryTerms } from './preview';
 import { renderRow, renderTierLabel } from './results';
+import { SimilarPanel } from './similar';
 
 const LIMIT = 50;
 const INITIAL_ROWS = 30;
@@ -59,6 +61,12 @@ export class FastFindModal extends Modal {
 	private closed = false;
 	private deadNoticeShown = false;
 	private unsubscribeStatus: (() => void) | null = null;
+	private preview!: Preview;
+	private similar!: SimilarPanel;
+	/** Pending paint of preview + similar panel (one per frame, superseded by newer selections). */
+	private paintFrame = 0;
+	/** Pushed while keyboard focus is in the similar panel. */
+	private similarScope: Scope | null = null;
 
 	constructor(app: App, plugin: FastFindPlugin, mode: Mode) {
 		super(app);
@@ -94,8 +102,9 @@ export class FastFindModal extends Modal {
 		const body = contentEl.createDiv({ cls: 'ff10k-body' });
 		this.resultsEl = body.createDiv({ cls: 'ff10k-results' });
 		const right = body.createDiv({ cls: 'ff10k-right' });
-		right.createDiv({ cls: 'ff10k-preview' });
-		right.createDiv({ cls: 'ff10k-similar' });
+		this.preview = new Preview(right.createDiv({ cls: 'ff10k-preview' }));
+		this.similar = new SimilarPanel(right.createDiv({ cls: 'ff10k-similar' }));
+		this.similar.onOpen((path) => void this.openPath(path));
 		this.resultsEl.addEventListener('scroll', () => {
 			const r = this.resultsEl;
 			if (r.scrollTop + r.clientHeight >= r.scrollHeight - 80) this.renderUpTo(this.state.hits.length);
@@ -105,6 +114,7 @@ export class FastFindModal extends Modal {
 
 		this.inputEl.value = this.app.workspace.activeEditor?.editor?.getSelection().trim() ?? '';
 		this.inputEl.addEventListener('input', () => this.search());
+		this.inputEl.addEventListener('focus', () => this.leaveSimilar());
 		this.unsubscribeStatus =
 			this.plugin.indexer?.onStatus((s) => {
 				this.renderStatus();
@@ -119,6 +129,8 @@ export class FastFindModal extends Modal {
 
 	onClose(): void {
 		this.closed = true;
+		cancelAnimationFrame(this.paintFrame);
+		this.leaveSimilar();
 		this.unsubscribeStatus?.();
 		this.unsubscribeStatus = null;
 		this.contentEl.empty();
@@ -133,7 +145,7 @@ export class FastFindModal extends Modal {
 			create: later,
 			insertLink: later,
 			semantic: later,
-			focusSimilar: later,
+			focusSimilar: () => this.enterSimilar(km),
 			filesOnly: () => this.setMode(this.state.mode === 'all' ? 'filesOnly' : 'all'),
 			moveDown: () => this.select(this.state.selected + 1),
 			moveUp: () => this.select(this.state.selected - 1),
@@ -195,6 +207,7 @@ export class FastFindModal extends Modal {
 		this.rowEls[this.state.selected]?.scrollIntoView({ block: 'nearest' });
 		if (res.hits.length === 0) this.resultsEl.createDiv({ cls: 'ff10k-empty', text: this.state.query ? 'No matches' : 'No recent notes' });
 		this.renderStatus();
+		this.schedulePaint();
 	}
 
 	/** Appends rows (and tier labels) until `n` hits are rendered. */
@@ -237,6 +250,7 @@ export class FastFindModal extends Modal {
 			[[km.filesOnly], 'files only'],
 			[[km.moveDown, km.moveUp], 'move'],
 			[[km.togglePreview], 'toggle preview'],
+			[[km.focusSimilar], 'similar notes'],
 			[[km.toggleDebug], 'why ranked'],
 			[['Esc'], 'close'],
 		];
@@ -257,6 +271,69 @@ export class FastFindModal extends Modal {
 		const row = this.rowEls[next];
 		row.addClass('is-selected');
 		row.scrollIntoView({ block: 'nearest' });
+		this.schedulePaint();
+	}
+
+	/** Coalesces preview + similar work to one run per frame; each ignores its own stale replies. */
+	private schedulePaint(): void {
+		this.leaveSimilar();
+		cancelAnimationFrame(this.paintFrame);
+		this.paintFrame = requestAnimationFrame(() => {
+			this.paintFrame = 0;
+			this.paint();
+		});
+	}
+
+	private paint(): void {
+		const engine = this.plugin.engine;
+		const hit = this.state.hits[this.state.selected];
+		if (this.closed || !this.state.previewOpen) return;
+		if (!engine || !hit) {
+			this.preview.clear();
+			this.similar.clear();
+			return;
+		}
+		// hasVectors: false until the Smart Connections bridge exists (Task 20)
+		void this.preview.show(engine, hit, queryTerms(this.state.query));
+		void this.similar.show(engine, hit, this.plugin.settings.minSimilarity, false);
+	}
+
+	/** Tab: keyboard focus into the similar panel; its own scope handles move/open/leave. */
+	private enterSimilar(km: Keymap): void {
+		if (this.similarScope || !this.state.previewOpen || !this.similar.focus()) return;
+		const scope = new Scope(this.scope);
+		const bind = (spec: string, fn: () => void) => {
+			const k = parseKeySpec(spec);
+			if (k)
+				scope.register(k.modifiers, k.key, () => {
+					fn();
+					return false;
+				});
+		};
+		const leave = () => this.leaveSimilar();
+		bind(km.focusSimilar, leave);
+		bind('Escape', leave);
+		bind(km.moveDown, () => this.similar.move(1));
+		bind(km.moveUp, () => this.similar.move(-1));
+		bind('ArrowDown', () => this.similar.move(1));
+		bind('ArrowUp', () => this.similar.move(-1));
+		bind(km.open, () => this.similar.openSelected());
+		this.similarScope = scope;
+		this.app.keymap.pushScope(scope);
+	}
+
+	/** Leaves the similar panel (if focused) and gives keyboard focus back to the input. */
+	private leaveSimilar(): void {
+		if (!this.similarScope) return;
+		this.app.keymap.popScope(this.similarScope);
+		this.similarScope = null;
+		this.similar.blur();
+		this.inputEl.focus();
+	}
+
+	private async openPath(path: string): Promise<void> {
+		const file = await open(this.app, { path, line: null, heading: null }, 'same');
+		if (file) this.close();
 	}
 
 	private async openSelected(where: OpenWhere): Promise<void> {
@@ -285,6 +362,8 @@ export class FastFindModal extends Modal {
 	private togglePreview(): void {
 		this.state.previewOpen = !this.state.previewOpen;
 		this.modalEl.toggleClass('ff10k-preview-hidden', !this.state.previewOpen);
+		if (this.state.previewOpen) this.schedulePaint();
+		else this.leaveSimilar();
 	}
 
 	private toggleDebug(): void {

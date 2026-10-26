@@ -7,7 +7,7 @@ export type OpenWhere = 'same' | 'tab' | 'split';
 
 /** Opens `hit` and places the cursor on its matched heading/body line (0-based), centred.
  * Returns the opened file, or null when the path no longer resolves to a file. */
-export async function open(app: App, hit: Hit, where: OpenWhere): Promise<TFile | null> {
+export async function open(app: App, hit: Pick<Hit, 'path' | 'line' | 'heading'>, where: OpenWhere): Promise<TFile | null> {
 	const file = app.vault.getAbstractFileByPath(hit.path);
 	if (!(file instanceof TFile)) {
 		new Notice(`Fast Find 10K: note not found (${hit.path})`);

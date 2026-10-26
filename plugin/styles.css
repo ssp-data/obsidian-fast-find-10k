@@ -91,11 +91,20 @@
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
+	padding: var(--size-4-2) var(--size-4-3);
 	border-bottom: 1px solid var(--background-modifier-border);
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+	color: var(--text-normal);
 }
 
 .ff10k-similar {
 	flex: 0 0 auto;
+	max-height: 40%;
+	display: flex;
+	flex-direction: column;
+	padding: var(--size-4-2) var(--size-4-3);
+	background: rgba(var(--color-red-rgb), 0.05);
 }
 
 .ff10k-preview-hidden .ff10k-right {
@@ -249,4 +258,113 @@
 	color: var(--text-muted);
 	background: var(--background-secondary);
 	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Preview: lightweight rendering of the selected note */
+.ff10k-line {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.ff10k-h1,
+.ff10k-h2,
+.ff10k-h3 {
+	font-weight: var(--font-bold);
+}
+
+.ff10k-h1 {
+	color: var(--color-red);
+}
+
+.ff10k-h2 {
+	color: var(--color-orange);
+}
+
+.ff10k-h3 {
+	color: var(--color-yellow);
+}
+
+.ff10k-code {
+	color: var(--text-muted);
+}
+
+.ff10k-link {
+	color: var(--text-accent);
+}
+
+.ff10k-tag {
+	color: var(--color-purple);
+}
+
+.ff10k-preview mark {
+	background: var(--text-highlight-bg);
+	color: inherit;
+}
+
+.ff10k-truncated,
+.ff10k-preview-empty {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+/* Similar notes panel */
+.ff10k-similar-label {
+	font-size: var(--font-ui-smaller);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--color-red);
+	margin-bottom: 2px;
+}
+
+.ff10k-similar-list {
+	min-height: 0;
+	overflow-y: auto;
+	outline: none;
+}
+
+.ff10k-similar-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	column-gap: var(--size-4-2);
+	padding: 2px var(--size-4-1);
+	border-radius: var(--radius-s);
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.ff10k-similar-row:hover {
+	background: var(--background-modifier-hover);
+}
+
+.ff10k-similar-row.is-selected {
+	background: var(--background-modifier-active-hover);
+}
+
+.ff10k-similar-title,
+.ff10k-similar-path {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ff10k-similar-path {
+	grid-column: 1 / -1;
+	grid-row: 2;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.ff10k-similar-reason {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.ff10k-similar-none {
+	color: var(--text-faint);
+}
+
+.ff10k-similar-hint {
+	margin-top: 2px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
 }
