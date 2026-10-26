@@ -183,13 +183,13 @@ pub struct Extras<'a> {
 
 impl Extras<'_> {
     pub fn frecency(&self, path: &str, now_secs: f64) -> f32 {
-        let Some(ts) = self.access.and_then(|a| a.get(path)) else { return 0.0 };
+        let Some(ts) = self.access.filter(|a| !a.is_empty()).and_then(|a| a.get(path)) else { return 0.0 };
         let ts: Vec<f64> = ts.iter().copied().collect();
         frecency_score(&ts, now_secs)
     }
 
     pub fn combo_count(&self, query: &str, path: &str) -> u32 {
-        self.combos.and_then(|c| c.get(query)?.get(path)).copied().unwrap_or(0)
+        self.combos.filter(|c| !c.is_empty()).and_then(|c| c.get(query)?.get(path)).copied().unwrap_or(0)
     }
 }
 
