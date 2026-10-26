@@ -360,3 +360,9 @@ Calls made by the designer after the builder check (owner may override):
 - Short terms (≤3 chars) are exact-only in single-term queries but may prefix-match in multi-term queries. Keeps `AI` alone strict while letting `rust data eng` work.
 - Frecency counts every note open in Obsidian, not only opens via the modal.
 - Smart Connections bridge targets 4.7.2, isolated in one module, self-disables on an unknown major version.
+
+Rulings made during implementation (controller):
+
+- Smart case (§6.2) is deferred: fuzzy matching runs the normalized query against normalized field strings, so case bonuses are inert in v1.
+- Fuzzy hits are rejected when the matched span exceeds `needle_chars + 2×max_typos + 1` characters or the score ratio is below 0.5, so scattered subsequences (`airflow` → "AI rules for low budgets") never enter tier 1.
+- The short-term rule applies per compound part (`gen-ai` keeps `ai` exact-only in single-term queries).
