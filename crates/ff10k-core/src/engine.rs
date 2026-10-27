@@ -1157,4 +1157,52 @@ mod tests {
         let r = e.search("writing ai", &opts());
         assert_eq!(titles(&r).first().copied(), Some("AI Writing"), "{:?}", titles(&r));
     }
+
+    #[test]
+    fn german_dictionary_expands_english_and_german_words_when_enabled() {
+        let mut e = Engine::new();
+        for (path, text) in [
+            ("Empfangsstruktur (Schule Madretsch).md", "Notizen zur Empfangsstruktur der Schule, genug Wörter um die Kurznotiz-Regel zu umgehen, Wörter Wörter Wörter"),
+            ("School Notes.md", "notes about the school, with enough words to pass the short note rule, words words words words words"),
+            ("Schulen im Kanton.md", "Liste der Schulen, genug Wörter um die Kurznotiz-Regel zu umgehen, Wörter Wörter Wörter Wörter Wörter"),
+            ("Gift Ideas.md", "presents for the family, with enough words to pass the short note rule, words words words words words"),
+            ("Kinder und Familie.md", "Notizen zur Familie, genug Wörter um die Kurznotiz-Regel zu umgehen, Wörter Wörter Wörter Wörter Wörter"),
+        ] {
+            e.upsert(path, 0.0, text);
+        }
+        // Off by default: `school` is English only.
+        let r = e.search("school", &opts());
+        assert_eq!(titles(&r), ["School Notes"]);
+        e.set_config(Config { languages: vec!["de".into()], ..Config::default() });
+        let r = e.search("school", &opts());
+        assert_eq!(hit(&r, "Empfangsstruktur (Schule Madretsch)").map(|h| h.tier), Some(1), "{:?}", titles(&r));
+        // Prefix: `schule` → "Schulen".
+        assert_eq!(hit(&r, "Schulen im Kanton").map(|h| h.tier), Some(1), "{:?}", titles(&r));
+        assert_eq!(hit(&r, "School Notes").map(|h| h.tier), Some(1));
+        // German → English too, and umlauts fold (`Schüler` is on the list as a different word).
+        assert_eq!(hit(&e.search("schule", &opts()), "School Notes").map(|h| h.tier), Some(1));
+        assert_eq!(hit(&e.search("children", &opts()), "Kinder und Familie").map(|h| h.tier), Some(1));
+        // False friends are not on the list: `poison` must not find "Gift Ideas".
+        assert!(e.search("poison", &opts()).hits.is_empty());
+        // Unknown languages are ignored; the owner's own lines still apply next to the dictionary.
+        e.set_config(Config { languages: vec!["xx".into(), "German".into()], synonyms: vec!["empfang: reception".into()], ..Config::default() });
+        assert_eq!(hit(&e.search("reception", &opts()), "Empfangsstruktur (Schule Madretsch)").map(|h| h.tier), Some(1));
+        assert_eq!(hit(&e.search("school", &opts()), "Schulen im Kanton").map(|h| h.tier), Some(1));
+    }
+
+    #[test]
+    fn german_dictionary_parses_and_serializes() {
+        let text = crate::rank::dictionary("de").unwrap();
+        let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#')).collect();
+        assert!(lines.len() > 300, "{}", lines.len());
+        for l in &lines {
+            assert!(l.contains(':'), "{l:?}");
+            assert!(!l.contains("gift") || !l.starts_with("poison"), "false friend: {l:?}");
+        }
+        assert!(crate::rank::dictionary("fr").is_none());
+        let c: Config = serde_json::from_str(&serde_json::to_string(&Config { languages: vec!["de".into()], ..Config::default() }).unwrap()).unwrap();
+        assert_eq!(c.languages, ["de"]);
+        let c: Config = serde_json::from_str(r#"{"weights":{"title":100,"alias":90,"h1":60,"h2":50,"h3":40,"tag":30,"link":20,"path":15,"body":10},"fuzzy":{"enabled":true,"loose":false},"partial":"whenFew","downrankedFolders":[],"downrankFactor":0.3,"fewThreshold":5}"#).unwrap();
+        assert!(c.languages.is_empty());
+    }
 }

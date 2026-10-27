@@ -154,6 +154,17 @@ export class FastFindSettingTab extends PluginSettingTab {
 					this.saveRanking();
 				});
 			});
+		new Setting(el)
+			.setName('German words (English ↔ German)')
+			.setDesc(
+				'Adds a built-in list of about 400 everyday English–German word pairs to the abbreviations, both directions: school finds Schule and Schulen, Kinder finds children. Umlauts are folded. Your own lines above take part as well.',
+			)
+			.addToggle((t) =>
+				t.setValue(this.s.languages.includes('de')).onChange((v) => {
+					this.s.languages = v ? [...this.s.languages.filter((l) => l !== 'de'), 'de'] : this.s.languages.filter((l) => l !== 'de');
+					this.saveRanking();
+				}),
+			);
 	}
 
 	private semantic(el: HTMLElement): void {

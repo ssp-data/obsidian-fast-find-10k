@@ -98,7 +98,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 ### Settings
 
 - **Indexing**: ignored folders/globs (never indexed; Obsidian "Excluded files" are always honoured), downranked folders (still searchable, score × 0.3), rebuild index.
-- **Ranking**: field weights (title 100, alias 90, h1 60, h2 50, h3 40, tag 30, link 20, path 15, body 10; a weight of 0 turns the field off), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never), optional words that a query never requires (default `a an the of to in on i`; they still add to the score where they match), abbreviations and synonyms (one group per line, `oss: open source, open-source software`; typing a single-word member also finds the other members, see [Examples](#examples)).
+- **Ranking**: field weights (title 100, alias 90, h1 60, h2 50, h3 40, tag 30, link 20, path 15, body 10; a weight of 0 turns the field off), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never), optional words that a query never requires (default `a an the of to in on i`; they still add to the score where they match), abbreviations and synonyms (one group per line, `oss: open source, open-source software`; typing a single-word member also finds the other members, see [Examples](#examples)), German words (a toggle that adds about 400 built-in English ↔ German word pairs to the abbreviations: `school` finds "Schule Madretsch", `Kinder` finds "children"; off by default).
 - **Semantic**: use Smart Connections embeddings, minimum similarity shown, semantic tier (auto / on demand / never).
 - **Behaviour**: create guard, preview open by default.
 - **Keys**: every modal binding.
@@ -167,6 +167,8 @@ without the group                        with the group
                                          1  open-source lock-in
                                          1  The Death of Open Source
 ```
+
+**German words.** With the "German words" toggle on, `school` also finds "Empfangsstruktur (Schule Madretsch)" and "Schulen im Kanton" (prefix: `schule` → `Schulen`, umlauts folded), and `schule` finds the English "School Notes". The list is about 400 everyday pairs (`crates/ff10k-core/dict/de.txt`); add your own in the abbreviations box. Everything stays exact or prefix: no translation model, and nothing changes while the toggle is off.
 
 The same for `de: data engineering`: alone, `de` is an exact two-letter word and finds "TJ DeVries" and "Elias DeFaria"; with the group it finds the "Data Engineering" hub notes first. Typing a single-word member finds the others in both directions (`k8s: kubernetes` makes `kubernetes` find the "K8s Cheatsheet" note too); a several-word member is only found, so `open source` does not search for `oss`.
 

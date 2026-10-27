@@ -1,0 +1,437 @@
+# English ↔ German word pairs for the "German" language option (Config.languages = ["de"]).
+# One group per line, same format as the Abbreviations setting: `english: german, german`.
+# Every single-word member expands to the others in both directions (school ↔ schule).
+# Matching is exact/prefix, so `schule` also finds `Schulen` (not `Schulhaus`); umlauts are folded.
+# False friends are left out on purpose (gift, bald, rat, hut, kind, art, fast, also, brief, chef).
+
+# people, family
+school: schule
+teacher: lehrer, lehrerin
+pupil: schüler, schülerin
+student: studierende, studentin
+child: kind, kinder
+children: kinder
+parents: eltern
+mother: mutter
+father: vater
+family: familie
+friend: freund, freundin
+people: leute, menschen
+human: mensch
+woman: frau
+man: mann
+boy: junge, bub
+girl: mädchen
+neighbour: nachbar, nachbarin
+neighbor: nachbar, nachbarin
+colleague: kollege, kollegin
+boss: vorgesetzter, chefin
+customer: kunde, kundin
+doctor: arzt, ärztin
+birthday: geburtstag
+wedding: hochzeit
+holiday: urlaub, ferien
+vacation: urlaub, ferien
+
+# home, places
+house: haus
+apartment: wohnung
+flat: wohnung
+room: zimmer, raum
+kitchen: küche
+bathroom: badezimmer
+bedroom: schlafzimmer
+garden: garten
+door: tür
+window: fenster
+key: schlüssel
+street: strasse, straße
+city: stadt
+town: stadt
+village: dorf
+country: land
+countryside: landschaft
+mountain: berg
+lake: see
+river: fluss
+forest: wald
+sea: meer
+beach: strand
+island: insel
+church: kirche
+castle: schloss, burg
+bridge: brücke
+station: bahnhof
+airport: flughafen
+hospital: spital, krankenhaus
+library: bibliothek
+museum: museum
+restaurant: restaurant
+shop: laden, geschäft
+store: laden, geschäft
+market: markt
+office: büro
+building: gebäude
+reception: empfang
+entrance: eingang
+exit: ausgang
+floor: stockwerk, etage, boden
+cellar: keller
+basement: keller
+attic: dachboden
+roof: dach
+wall: wand, mauer
+address: adresse
+map: karte
+world: welt
+germany: deutschland
+switzerland: schweiz
+austria: österreich
+swiss: schweizer
+german: deutsch
+english: englisch
+french: französisch
+italian: italienisch
+language: sprache
+
+# time
+time: zeit
+day: tag
+week: woche
+month: monat
+year: jahr
+today: heute
+tomorrow: morgen
+yesterday: gestern
+morning: morgen, vormittag
+evening: abend
+night: nacht
+hour: stunde
+minute: minute
+weekend: wochenende
+monday: montag
+tuesday: dienstag
+wednesday: mittwoch
+thursday: donnerstag
+friday: freitag
+saturday: samstag
+sunday: sonntag
+january: januar
+february: februar
+march: märz
+april: april
+may: mai
+june: juni
+july: juli
+august: august
+september: september
+october: oktober
+november: november
+december: dezember
+spring: frühling
+summer: sommer
+autumn: herbst
+fall: herbst
+winter: winter
+calendar: kalender
+date: datum
+appointment: termin
+deadline: frist, termin
+schedule: zeitplan, plan
+early: früh
+late: spät
+always: immer
+never: nie
+often: oft
+soon: bald
+
+# work, business, money
+work: arbeit
+job: beruf, stelle
+career: karriere, laufbahn
+company: firma, unternehmen
+business: geschäft, unternehmen
+meeting: sitzung, besprechung, meeting
+project: projekt
+plan: plan
+goal: ziel
+target: ziel
+task: aufgabe
+todo: aufgabe
+decision: entscheidung
+contract: vertrag
+offer: angebot
+invoice: rechnung
+bill: rechnung
+price: preis
+cost: kosten
+costs: kosten
+money: geld
+salary: lohn, gehalt
+wage: lohn
+tax: steuer
+taxes: steuern
+insurance: versicherung
+bank: bank
+account: konto
+payment: zahlung
+budget: budget
+report: bericht
+presentation: präsentation, vortrag
+talk: vortrag
+speech: rede
+interview: interview, gespräch
+conversation: gespräch
+application: bewerbung, anwendung
+resume: lebenslauf
+cv: lebenslauf
+employee: mitarbeiter, mitarbeiterin, angestellter
+employer: arbeitgeber
+team: team, mannschaft
+department: abteilung
+management: führung, management
+manager: leiter, leiterin
+leadership: führung
+strategy: strategie
+market: markt
+product: produkt
+service: dienstleistung, dienst
+quality: qualität
+performance: leistung
+result: ergebnis, resultat
+results: ergebnisse
+success: erfolg
+failure: scheitern, misserfolg
+mistake: fehler
+error: fehler
+problem: problem
+solution: lösung
+risk: risiko
+chance: chance, gelegenheit
+opportunity: gelegenheit, chance
+experience: erfahrung
+knowledge: wissen
+skill: fähigkeit, kompetenz
+training: ausbildung, schulung, training
+education: bildung, ausbildung
+course: kurs
+lesson: lektion, unterricht
+exam: prüfung
+test: test, prüfung
+certificate: zertifikat, zeugnis
+degree: abschluss
+university: universität, hochschule
+college: hochschule
+research: forschung
+science: wissenschaft
+history: geschichte
+mathematics: mathematik
+math: mathe, mathematik
+physics: physik
+chemistry: chemie
+biology: biologie
+economics: wirtschaft
+economy: wirtschaft
+politics: politik
+law: recht, gesetz
+government: regierung
+state: staat
+election: wahl
+vote: abstimmung, stimme
+
+# writing, thinking, notes
+note: notiz
+notes: notizen
+book: buch
+books: bücher
+chapter: kapitel
+page: seite
+article: artikel
+newspaper: zeitung
+magazine: zeitschrift
+letter: brief
+email: e-mail, mail
+message: nachricht
+news: nachrichten
+story: geschichte
+word: wort
+words: wörter
+sentence: satz
+text: text
+title: titel
+list: liste
+table: tabelle
+picture: bild
+image: bild
+photo: foto
+drawing: zeichnung
+idea: idee
+thought: gedanke
+thoughts: gedanken
+question: frage
+answer: antwort
+example: beispiel
+explanation: erklärung
+summary: zusammenfassung
+overview: übersicht
+introduction: einleitung, einführung
+conclusion: fazit, schluss
+reason: grund
+meaning: bedeutung
+opinion: meinung
+feeling: gefühl
+memory: erinnerung, gedächtnis
+dream: traum
+wish: wunsch
+hope: hoffnung
+fear: angst
+love: liebe
+life: leben
+death: tod
+health: gesundheit
+illness: krankheit
+disease: krankheit
+medicine: medizin
+sleep: schlaf
+food: essen, nahrung
+drink: getränk
+water: wasser
+bread: brot
+cheese: käse
+coffee: kaffee
+tea: tee
+beer: bier
+wine: wein
+breakfast: frühstück
+lunch: mittagessen
+dinner: abendessen
+recipe: rezept
+cooking: kochen
+sport: sport
+game: spiel
+music: musik
+song: lied
+movie: film
+film: film
+travel: reise
+trip: reise, ausflug
+journey: reise
+car: auto
+train: zug, bahn
+bicycle: fahrrad, velo
+bike: fahrrad, velo
+plane: flugzeug
+ticket: ticket, billett
+weather: wetter
+rain: regen
+snow: schnee
+sun: sonne
+wind: wind
+tree: baum
+flower: blume
+animal: tier
+dog: hund
+cat: katze
+bird: vogel
+horse: pferd
+
+# tech, data
+computer: rechner, computer
+laptop: laptop, notebook
+phone: telefon, handy
+screen: bildschirm
+keyboard: tastatur
+mouse: maus
+printer: drucker
+file: datei
+folder: ordner
+directory: verzeichnis
+data: daten
+database: datenbank
+network: netzwerk
+server: server
+storage: speicher
+memory: speicher
+backup: sicherung, backup
+security: sicherheit
+password: passwort, kennwort
+user: benutzer, nutzer
+setting: einstellung
+settings: einstellungen
+search: suche
+tool: werkzeug
+tools: werkzeuge
+device: gerät
+machine: maschine
+software: software
+program: programm
+development: entwicklung
+developer: entwickler, entwicklerin
+engineer: ingenieur, ingenieurin
+engineering: technik
+technology: technologie, technik
+internet: internet
+website: webseite, website
+link: verknüpfung, link
+download: herunterladen
+upload: hochladen
+update: aktualisierung
+version: version
+change: änderung, wechsel
+changes: änderungen
+requirement: anforderung
+requirements: anforderungen
+structure: struktur
+process: prozess, ablauf
+system: system
+model: modell
+number: zahl, nummer
+count: anzahl
+amount: betrag, menge
+size: grösse, größe
+weight: gewicht
+length: länge
+width: breite
+height: höhe
+speed: geschwindigkeit
+power: kraft, strom, leistung
+energy: energie
+light: licht
+colour: farbe
+color: farbe
+shape: form
+form: formular, form
+part: teil
+piece: stück
+beginning: anfang, beginn
+start: start, anfang
+end: ende
+middle: mitte
+side: seite
+top: oben
+bottom: unten
+left: links
+right: rechts
+new: neu
+old: alt
+big: gross, groß
+small: klein
+important: wichtig
+easy: einfach
+simple: einfach
+difficult: schwierig
+hard: schwer
+good: gut
+bad: schlecht
+beautiful: schön
+nice: schön, nett
+free: frei, kostenlos
+open: offen
+closed: geschlossen
+public: öffentlich
+private: privat
+personal: persönlich
+weekly: wöchentlich
+daily: täglich
+monthly: monatlich
+yearly: jährlich

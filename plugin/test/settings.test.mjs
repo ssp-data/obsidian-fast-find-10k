@@ -133,6 +133,19 @@ test('abbreviations: empty by default, saved lines kept, sent to the engine as a
 	assert.equal(DEFAULT_SETTINGS.synonyms.length, 0);
 });
 
+test('languages: empty by default, saved list kept, sent to the engine as a copy', () => {
+	assert.deepEqual(DEFAULT_SETTINGS.languages, []);
+	const s = mergeSettings({ languages: ['de'] });
+	assert.deepEqual(s.languages, ['de']);
+	assert.deepEqual(mergeSettings({ languages: 'de' }).languages, []);
+	const c = settingsToEngineConfig(s);
+	assert.deepEqual(c.languages, ['de']);
+	c.languages.push('xx');
+	assert.deepEqual(s.languages, ['de']);
+	mergeSettings(null).languages.push('y');
+	assert.equal(DEFAULT_SETTINGS.languages.length, 0);
+});
+
 test('key specs split into modifiers and key', () => {
 	assert.deepEqual(parseKeySpec('Enter'), { modifiers: [], key: 'Enter' });
 	assert.deepEqual(parseKeySpec('Mod+Alt+Enter'), { modifiers: ['Mod', 'Alt'], key: 'Enter' });

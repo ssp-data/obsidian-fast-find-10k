@@ -80,6 +80,35 @@ pub struct Config {
     /// matches every other member (single words as terms, several words as a phrase).
     #[serde(default)]
     pub synonyms: Vec<String>,
+    /// Built-in dictionaries added to the abbreviation groups: `"de"` (English ↔ German word
+    /// pairs, `dict/de.txt`). Unknown names are ignored. Empty by default.
+    #[serde(default)]
+    pub languages: Vec<String>,
+    /// `synonyms` + dictionaries parsed, built on first use (`Config::groups`). Public only so
+    /// `Config { .., ..Config::default() }` works outside this module.
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub groups: std::cell::OnceCell<Vec<Vec<Vec<String>>>>,
+}
+
+const DICT_DE: &str = include_str!("../dict/de.txt");
+
+/// The built-in dictionary for a language name (`de`, `german`, `deutsch`).
+pub fn dictionary(lang: &str) -> Option<&'static str> {
+    match lang.trim().to_ascii_lowercase().as_str() {
+        "de" | "german" | "deutsch" => Some(DICT_DE),
+        _ => None,
+    }
+}
+
+impl Config {
+    /// The abbreviation groups: the `synonyms` lines plus every enabled dictionary.
+    fn groups(&self) -> &[Vec<Member>] {
+        self.groups.get_or_init(|| {
+            let dict_lines = self.languages.iter().filter_map(|l| dictionary(l)).flat_map(|d| d.lines());
+            synonym_groups(self.synonyms.iter().map(String::as_str).chain(dict_lines))
+        })
+    }
 }
 
 /// Stopwords and single letters: `a an the of to in on i`.
@@ -98,6 +127,8 @@ impl Default for Config {
             few_threshold: 5,
             optional_terms: default_optional_terms(),
             synonyms: Vec::new(),
+            languages: Vec::new(),
+            groups: std::cell::OnceCell::new(),
         }
     }
 }
@@ -248,11 +279,12 @@ struct Unit {
 /// One member of an abbreviation group as query words (one word → term, several → phrase).
 type Member = Vec<String>;
 
-/// `Config::synonyms` parsed: groups of at least two members. Members are split on `,`, `:` and
+/// Abbreviation lines parsed: groups of at least two members. Members are split on `,`, `:` and
 /// `=`, so `oss: open source, open-source software` and `oss, open source` read the same.
-fn synonym_groups(cfg: &Config) -> Vec<Vec<Member>> {
-    cfg.synonyms
-        .iter()
+/// Blank lines and `#` comments are skipped.
+fn synonym_groups<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Vec<Member>> {
+    lines
+        .filter(|l| !l.trim_start().starts_with('#'))
         .map(|line| {
             let mut members: Vec<Member> = line
                 .split([',', ':', '='])
@@ -419,7 +451,7 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
     let body_kept = !files_only && cfg.weights.body > 0.0;
     let body_later = body_kept && query.terms.len() + query.phrases.len() > 1;
     let scope = if body_kept && !body_later { Scope::All } else { Scope::NoBody };
-    let groups = synonym_groups(cfg);
+    let groups = cfg.groups();
     let mut units = Vec::new();
     for (t, &optional) in query.terms.iter().zip(&optional) {
         let mut words: Vec<(String, bool)> = t.parts.iter().map(|p| (p.clone(), prefix_ok(p, multi))).collect();
@@ -428,7 +460,7 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
         // Abbreviations: the other members of the term's groups match as if typed too. Single
         // words follow the term rules without fuzzy (the owner spelled them), several words the
         // phrase rules (adjacent; phrase hits include Body for every doc, as phrase units do).
-        let alts = alternatives(&groups, t);
+        let alts = alternatives(groups, t);
         for m in &alts {
             if let [word] = m.as_slice() {
                 if let Some(at) = synth_term(word) {

@@ -61,6 +61,8 @@ export interface FastFindSettings {
 	optionalTerms: string[];
 	/** Abbreviation groups, one per line: `oss: open source, open-source software`. */
 	synonyms: string[];
+	/** Built-in dictionaries added to the abbreviation groups: `de` = English ↔ German. */
+	languages: string[];
 	semantic: SemanticSetting;
 	useSmartConnections: boolean;
 	minSimilarity: number;
@@ -95,6 +97,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	fewThreshold: 5,
 	optionalTerms: ['a', 'an', 'the', 'of', 'to', 'in', 'on', 'i'],
 	synonyms: [],
+	languages: [],
 	semantic: 'auto',
 	useSmartConnections: true,
 	minSimilarity: 0.7,
@@ -159,6 +162,7 @@ export function mergeSettings(saved: unknown): FastFindSettings {
 	s.downrankedFolders = [...s.downrankedFolders];
 	s.optionalTerms = [...s.optionalTerms];
 	s.synonyms = [...s.synonyms];
+	s.languages = [...s.languages];
 	return s;
 }
 
@@ -180,5 +184,6 @@ export function settingsToEngineConfig(s: FastFindSettings): EngineConfig {
 		fewThreshold: s.fewThreshold,
 		optionalTerms: [...s.optionalTerms],
 		synonyms: [...s.synonyms],
+		languages: [...s.languages],
 	};
 }

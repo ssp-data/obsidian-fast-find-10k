@@ -29,6 +29,8 @@ export interface EngineConfig {
 	optionalTerms: string[];
 	/** Abbreviation groups, one per line (`oss: open source, open-source software`). */
 	synonyms: string[];
+	/** Built-in dictionaries added to the groups (`de`: English ↔ German). */
+	languages: string[];
 }
 
 export interface SearchOptions {
