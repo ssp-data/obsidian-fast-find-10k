@@ -303,6 +303,8 @@ export class FastFindModal extends Modal {
 			createTab: () => void this.startCreate('tab'),
 			semantic: () => this.forceSemantic(),
 			focusSimilar: () => this.enterSimilar(km),
+			panelRight: () => this.enterSimilar(km),
+			panelLeft: () => this.leaveSimilar(),
 			filesOnly: () => this.setMode(this.state.mode === 'all' ? 'filesOnly' : 'all'),
 			moveDown: () => this.select(this.state.selected + 1),
 			moveUp: () => this.select(this.state.selected - 1),
@@ -465,7 +467,7 @@ export class FastFindModal extends Modal {
 			[[km.semantic], 'semantic'],
 			[[km.moveDown, km.moveUp], 'move'],
 			[[km.togglePreview], 'toggle preview'],
-			[[km.focusSimilar], 'similar notes'],
+			[[km.focusSimilar, km.panelRight], 'similar notes'],
 			[[km.toggleDebug], 'why ranked'],
 			[[km.toggleLanguages], 'languages'],
 			[[km.openAll], 'open all'],
@@ -541,6 +543,7 @@ export class FastFindModal extends Modal {
 			bind(km.createTab, () => void this.confirmCreate('tab'));
 		} else {
 			bind(km.focusSimilar, leave);
+			bind(km.panelLeft, leave);
 		}
 		bind('Escape', leave);
 		bind(km.moveDown, () => this.similar.move(1));

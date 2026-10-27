@@ -167,6 +167,8 @@ test('languages: empty by default, saved list kept, only sent while language exp
 	mergeSettings(null).languages.push('y');
 	assert.equal(DEFAULT_SETTINGS.languages.length, 0);
 	assert.equal(DEFAULT_KEYMAP.toggleLanguages, 'Ctrl+L');
+	assert.equal(DEFAULT_KEYMAP.panelRight, 'Shift+L');
+	assert.equal(DEFAULT_KEYMAP.panelLeft, 'Shift+H');
 });
 
 test('key specs split into modifiers and key', () => {
@@ -245,8 +247,8 @@ test('help overlay: every action once, in its group, with its current binding', 
 test('help overlay: a Shift+letter binding notes that the capital letter cannot be typed', () => {
 	const notes = helpNotes(DEFAULT_KEYMAP, false);
 	assert.equal(notes.length, 1);
-	assert.match(notes[0], /Shift\+J, Shift\+K/);
-	assert.match(notes[0], /capital J, K/);
+	assert.match(notes[0], /Shift\+J, Shift\+K, Shift\+L, Shift\+H/);
+	assert.match(notes[0], /capital J, K, L, H/);
 	assert.match(notes[0], /Alt\+J/);
-	assert.deepEqual(helpNotes({ ...DEFAULT_KEYMAP, previewDown: 'Alt+J', previewUp: 'Alt+K' }, false), []);
+	assert.deepEqual(helpNotes({ ...DEFAULT_KEYMAP, previewDown: 'Alt+J', previewUp: 'Alt+K', panelRight: 'Alt+L', panelLeft: 'Alt+H' }, false), []);
 });

@@ -19,8 +19,9 @@ It will nicely show the different titles, and h1-3 and body, plus you can toggle
 
 And bottom right, there's similar notes to show and avoid creating an existing note twice, which is most important to [my obsidian workflow](https://www.ssp.sh/blog/obsidian-note-taking-workflow/), as i don't relay on folders, but all by seach. So if search does not work anymore, I will create 10 of the same notes over and over again, plus i might not find my notes, usually i remember when I create a note and want to find a spefific, but in case I forgot, then this plusign helps me too.
 
-> NOTE "The name"
-> The name comes from finding fast notes, which is the key of this plugin and the 10k is a hint to my personal limitation I got from 10k above. It's not meant to stay like this, or not usable below 10k, it will work peferctly fine too for low files, but that's the reason why I created it, and hence the name.
+
+> [!NOTE]
+> The name "Fast Find 10K" comes from finding fast notes, which is the key of this plugin and the 10k is a hint to my personal limitation I got from 10k above. It's not meant to stay like this, or not usable below 10k, it will work peferctly fine too for low files, but that's the reason why I created it, and hence the name.
 
 ## Features
 
@@ -85,7 +86,8 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 | ↓ / Ctrl+J | next result |
 | ↑ / Ctrl+K | previous result |
 | Shift+J / Shift+K | scroll the preview down / up. Search is case-insensitive, so typing lowercase j/k is the same query; only a note created with Shift+Enter would get a lowercase j/k in its name (rebind to Alt+J / Alt+K if that matters) |
-| Tab | focus the similar-notes panel |
+| Tab | focus the similar-notes panel (Tab again or Esc returns) |
+| Shift+L / Shift+H | vim-style: move into the similar-notes panel on the right / back to the results on the left (capital L and H cannot be typed into the query while bound; rebind if you need them) |
 | Enter | open |
 | Mod+Enter | open in a new tab |
 | Mod+Alt+Enter | open in a split |
@@ -125,7 +127,7 @@ Within a tier, notes where every word matched exactly or by prefix come before n
 
 When [Smart Connections](https://github.com/brianpetro/obsidian-smart-connections) (4.7.2) is installed and has embedded the vault, Fast Find 10K reads its note vectors (read-only, through one bridge module) and uses them for the semantic tier, the similar-notes panel and the create guard. Without it everything else works and the similar panel uses title similarity only.
 
-### How the index and the embeddings stay current
+#### How the index and the embeddings stay current
 
 Two separate things, both automatic:
 

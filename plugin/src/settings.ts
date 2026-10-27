@@ -27,6 +27,8 @@ export interface Keymap {
 	showHelp: string;
 	openAll: string;
 	toggleLanguages: string;
+	panelRight: string;
+	panelLeft: string;
 }
 
 export const DEFAULT_KEYMAP: Keymap = {
@@ -50,6 +52,9 @@ export const DEFAULT_KEYMAP: Keymap = {
 	openAll: 'Alt+Shift+Enter',
 	// Ctrl+L is Obsidian's editor "toggle checkbox"; the modal swallows it while open
 	toggleLanguages: 'Ctrl+L',
+	// vim h/l: similar panel on the right, results on the left (Tab still toggles)
+	panelRight: 'Shift+L',
+	panelLeft: 'Shift+H',
 };
 
 export interface FastFindSettings {
