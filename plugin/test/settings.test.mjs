@@ -178,6 +178,7 @@ test('languages: empty by default, saved list kept, only sent while language exp
 	assert.equal(mergeSettings({ keyHints: 'never' }).keyHints, 'never');
 	assert.equal(DEFAULT_KEYMAP.panelRight, 'Shift+L');
 	assert.equal(DEFAULT_KEYMAP.panelLeft, 'Shift+H');
+	assert.equal(DEFAULT_KEYMAP.clearQuery, 'Ctrl+C');
 });
 
 test('key specs split into modifiers and key', () => {

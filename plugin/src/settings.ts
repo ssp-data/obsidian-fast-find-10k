@@ -30,6 +30,7 @@ export interface Keymap {
 	toggleLanguages: string;
 	panelRight: string;
 	panelLeft: string;
+	clearQuery: string;
 }
 
 export const DEFAULT_KEYMAP: Keymap = {
@@ -56,6 +57,9 @@ export const DEFAULT_KEYMAP: Keymap = {
 	// vim h/l: similar panel on the right, results on the left (Tab still toggles)
 	panelRight: 'Shift+L',
 	panelLeft: 'Shift+H',
+	// clears the query (the last query is still there for "Search (resume last)"); with text
+	// selected in the field it stays the copy shortcut
+	clearQuery: 'Ctrl+C',
 };
 
 export interface FastFindSettings {

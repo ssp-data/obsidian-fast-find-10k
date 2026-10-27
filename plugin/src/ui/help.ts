@@ -20,7 +20,7 @@ const GROUPS: [string, [keyof Keymap | 'close', string][]][] = [
 	['Open', [['open', 'open'], ['openTab', 'open in new tab'], ['openSplit', 'open in split'], ['openAll', 'open all shown in tabs (≤ 10)']]],
 	['Create', [['create', 'create note from query'], ['createTab', 'create note in new tab']]],
 	['Modes & panels', [['filesOnly', 'toggle files only'], ['semantic', 'add semantic results'], ['toggleLanguages', 'toggle language expansion (German list, dictionary note)'], ['togglePreview', 'toggle preview'], ['toggleDebug', 'toggle why ranked']]],
-	['Help', [['showHelp', 'toggle this help'], ['close', 'close']]],
+	['Help', [['clearQuery', 'clear the query (copy while text is selected)'], ['showHelp', 'toggle this help'], ['close', 'close']]],
 ];
 
 const FIXED: Partial<Record<HelpRow['action'], string>> = { moveDown: 'ArrowDown', moveUp: 'ArrowUp', close: 'Escape' };

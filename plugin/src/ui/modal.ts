@@ -332,15 +332,40 @@ export class FastFindModal extends Modal {
 			showHelp: () => this.toggleHelp(),
 			openAll: () => void this.openAll(),
 			toggleLanguages: () => this.toggleLanguages(),
+			clearQuery: () => this.clearQuery(),
 		};
 		const bind = (spec: string, fn: () => void) => {
 			const k = parseKeySpec(spec);
 			if (!k) return console.warn('Fast Find 10K: invalid key binding', spec);
 			this.scope.register(k.modifiers, k.key, swallowKey(fn));
 		};
-		for (const name of Object.keys(actions) as (keyof Keymap)[]) bind(km[name], actions[name]);
+		for (const name of Object.keys(actions) as (keyof Keymap)[]) {
+			if (name === 'clearQuery') continue;
+			bind(km[name], actions[name]);
+		}
+		// clearQuery passes through (copy) while text is selected in the field
+		const clear = parseKeySpec(km.clearQuery);
+		if (clear) {
+			this.scope.register(clear.modifiers, clear.key, (evt) => {
+				const i = this.inputEl;
+				if (document.activeElement === i && i.selectionStart !== i.selectionEnd) return true;
+				evt.preventDefault();
+				actions.clearQuery();
+				return false;
+			});
+		}
 		bind('ArrowDown', actions.moveDown);
 		bind('ArrowUp', actions.moveUp);
+	}
+
+	/** Empties the query and re-runs (the recent list); the previous query stays saved for "Search (resume last)". */
+	private clearQuery(): void {
+		if (this.inputEl.value === '') return;
+		this.plugin.rememberQuery(this.inputEl.value);
+		this.inputEl.value = '';
+		this.leaveSimilar();
+		this.inputEl.focus();
+		this.search();
 	}
 
 	private search(): void {

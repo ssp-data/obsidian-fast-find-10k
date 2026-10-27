@@ -45,7 +45,8 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 - **Create when nothing exists.** Shift+Enter creates a note named after the query (Mod+Shift+Enter in a new tab). Unresolved `[[links]]` show as ghost rows (`[ghost x2]` = linked from two notes) and can be created the same way.
 - **Files only (Ctrl+F)** switches to titles, aliases and paths, as a Quick Switcher replacement.
 - **Telescope layout with preview.** Results left, the note preview right with the matches highlighted (plain text for speed; embedded images are shown as pictures), vim keys to move (Ctrl+J/K) and to scroll the preview (Shift+J/K). Enter opens, Mod+Enter in a new tab, Mod+Alt+Enter in a split, Alt+Shift+Enter opens all shown results (10 or fewer).
-- **Query syntax** for narrowing: `"exact phrase"`, `#tag`, `path:folder`, `-exclude`. Optional words (`a an the of to in on i` by default) never exclude a note, and abbreviations expand (`oss` → "open source"), both editable in the settings.
+- **Query syntax** for narrowing: `"exact phrase"`, `#tag`, `path:folder`, `-exclude`. Optional words (`a an the of to in on i` by default) never exclude a note
+  - Set abbreviations that expand (`oss` → "open source"). Both editable in the settings.
 - **Respects your vault setup.** Obsidian's "Excluded files" are never indexed, you can add ignored globs, and folders such as an archive can be downranked instead of hidden.
 - **Semantic results** through Smart Connections embeddings, as a separate tier below the text matches: on by default for every query (a query embedding takes a few milliseconds), or on demand with Ctrl+S.
 - **Resume and recall.** "Search (resume last)" reopens the finder with the previous query; notes you keep opening from the same query get a sticky bonus.
@@ -107,6 +108,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 | Ctrl+P | toggle the preview |
 | Ctrl+R | toggle "why ranked here" (tier, per-term field and match, score parts); while the search is open Ctrl+R does not reload Obsidian. A saved binding still on the old default Ctrl+/ moves to Ctrl+R on load (unless Ctrl+R is taken) |
 | Ctrl+L | toggle language expansion for this search session (the German word list and the dictionary note join the abbreviations); off at startup unless "German words on at startup" is set. The header pill "+languages" shows the state |
+| Ctrl+C | clear the query (the cleared text is kept for "Search (resume last)"); while text is selected in the field, Ctrl+C copies as usual |
 | Ctrl+? (Ctrl+Shift+/) | toggle the key help |
 | Esc | close (or leave the similar panel / help) |
 
