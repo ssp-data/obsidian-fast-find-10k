@@ -2,9 +2,27 @@
 
 A fast note finder for large vaults (10k+ notes). A Rust search engine compiled to WebAssembly runs in a worker and powers instant fuzzy, field-weighted, frecency-ranked search with optional semantic "similar notes".
 
-Spec: [docs/superpowers/specs/2026-10-26-fast-find-10k-design.md](docs/superpowers/specs/2026-10-26-fast-find-10k-design.md)
 This is how it looks:
 ![image](docs/images/find-fast-preview.webp)
+
+## Origin Story
+
+I've built my dream search for [[Obsidian]] based on [[fzf]]/[Telescope](https://github.com/nvim-telescope/telescope.nvim) form Neovim for preview style and fuzzy search, Omnisearch for smarter search, and [[Obsidian Smart Connections|Smart Connections]] for similar notes, all based on Rust [[WebAssembly (WASM)|WASM]] to be super fast. This is how it looks:
+
+I used Omnisearch for 5+ yearso, plus, and I ran into the 10k limitation of Obsidian. luckly Kepano, the CEO Obsidian [quickly solved](https://bsky.app/profile/stephango.com/post/3mvljvuhwks2p). The problem was that wikilinks starting with `[[` didn't show notes that existed in the vault. I knew it, sometimes they showed, sometimes they didn't, see the video [here]().
+
+But I also noticed, that Omnisearch sometimes I missed notes, or I had to know the title exactly. It was not as much fuzzy finding as i wanted, plus the configration between searching the title of file (I used quick switcher for taht) or h1-h3 headers, or if inside the body, wasn't that clear. Although, to their credit, you can speicify the weight of each in the settings.
+
+But I also started to use Smart Connection panel on the left, that helped me to find similar notes, as to make sure I don't create a note that already exists.
+
+In this new plugin I created with Claude Code, i integrated Quick Seach, OMniseach and Smart Connections into one Plugin. If you have smart connections installed, we use the embeddings created for similary search. Plus the search is more fuzzy too, so if you type `toubleshoot`, missing the `r`, it will still find the troubleshoot note.
+
+It will nicely show the different titles, and h1-3 and body, plus you can toggle why they were found.
+
+And bottom right, there's similar notes to show and avoid creating an existing note twice, which is most important to [my obsidian workflow](TODO), as i don't relay on folders, but all by seach. So if search does not work anymore, I will create 10 of the same notes over and over again, plus i might not find my notes, usually i remember when I create a note and want to find a spefific, but in case I forgot, then this plusign helps me too.
+
+> NOTE "The name"
+> The name comes from finding fast notes, which is the key of this plugin and the 10k is a hint to my personal limitation I got from 10k above. It's not meant to stay like this, or not usable below 10k, it will work peferctly fine too for low files, but that's the reason why I created it, and hence the name.
 
 ## Install
 
@@ -79,9 +97,15 @@ Each query word (and each quoted phrase) must match, except optional words (`a a
 
 Within a tier the score adds the field weights × match quality (exact 1.0, prefix by length ratio, fuzzy below that), shrinks it for title words the query left unmatched, and adds proximity (words close together or in one section), backlinks, frecency (opens over the last 30 days, decaying) and a sticky bonus for a note opened three times from the same query. Downranked folders and very short notes are multiplied down. Ctrl+R shows every part for each row.
 
-## Smart Connections
+### Smart Connections
 
 When [Smart Connections](https://github.com/brianpetro/obsidian-smart-connections) (4.7.2) is installed and has embedded the vault, Fast Find 10K reads its note vectors (read-only, through one bridge module) and uses them for the semantic tier, the similar-notes panel and the create guard. Without it everything else works and the similar panel uses title similarity only.
+
+
+### LLMs or AI
+Everything here shown is based locally, no AI model used, no local and also no frontier or online model. Smart Connection creates local embeddings in `.smart-env` (small local embedding model), and these we use for showing similar notes. Everything else is just local index based on your notes.
+ 
+Everything runs locally and there is no language model involved. Search is a plain index over your notes: tokens, fields, positions, frecency. No model runs when you type. The one exception is similar notes: if you have Smart Connections installed, FF10K reuses the embeddings it already stored in `.smart-env`. Those come from a small local embedding model (a few hundred MB, not an LLM), and FF10K does not compute them, but instead read and compresses them from Smart Connctions. If Smart Connections isn't installed, nothing changes except the similar-notes panel falls back to title overlap only.
 
 ## Performance
 
