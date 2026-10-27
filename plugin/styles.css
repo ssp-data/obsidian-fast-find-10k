@@ -480,6 +480,12 @@ input.ff10k-invalid {
 .ff10k-mobile .ff10k-bar {
 	flex-wrap: wrap;
 	align-items: stretch;
+	/* below the phone's status bar / notch (Obsidian sets --safe-area-inset-*, the webview env()) */
+	padding-top: calc(var(--size-4-2) + max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px)));
+}
+
+.modal.ff10k-modal.ff10k-mobile .ff10k-content {
+	padding-bottom: max(var(--safe-area-inset-bottom, 0px), env(safe-area-inset-bottom, 0px));
 }
 
 .ff10k-mobile .ff10k-bar .ff10k-input {
