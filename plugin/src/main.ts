@@ -5,7 +5,7 @@ import { EngineClient } from './engine-client';
 import { FrecencyTracker } from './frecency';
 import { Indexer } from './indexer';
 import type { Mode } from './protocol';
-import { DEFAULT_SETTINGS, type FastFindSettings, mergeSettings, migrateKeymap, settingsToEngineConfig } from './settings';
+import { DEFAULT_SETTINGS, type FastFindSettings, mergeSettings, migrateKeymap, parseDictionaryLines, settingsToEngineConfig } from './settings';
 import { FastFindSettingTab } from './settings-tab';
 import { SmartConnectionsBridge } from './smart-connections-bridge';
 import { FastFindModal } from './ui/modal';
@@ -23,6 +23,8 @@ export default class FastFindPlugin extends Plugin {
 	private ready: Promise<void> = Promise.resolve();
 	private saveTimer = 0;
 	private globsTimer = 0;
+	/** Lines of the dictionary note (settings.dictionaryFile), merged into the abbreviations. */
+	private dictionaryLines: string[] = [];
 
 	async onload(): Promise<void> {
 		// one object for the plugin's lifetime: the bridge and the indexer keep a reference
@@ -55,7 +57,24 @@ export default class FastFindPlugin extends Plugin {
 
 	/** Pushes the ranking settings to the engine (no reindex). */
 	applyEngineConfig(): void {
-		this.engine?.setConfig(settingsToEngineConfig(this.settings));
+		this.engine?.setConfig(settingsToEngineConfig(this.settings, this.dictionaryLines));
+	}
+
+	/** Reads the dictionary note named in the settings (if any) and pushes the config. */
+	async reloadDictionary(): Promise<number> {
+		const path = this.settings.dictionaryFile.trim();
+		let lines: string[] = [];
+		if (path) {
+			try {
+				if (await this.app.vault.adapter.exists(path)) lines = parseDictionaryLines(await this.app.vault.adapter.read(path));
+				else new Notice(`Fast Find 10K: dictionary note not found: ${path}`);
+			} catch (e) {
+				console.error('Fast Find 10K: reading the dictionary note failed', e);
+			}
+		}
+		this.dictionaryLines = lines;
+		this.applyEngineConfig();
+		return lines.length;
 	}
 
 	/** After an edit of the ignored globs: rebuilds the index once the edits pause for 1 s. */
@@ -117,6 +136,13 @@ export default class FastFindPlugin extends Plugin {
 		if (!this.engine) return; // unloaded meanwhile
 		this.app.workspace.onLayoutReady(() => {
 			for (const ref of indexer.handleEvents()) this.registerEvent(ref);
+			// the dictionary note: load once the vault is ready, reload when it is edited
+			void this.reloadDictionary();
+			this.registerEvent(
+				this.app.vault.on('modify', (f) => {
+					if (f.path === this.settings.dictionaryFile.trim()) void this.reloadDictionary();
+				}),
+			);
 		});
 		this.stopGhosts = watchGhosts(this.app, engine, indexer);
 		indexer.start().catch((e: unknown) => console.error('Fast Find 10K: indexing failed', e));

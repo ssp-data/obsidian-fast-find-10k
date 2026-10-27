@@ -63,6 +63,8 @@ export interface FastFindSettings {
 	synonyms: string[];
 	/** Built-in dictionaries added to the abbreviation groups: `de` = English ↔ German. */
 	languages: string[];
+	/** Vault path of a note whose `word: other, words` lines join the abbreviation groups ('' = none). */
+	dictionaryFile: string;
 	semantic: SemanticSetting;
 	useSmartConnections: boolean;
 	minSimilarity: number;
@@ -98,6 +100,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	optionalTerms: ['a', 'an', 'the', 'of', 'to', 'in', 'on', 'i'],
 	synonyms: [],
 	languages: [],
+	dictionaryFile: '',
 	semantic: 'auto',
 	useSmartConnections: true,
 	minSimilarity: 0.7,
@@ -174,7 +177,24 @@ export function migrateKeymap(km: Keymap, isMac: boolean): boolean {
 	return true;
 }
 
-export function settingsToEngineConfig(s: FastFindSettings): EngineConfig {
+/** The abbreviation lines of a dictionary note: lines with a `:` (list markers and surrounding
+ * whitespace stripped), skipping blank lines, `#` headings/comments and frontmatter. */
+export function parseDictionaryLines(text: string): string[] {
+	let body = text;
+	if (body.startsWith('---\n')) {
+		const end = body.indexOf('\n---', 4);
+		if (end >= 0) body = body.slice(end + 4);
+	}
+	const out: string[] = [];
+	for (const raw of body.split('\n')) {
+		const line = raw.trim().replace(/^[-*+]\s+/, '').replace(/^\d+[.)]\s+/, '').trim();
+		if (!line || line.startsWith('#') || !line.includes(':')) continue;
+		out.push(line);
+	}
+	return out;
+}
+
+export function settingsToEngineConfig(s: FastFindSettings, extraSynonyms: readonly string[] = []): EngineConfig {
 	return {
 		weights: { ...s.weights },
 		fuzzy: { enabled: s.fuzzy !== 'off', loose: s.fuzzy === 'loose' },
@@ -183,7 +203,7 @@ export function settingsToEngineConfig(s: FastFindSettings): EngineConfig {
 		downrankFactor: s.downrankFactor,
 		fewThreshold: s.fewThreshold,
 		optionalTerms: [...s.optionalTerms],
-		synonyms: [...s.synonyms],
+		synonyms: [...s.synonyms, ...extraSynonyms],
 		languages: [...s.languages],
 	};
 }

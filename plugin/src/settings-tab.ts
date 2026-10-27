@@ -155,6 +155,21 @@ export class FastFindSettingTab extends PluginSettingTab {
 				});
 			});
 		new Setting(el)
+			.setName('Dictionary note')
+			.setDesc(
+				'Path of a note in this vault (for example "Dictionary.md") whose lines "english: german, german" join the abbreviations above, so the list can be kept in Obsidian. Headings, blank lines and lines without a colon are ignored; list markers are fine. Reloaded when the note is edited.',
+			)
+			.addText((t) => {
+				t.setPlaceholder('Dictionary.md');
+				t.setValue(this.s.dictionaryFile).onChange((v) => {
+					this.s.dictionaryFile = v.trim();
+					this.save();
+					void this.plugin.reloadDictionary().then((n) => {
+						if (this.s.dictionaryFile) new Notice(`Fast Find 10K: ${n} dictionary lines loaded`);
+					});
+				});
+			});
+		new Setting(el)
 			.setName('German words (English ↔ German)')
 			.setDesc(
 				'Adds a built-in list of about 400 everyday English–German word pairs to the abbreviations, both directions: school finds Schule and Schulen, Kinder finds children. Umlauts are folded. Your own lines above take part as well.',

@@ -2,14 +2,15 @@
 # One group per line, same format as the Abbreviations setting: `english: german, german`.
 # Every single-word member expands to the others in both directions (school ↔ schule).
 # Matching is exact/prefix, so `schule` also finds `Schulen` (not `Schulhaus`); umlauts are folded.
-# False friends are left out on purpose (gift, bald, rat, hut, kind, art, fast, also, brief, chef).
+# Left out on purpose: false friends and German words that are also English words (gift, bald, rat,
+# hut, kind, art, fast, also, brief, chef, tag, see, links, gut, alt, lied, tee, land, strand, tier, mann)
+# and English words so common that their German member would flood results (may, bill, state, day).
 
 # people, family
 school: schule
 teacher: lehrer, lehrerin
 pupil: schüler, schülerin
 student: studierende, studentin
-child: kind, kinder
 children: kinder
 parents: eltern
 mother: mutter
@@ -19,7 +20,6 @@ friend: freund, freundin
 people: leute, menschen
 human: mensch
 woman: frau
-man: mann
 boy: junge, bub
 girl: mädchen
 neighbour: nachbar, nachbarin
@@ -49,14 +49,11 @@ street: strasse, straße
 city: stadt
 town: stadt
 village: dorf
-country: land
 countryside: landschaft
 mountain: berg
-lake: see
 river: fluss
 forest: wald
 sea: meer
-beach: strand
 island: insel
 church: kirche
 castle: schloss, burg
@@ -80,7 +77,7 @@ cellar: keller
 basement: keller
 attic: dachboden
 roof: dach
-wall: wand, mauer
+wall: mauer
 address: adresse
 map: karte
 world: welt
@@ -96,7 +93,6 @@ language: sprache
 
 # time
 time: zeit
-day: tag
 week: woche
 month: monat
 year: jahr
@@ -118,9 +114,7 @@ saturday: samstag
 sunday: sonntag
 january: januar
 february: februar
-march: märz
 april: april
-may: mai
 june: juni
 july: juli
 august: august
@@ -131,19 +125,17 @@ december: dezember
 spring: frühling
 summer: sommer
 autumn: herbst
-fall: herbst
 winter: winter
 calendar: kalender
 date: datum
 appointment: termin
 deadline: frist, termin
-schedule: zeitplan, plan
+schedule: zeitplan
 early: früh
 late: spät
 always: immer
 never: nie
 often: oft
-soon: bald
 
 # work, business, money
 work: arbeit
@@ -153,7 +145,6 @@ company: firma, unternehmen
 business: geschäft, unternehmen
 meeting: sitzung, besprechung, meeting
 project: projekt
-plan: plan
 goal: ziel
 target: ziel
 task: aufgabe
@@ -162,7 +153,6 @@ decision: entscheidung
 contract: vertrag
 offer: angebot
 invoice: rechnung
-bill: rechnung
 price: preis
 cost: kosten
 costs: kosten
@@ -172,7 +162,6 @@ wage: lohn
 tax: steuer
 taxes: steuern
 insurance: versicherung
-bank: bank
 account: konto
 payment: zahlung
 budget: budget
@@ -217,7 +206,7 @@ education: bildung, ausbildung
 course: kurs
 lesson: lektion, unterricht
 exam: prüfung
-test: test, prüfung
+test: prüfung
 certificate: zertifikat, zeugnis
 degree: abschluss
 university: universität, hochschule
@@ -235,7 +224,6 @@ economy: wirtschaft
 politics: politik
 law: recht, gesetz
 government: regierung
-state: staat
 election: wahl
 vote: abstimmung, stimme
 
@@ -249,7 +237,6 @@ page: seite
 article: artikel
 newspaper: zeitung
 magazine: zeitschrift
-letter: brief
 email: e-mail, mail
 message: nachricht
 news: nachrichten
@@ -299,7 +286,6 @@ water: wasser
 bread: brot
 cheese: käse
 coffee: kaffee
-tea: tee
 beer: bier
 wine: wein
 breakfast: frühstück
@@ -310,7 +296,6 @@ cooking: kochen
 sport: sport
 game: spiel
 music: musik
-song: lied
 movie: film
 film: film
 travel: reise
@@ -329,7 +314,6 @@ sun: sonne
 wind: wind
 tree: baum
 flower: blume
-animal: tier
 dog: hund
 cat: katze
 bird: vogel
@@ -338,7 +322,7 @@ horse: pferd
 # tech, data
 computer: rechner, computer
 laptop: laptop, notebook
-phone: telefon, handy
+phone: telefon
 screen: bildschirm
 keyboard: tastatur
 mouse: maus
@@ -399,7 +383,6 @@ energy: energie
 light: licht
 colour: farbe
 color: farbe
-shape: form
 form: formular, form
 part: teil
 piece: stück
@@ -410,10 +393,8 @@ middle: mitte
 side: seite
 top: oben
 bottom: unten
-left: links
 right: rechts
 new: neu
-old: alt
 big: gross, groß
 small: klein
 important: wichtig
@@ -421,7 +402,6 @@ easy: einfach
 simple: einfach
 difficult: schwierig
 hard: schwer
-good: gut
 bad: schlecht
 beautiful: schön
 nice: schön, nett

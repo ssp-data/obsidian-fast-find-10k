@@ -8,7 +8,7 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { mergeSettings, settingsToEngineConfig, migrateKeymap, DEFAULT_SETTINGS, DEFAULT_KEYMAP } = await load('src/settings.ts');
+const { mergeSettings, settingsToEngineConfig, migrateKeymap, parseDictionaryLines, DEFAULT_SETTINGS, DEFAULT_KEYMAP } = await load('src/settings.ts');
 const { parseKeySpec, validateBinding, keyLabel, conflicts } = await load('src/keys.ts');
 const { helpGroups, helpNotes } = await load('src/ui/help.ts');
 
@@ -131,6 +131,20 @@ test('abbreviations: empty by default, saved lines kept, sent to the engine as a
 	assert.equal(s.synonyms.length, 2);
 	mergeSettings(null).synonyms.push('y');
 	assert.equal(DEFAULT_SETTINGS.synonyms.length, 0);
+});
+
+test('dictionary note: default none, lines parsed from markdown, merged into the engine synonyms', () => {
+	assert.equal(DEFAULT_SETTINGS.dictionaryFile, '');
+	assert.equal(mergeSettings({ dictionaryFile: 'Dictionary.md' }).dictionaryFile, 'Dictionary.md');
+	assert.equal(mergeSettings({ dictionaryFile: 3 }).dictionaryFile, '');
+	const text = '---\ntags: [dict]\n---\n# My words\n\n- school: schule\n* data: daten, angaben\n1. oss: open source\nno colon here\n  meeting: sitzung  \n#comment: x\n';
+	assert.deepEqual(parseDictionaryLines(text), ['school: schule', 'data: daten, angaben', 'oss: open source', 'meeting: sitzung']);
+	assert.deepEqual(parseDictionaryLines(''), []);
+	const s = mergeSettings({ synonyms: ['k8s: kubernetes'] });
+	const c = settingsToEngineConfig(s, ['school: schule']);
+	assert.deepEqual(c.synonyms, ['k8s: kubernetes', 'school: schule']);
+	assert.deepEqual(s.synonyms, ['k8s: kubernetes']);
+	assert.deepEqual(settingsToEngineConfig(s).synonyms, ['k8s: kubernetes']);
 });
 
 test('languages: empty by default, saved list kept, sent to the engine as a copy', () => {
