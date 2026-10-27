@@ -53,9 +53,7 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 - **Local only.** No language model, no network. See [LLMs or AI](#llms-or-ai).
 ## Install
 
-**From the community plugins** (desktop and mobile): in Obsidian open Settings → Community plugins → Browse, search for "Fast Find 10K" and install it, or open <https://community.obsidian.md/plugins/fast-find> and click Install. Then enable it.
-
-**Pre-releases**: with [BRAT](https://github.com/TfTHacker/obsidian42-brat), add `ssp-data/obsidian-fast-find-10k` as a beta plugin; BRAT also installs the latest release on mobile.
+**From the community plugins** (desktop and mobile): in Obsidian open `Settings → Community plugins → Browsey, search for "Fast Find 10K" and install it, or open <https://community.obsidian.md/plugins/fast-find> and click Install. Then enable it.
 
 **From source**:
 
