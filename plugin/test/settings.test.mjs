@@ -52,6 +52,10 @@ test('merge: minSimilarity is clamped to 0.5-0.95', () => {
 	assert.equal(mergeSettings({ minSimilarity: 2 }).minSimilarity, 0.95);
 	assert.equal(mergeSettings({ minSimilarity: 0.8 }).minSimilarity, 0.8);
 	assert.equal(mergeSettings({ minSimilarity: NaN }).minSimilarity, 0.7);
+	assert.equal(DEFAULT_SETTINGS.semanticMinSimilarity, 0.6);
+	assert.equal(mergeSettings({ semanticMinSimilarity: 0.1 }).semanticMinSimilarity, 0.3);
+	assert.equal(mergeSettings({ semanticMinSimilarity: 0.75 }).semanticMinSimilarity, 0.75);
+	assert.equal(mergeSettings({ semanticMinSimilarity: 'x' }).semanticMinSimilarity, 0.6);
 });
 
 test('merge: downrankFactor is clamped to 0-1', () => {

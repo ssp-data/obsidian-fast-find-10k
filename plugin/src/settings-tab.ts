@@ -154,8 +154,13 @@ export class FastFindSettingTab extends PluginSettingTab {
 					},
 					{
 						name: 'Minimum similarity shown',
-						desc: 'Cosine score, as Smart Connections shows it. Default 0.70.',
+						desc: 'Cosine score for the similar-notes panel (note to note), as Smart Connections shows it. Default 0.70.',
 						control: { type: 'slider', key: 'minSimilarity', min: 0.5, max: 0.95, step: 0.01 },
+					},
+					{
+						name: 'Minimum similarity for semantic results',
+						desc: 'Cosine floor for the semantic tier (Ctrl+S or automatic) and the create guard. A short query sits further from a note than two notes from each other, so this is lower: typical top hits score 0.65–0.8. Default 0.60.',
+						control: { type: 'slider', key: 'semanticMinSimilarity', min: 0.3, max: 0.95, step: 0.01 },
 					},
 					{
 						name: 'Semantic tier',
@@ -404,7 +409,7 @@ export class FastFindSettingTab extends PluginSettingTab {
 			);
 		new Setting(el)
 			.setName('Minimum similarity shown')
-			.setDesc('Cosine score, as Smart Connections shows it. Default 0.70.')
+			.setDesc('Cosine score for the similar-notes panel (note to note), as Smart Connections shows it. Default 0.70.')
 			.addSlider((sl) =>
 				sl
 					.setLimits(0.5, 0.95, 0.01)
@@ -412,6 +417,19 @@ export class FastFindSettingTab extends PluginSettingTab {
 					.setDynamicTooltip()
 					.onChange((v) => {
 						this.s.minSimilarity = v;
+						this.save();
+					}),
+			);
+		new Setting(el)
+			.setName('Minimum similarity for semantic results')
+			.setDesc('Cosine floor for the semantic tier (Ctrl+S or automatic) and the create guard; lower than the panel\'s, since a short query sits further from a note. Default 0.60.')
+			.addSlider((sl) =>
+				sl
+					.setLimits(0.3, 0.95, 0.01)
+					.setValue(this.s.semanticMinSimilarity)
+					.setDynamicTooltip()
+					.onChange((v) => {
+						this.s.semanticMinSimilarity = v;
 						this.save();
 					}),
 			);

@@ -56,7 +56,7 @@ const { semanticGuard, runGuard } = await load('src/ui/modal.ts');
 
 const vecBridge = (embed) => ({ available: () => true, hasVectors: () => true, embed });
 const semEngine = { semantic: async () => [{ path: 'x.md', title: 'X', score: 0.812 }] };
-const settings = (semantic) => ({ useSmartConnections: true, semantic, minSimilarity: 0.7 });
+const settings = (semantic) => ({ useSmartConnections: true, semantic, semanticMinSimilarity: 0.6 });
 
 test('guard semantic rows carry the score; never embeds with semantic = never', async () => {
 	let embeds = 0;

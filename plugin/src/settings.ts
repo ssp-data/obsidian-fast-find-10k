@@ -76,6 +76,9 @@ export interface FastFindSettings {
 	semantic: SemanticSetting;
 	useSmartConnections: boolean;
 	minSimilarity: number;
+	/** Cosine floor for the semantic tier and the create guard (a short query sits further from a
+	 * note than two notes from each other, so this is lower than `minSimilarity`). */
+	semanticMinSimilarity: number;
 	createGuard: boolean;
 	previewOpen: boolean;
 	debugByDefault: boolean;
@@ -112,6 +115,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	semantic: 'auto',
 	useSmartConnections: true,
 	minSimilarity: 0.7,
+	semanticMinSimilarity: 0.6,
 	createGuard: true,
 	previewOpen: true,
 	debugByDefault: false,
@@ -167,6 +171,7 @@ export function mergeSettings(saved: unknown): FastFindSettings {
 	s.semantic = oneOf(s.semantic, SEMANTIC_VALUES, d.semantic);
 	s.fewThreshold = clamp(s.fewThreshold, 1, 50, d.fewThreshold, true);
 	s.minSimilarity = clamp(s.minSimilarity, 0.5, 0.95, d.minSimilarity);
+	s.semanticMinSimilarity = clamp(s.semanticMinSimilarity, 0.3, 0.95, d.semanticMinSimilarity);
 	s.downrankFactor = clamp(s.downrankFactor, 0, 1, d.downrankFactor);
 	s.keymap = pick(DEFAULT_KEYMAP, src.keymap);
 	s.ignoredGlobs = [...s.ignoredGlobs];

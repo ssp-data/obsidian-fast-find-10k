@@ -109,7 +109,7 @@ function semanticHit(h: SemanticHit): Hit {
 
 /** What the create guard needs to look up semantic neighbours of a note name. */
 export interface GuardDeps {
-	settings: Pick<FastFindSettings, 'useSmartConnections' | 'semantic' | 'minSimilarity'>;
+	settings: Pick<FastFindSettings, 'useSmartConnections' | 'semantic' | 'semanticMinSimilarity'>;
 	bridge: Pick<SmartConnectionsBridge, 'available' | 'hasVectors' | 'embed'> | null;
 	engine: Pick<EngineClient, 'semantic'> | null;
 }
@@ -122,7 +122,7 @@ export async function semanticGuard(name: string, { settings, bridge, engine }: 
 	const vec = await bridge.embed(name);
 	if (!vec) return [];
 	try {
-		const hits = await engine.semantic(vec, GUARD_SEMANTIC, settings.minSimilarity);
+		const hits = await engine.semantic(vec, GUARD_SEMANTIC, settings.semanticMinSimilarity);
 		return hits.map((h) => ({ path: h.path, title: h.title, note: h.score.toFixed(2) }));
 	} catch {
 		return [];
@@ -405,7 +405,7 @@ export class FastFindModal extends Modal {
 		if (!vec || !current()) return;
 		let found: SemanticHit[];
 		try {
-			found = await engine.semantic(vec, SEMANTIC_ROWS, settings.minSimilarity);
+			found = await engine.semantic(vec, SEMANTIC_ROWS, settings.semanticMinSimilarity);
 		} catch {
 			return;
 		}
