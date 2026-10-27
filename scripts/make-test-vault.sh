@@ -6,7 +6,7 @@
 #   bash scripts/make-test-vault.sh <vault>
 #
 # Sources (licence):
-#   duckdb/duckdb-web            docs/preview       MIT (one copy; the repo also holds 0.10 … 2.0 duplicates)
+#   duckdb/duckdb-web            docs/2.0           MIT (one version; the repo holds a copy per version)
 #   tldr-pages/tldr              pages/common       CC BY 4.0 (about 4,000 short command notes)
 #   dbt-labs/docs.getdbt.com     website/docs       Apache-2.0
 #   kubernetes/website           content/en/docs    CC BY 4.0
@@ -36,7 +36,7 @@ fetch() { # name url path licence
   rm -rf "$TMP/$name"
 }
 
-fetch duckdb         https://github.com/duckdb/duckdb-web.git      docs/preview    "MIT"
+fetch duckdb         https://github.com/duckdb/duckdb-web.git      docs/2.0        "MIT"
 fetch tldr           https://github.com/tldr-pages/tldr.git        pages/common    "CC BY 4.0"
 fetch dbt        https://github.com/dbt-labs/docs.getdbt.com.git   website/docs    "Apache-2.0"
 fetch kubernetes https://github.com/kubernetes/website.git         content/en/docs "CC BY 4.0"
