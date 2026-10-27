@@ -31,9 +31,12 @@ queries; "after" was run after the fixes, so the five fixture notes are not in i
 
 | Variant | Queries | @1 before → after | @5 before → after | @10 before → after | p50 | p95 |
 |---|---|---|---|---|---|---|
-| full | 9,385 | 97.81 % → **98.91 %** | 99.53 % → **99.97 %** | 99.61 % → 99.98 % | 2.8 ms | 12.9 ms |
-| two | 4,072 | 57.66 % → 57.57 % | 79.94 % → 79.89 % | 86.12 % → 86.23 % | 2.7 ms | 6.5 ms |
-| typo | 6,323 | 91.03 % → **97.90 %** | 94.48 % → **99.84 %** | 94.97 % → 99.98 % | 3.3 ms | 14.8 ms |
+| full | 9,385 | 97.81 % → **98.88 %** | 99.53 % → **99.96 %** | 99.61 % → 99.98 % | 3.0 ms | 14.3 ms |
+| two | 4,072 | 57.66 % → 58.63 % | 79.94 % → 80.70 % | 86.12 % → 86.62 % | 2.9 ms | 7.5 ms |
+| typo | 6,323 | 91.03 % → **97.96 %** | 94.48 % → **99.84 %** | 94.97 % → 99.94 % | 3.7 ms | 16.5 ms |
+
+"After" is the engine as released (all recall fixes, the exact-before-fuzzy order, the one-word
+fuzzy rule and the H1 105 / H2 65 / H3 55 weights), run 2026-10-27 on the same vault.
 
 Same 939-note sample (every 10th note), both tools, before the fixes; the last column is Fast
 Find 10K after the fixes (sample re-drawn the same way; the vault changed slightly in between,
