@@ -58,7 +58,7 @@ V=<vault>/.obsidian/plugins/fast-find
 mkdir -p $V && ln -sf $PWD/dist/main.js $PWD/dist/manifest.json $PWD/dist/styles.css $V/
 ```
 
-Then enable "Fast Find 10K" under Settings → Community plugins. Requires Obsidian 1.5.7 or newer.
+Then enable "Fast Find 10K" under Settings → Community plugins. Requires Obsidian 1.5.7 or newer. The plugin's Obsidian id is `fast-find` (manifest ids allow only lowercase letters and hyphens, so no `10k`); that id names the plugin folder and the commands (`fast-find:search`). Everything else, from the repo to the package, keeps the name Fast Find 10K.
 [docs/dev-checklist.md](docs/dev-checklist.md) has the reload and verification steps.
 
 ## Usage
