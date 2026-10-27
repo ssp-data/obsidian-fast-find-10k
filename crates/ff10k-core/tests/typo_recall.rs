@@ -2,8 +2,8 @@
 //! tier-1 place. For every title with ≥ 2 words and every word of ≥ 6 chars, the query
 //! `<misspelled word> <other title word>` must return the note in tier 1, for one
 //! transposition, one deletion and one substitution (each in the middle of the word).
-//! Deletions only apply to words of ≥ 7 chars: a shorter result is below the 6-char fuzzy
-//! minimum (spec §16) and is not a fuzzy query at all.
+//! Deletions apply to words of ≥ 6 chars: the 5-letter result gets one typo in Title/Alias
+//! (docs/recall.md fix 3), which is where a title word lives.
 //! Run: `cargo test -p ff10k-core --features golden --test typo_recall -- --nocapture`.
 
 use std::path::PathBuf;
@@ -33,7 +33,7 @@ fn misspellings(w: &str) -> Vec<(&'static str, String)> {
         t.swap(i, i + 1);
         out.push(("transposition", t.into_iter().collect()));
     }
-    if c.len() >= 7 {
+    if c.len() >= 6 {
         let mut d = c.clone();
         d.remove(mid);
         out.push(("deletion", d.into_iter().collect()));

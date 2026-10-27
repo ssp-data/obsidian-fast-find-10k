@@ -1065,4 +1065,96 @@ mod tests {
         let c: Config = serde_json::from_str(&serde_json::to_string(&Config { synonyms: vec!["oss: open source".into()], ..Config::default() }).unwrap()).unwrap();
         assert_eq!(c.synonyms, ["oss: open source"]);
     }
+
+    // ---- recall fixes (docs/recall.md, owner-approved 2026-10-27) ----
+
+    #[test]
+    fn hash_number_in_title_is_a_word_when_no_such_tag_exists() {
+        let mut e = Engine::new();
+        e.upsert("Newsletter #115.md", 0.0, "issue one hundred fifteen of the newsletter, with enough words to pass the short note rule here");
+        e.upsert("Newsletter #116.md", 0.0, "issue one hundred sixteen of the newsletter, with enough words to pass the short note rule here");
+        e.upsert("Tagged.md", 0.0, "a note with the tag #ai and some more words so it is not short, words words words words words");
+        let r = e.search("newsletter #115", &opts());
+        assert_eq!(titles(&r).first().copied(), Some("Newsletter #115"), "{:?}", titles(&r));
+        // `116` is not `115`: the other issue is at most a partial (tier 4) hit on `newsletter`.
+        assert!(hit(&r, "Newsletter #116").is_none_or(|h| h.tier == 4), "{:?}", titles(&r));
+        // A tag that exists keeps filtering.
+        let r = e.search("#ai", &opts());
+        assert_eq!(titles(&r), ["Tagged"]);
+        // A tag that does not exist, alone, is a word that matches nothing (not "every note").
+        assert!(e.search("#zzz", &opts()).hits.is_empty());
+    }
+
+    #[test]
+    fn dash_word_is_a_word_when_excluding_leaves_nothing() {
+        let mut e = Engine::new();
+        e.upsert("KW13 -Marktleistung.md", 0.0, "Kalenderwoche dreizehn, with enough words to pass the short note rule, words words words words words");
+        e.upsert("Plan.md", 0.0, "this is still a draft plan, with enough words to pass the short note rule, words words words words words");
+        e.upsert("Plan B.md", 0.0, "the final plan, with enough words to pass the short note rule, words words words words words words words");
+        let r = e.search("KW13 -Marktleistung", &opts());
+        assert_eq!(titles(&r).first().copied(), Some("KW13 -Marktleistung"), "{:?}", titles(&r));
+        // An exclusion that leaves results keeps excluding.
+        let r = e.search("plan -draft", &opts());
+        assert_eq!(titles(&r), ["Plan B"]);
+    }
+
+    #[test]
+    fn dotted_name_is_found_by_its_own_title() {
+        let mut e = Engine::new();
+        e.upsert("jasper.ai.md", 0.0, "The future of writing with [[Artificial intelligence (AI)]], with enough words to pass the short note rule words");
+        e.upsert("Artificial intelligence (AI).md", 0.0, "ai everywhere, with enough words to pass the short note rule, words words words words words words");
+        e.upsert("OpenAI.md", 0.0, "company notes, ai, with enough words to pass the short note rule, words words words words words words");
+        e.upsert("Jasper AI.md", 0.0, "the same product written as two words, with enough words to pass the short note rule, words words words");
+        let r = e.search("jasper.ai", &SearchOptions { debug: true, ..opts() });
+        assert_eq!(titles(&r).first().copied(), Some("jasper.ai"), "{:?}", titles(&r));
+        assert_eq!(component(hit(&r, "jasper.ai").unwrap(), "titleFactor"), 1.0);
+        // Notes that have only `ai` do not match the compound at all.
+        assert!(hit(&r, "OpenAI").is_none(), "{:?}", titles(&r));
+        // The two-word spelling matches through the parts and is fully covered.
+        assert_eq!(hit(&r, "Jasper AI").map(|h| h.tier), Some(1));
+        assert_eq!(component(hit(&r, "Jasper AI").unwrap(), "titleFactor"), 1.0);
+        // The other direction: the two-word query finds the dotted title in tier 1.
+        assert_eq!(hit(&e.search("jasper ai", &opts()), "jasper.ai").map(|h| h.tier), Some(1));
+    }
+
+    #[test]
+    fn five_letter_query_gets_one_typo_in_title_and_alias_only() {
+        let mut e = Engine::new();
+        e.upsert("GitHub.md", 0.0, "code hosting, with enough words to pass the short note rule, words words words words words words words");
+        e.upsert("Ollama.md", 0.0, "local models, with enough words to pass the short note rule, words words words words words words words");
+        e.upsert("Tools.md", 0.0, "---\naliases: [Mentor]\n---\nwe use github daily, with enough words to pass the short note rule, words words words");
+        e.upsert("Alfred MacOS.md", 0.0, "launcher, with enough words to pass the short note rule, words words words words words words words");
+        e.upsert("Heads.md", 0.0, "## GitHub\nheading only, with enough words to pass the short note rule, words words words words words");
+        let r = e.search("gitub", &opts());
+        assert_eq!(hit(&r, "GitHub").map(|h| h.tier), Some(1), "{:?}", titles(&r));
+        // Body and heading occurrences are not fuzzy-matched at 5 letters.
+        assert!(hit(&r, "Tools").is_none(), "{:?}", titles(&r));
+        assert!(hit(&r, "Heads").is_none(), "{:?}", titles(&r));
+        assert_eq!(hit(&e.search("ollma", &opts()), "Ollama").map(|h| h.tier), Some(1));
+        // Aliases count as titles.
+        assert_eq!(hit(&e.search("menor", &opts()), "Tools").map(|h| h.tier), Some(1));
+        // Also inside a multi-word query.
+        assert_eq!(hit(&e.search("alfed macos", &opts()), "Alfred MacOS").map(|h| h.tier), Some(1));
+        // Fuzzy off: nothing.
+        e.set_config(Config { fuzzy: crate::matcher::FuzzyLevel { enabled: false, loose: false }, ..Config::default() });
+        assert!(hit(&e.search("gitub", &opts()), "GitHub").is_none());
+    }
+
+    #[test]
+    fn whole_title_equal_to_the_query_wins_the_tie() {
+        let mut e = Engine::new();
+        e.upsert("data.md", 0.0, "");
+        e.upsert("DataOps.md", 0.0, "dataops is a practice, with enough words to pass the short note rule, words words words words words words");
+        e.upsert("DataFusion.md", 0.0, "query engine, with enough words to pass the short note rule, words words words words words words words");
+        for i in 0..6 {
+            e.upsert(&format!("Link {i}.md"), 0.0, "see [[DataOps]] and [[DataFusion]] for more, with enough words to pass the short note rule, words words");
+        }
+        let r = e.search("data", &SearchOptions { debug: true, ..opts() });
+        assert_eq!(titles(&r).first().copied(), Some("data"), "{:?}", titles(&r));
+        // Order-free: "AI Writing" equals the query `writing ai`.
+        e.upsert("AI Writing.md", 0.0, "writing with ai, with enough words to pass the short note rule, words words words words words words");
+        e.upsert("How to detect AI Writing.md", 0.0, "detecting, with enough words to pass the short note rule, words words words words words words words");
+        let r = e.search("writing ai", &opts());
+        assert_eq!(titles(&r).first().copied(), Some("AI Writing"), "{:?}", titles(&r));
+    }
 }

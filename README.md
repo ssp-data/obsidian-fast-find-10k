@@ -28,7 +28,7 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 
 - **Fast on big vaults.** The index is a Rust engine compiled to WebAssembly, running in a Web Worker. On the 9,385-note / 27 MB test vault the finder is searchable about 0.3 s after Obsidian loads (fully indexed after 1.2–1.4 s), and a query takes 4–18 ms inside Obsidian (1–8 ms native). There is no input debounce: every keystroke is a query, and the screen is repainted in under 30 ms. Notes are cached in IndexedDB, so a reload re-indexes only what changed; an edit is picked up within half a second.
 - **Accurate ranking in tiers.** A note that matches every word in its title or an alias always ranks above one that matches only in a heading, which ranks above body-only matches. Within a tier, field weights, prefix and typo quality, how many title words the query left unmatched, word proximity, backlinks and your own opening history (frecency) decide the order. See [How ranking works](#how-ranking-works).
-- **Fuzzy, but guarded.** `troubelshoot` still finds "Obsidian Troubleshooting" (one typo for 6–9 letter words, two for 10+), while scattered subsequences are rejected, so `writing` does not match "Airbyte Checkpointing". Word order never matters: `ai writing` and `writing ai` return the same list.
+- **Fuzzy, but guarded.** `troubelshoot` still finds "Obsidian Troubleshooting" (one typo for 6–9 letter words, two for 10+, and one typo in titles already at 5 letters: `Gitub` finds "GitHub"), while scattered subsequences are rejected, so `writing` does not match "Airbyte Checkpointing". Word order never matters: `ai writing` and `writing ai` return the same list.
 - **Why ranked here (Ctrl+R).** Every row can show its tier, which field each word hit (exact, prefix or fuzzy, with the quality), and every score component. When a result surprises you, one key shows the reason:
 
   ![why ranked](docs/images/why-ranked.webp)
@@ -68,7 +68,7 @@ Commands (bind them to hotkeys in Settings → Hotkeys):
 | Search (resume last) | reopens it with the last query |
 | Rebuild index | drops the note cache and reads every file again |
 
-Query syntax: plain words are AND-ed and match by prefix and with typo tolerance; `"exact phrase"`, `#tag`, `path:folder`, `-exclude`. No input debounce: every keystroke is a query.
+Query syntax: plain words are AND-ed and match by prefix and with typo tolerance; `"exact phrase"`, `#tag`, `path:folder`, `-exclude`. A `#tag` no note carries, or a `-word` that would leave nothing, is searched as a plain word, so pasting a title such as `Newsletter #115` works. No input debounce: every keystroke is a query.
 
 An empty query lists recently opened notes. Rows show which field matched (title, alias, heading, content, link) with highlights, a preview on the right, and an `N similar` pill when near-duplicates exist.
 
@@ -114,7 +114,7 @@ Each query word (and each quoted phrase) must match, except optional words (`a a
 4. **partial**: some words missing but one in the title or an alias (shown when the other tiers have few hits)
 5. **semantic**: Smart Connections neighbours of the query, when enabled
 
-Within a tier the score adds the field weights × match quality (exact 1.0, prefix by length ratio, fuzzy below that), shrinks it for title words the query left unmatched, and adds proximity (words close together or in one section), backlinks, frecency (opens over the last 30 days, decaying) and a sticky bonus for a note opened three times from the same query. Downranked folders and very short notes are multiplied down. Ctrl+R shows every part for each row.
+Within a tier the score adds the field weights × match quality (exact 1.0, prefix by length ratio, fuzzy below that), shrinks it for title words the query left unmatched, and adds proximity (words close together or in one section), backlinks, a bonus when the title is exactly the query's words, frecency (opens over the last 30 days, decaying) and a sticky bonus for a note opened three times from the same query. Downranked folders and very short notes are multiplied down. Ctrl+R shows every part for each row.
 
 ### Smart Connections
 

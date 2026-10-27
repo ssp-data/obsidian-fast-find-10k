@@ -96,6 +96,48 @@ impl Query {
         }
     }
 
+    /// Appends an already-normalized word as a plain term.
+    fn push_norm_word(&mut self, word: &str) {
+        let parts = tokenize_query_term(word);
+        if !parts.is_empty() {
+            self.terms.push(Term { raw: word.to_string(), norm: normalize(word), parts, has_upper: false });
+        }
+        self.normalized = self.terms.iter().map(|t| t.norm.as_str()).collect::<Vec<_>>().join(" ");
+    }
+
+    /// A copy with every tag for which `is_tag` is false searched as a word instead (`#115` in
+    /// a title is not a tag filter when no note carries that tag). None when nothing changes.
+    pub fn with_tags_as_words(&self, is_tag: impl Fn(&str) -> bool) -> Option<Query> {
+        if self.tags.iter().all(|t| is_tag(t)) {
+            return None;
+        }
+        let mut q = self.clone();
+        q.tags.clear();
+        for t in &self.tags {
+            if is_tag(t) {
+                q.tags.push(t.clone());
+            } else {
+                q.push_norm_word(t);
+            }
+        }
+        Some(q)
+    }
+
+    /// A copy with the exclusions searched as words (`KW13 -Marktleistung` when excluding
+    /// leaves nothing). None when there are no exclusions or nothing else to search (`-note`
+    /// alone means "everything without note", never "note").
+    pub fn with_excludes_as_words(&self) -> Option<Query> {
+        if self.excludes.is_empty() || (self.terms.is_empty() && self.phrases.is_empty()) {
+            return None;
+        }
+        let mut q = self.clone();
+        q.excludes.clear();
+        for e in &self.excludes {
+            q.push_norm_word(e);
+        }
+        Some(q)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.terms.is_empty() && self.phrases.is_empty() && !self.has_filters()
     }

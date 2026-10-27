@@ -408,7 +408,14 @@ pub fn match_term_scoped(
     let allow_prefix = |p: &str| multi_term || p.chars().count() >= 4;
     let needle_chars = term.norm.chars().count();
 
-    let mut matcher = typo_budget(len, fuzzy).map(|typos| {
+    // Five typed letters get one typo, but only against Title/Alias strings: `Gitub` → "GitHub"
+    // without fuzzy noise from headings (docs/recall.md fix 3).
+    let (budget, title_only) = match typo_budget(len, fuzzy) {
+        Some(t) => (Some(t), false),
+        None if fuzzy.enabled && len == 5 => (Some(1), true),
+        None => (None, false),
+    };
+    let mut matcher = budget.map(|typos| {
         let config = Config { max_typos: Some(typos), sort: SortStrategy::Unsorted, ..Default::default() };
         let mut m = Matcher::new(term.norm.as_str(), &config);
         let self_score = m.match_list(&[term.norm.as_str()]).first().map_or(0, |x| x.score);
@@ -459,7 +466,8 @@ pub fn match_term_scoped(
             }
         }
 
-        let fuzzy_here = has_strings(field).then_some(()).and(matcher.as_mut());
+        let fuzzy_field = has_strings(field) && (!title_only || matches!(field, Field::Title | Field::Alias));
+        let fuzzy_here = fuzzy_field.then_some(()).and(matcher.as_mut());
         let matched: HashSet<DocId> =
             if fuzzy_here.is_some() { hits.keys().copied().collect() } else { HashSet::new() };
         out.extend(hits.into_iter().map(|(doc, acc)| finish(index, field, doc, acc)));

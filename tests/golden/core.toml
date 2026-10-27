@@ -133,3 +133,35 @@ expect_tier = 1
 query = "obsidina search"
 expect_in_top3 = ["Obsidian\u00A0Search (lots of files)"]
 expect_tier = 1
+
+# ---- docs/recall.md fixes (owner-approved 2026-10-27) ----
+
+# Fix 1: `#115` is a word when no note carries that tag.
+[[case]]
+query = "newsletter #115"
+expect_top = "Newsletter #115"
+expect_tier = 1
+
+# Fix 1: `-Marktleistung` is a word when excluding it leaves no full hit.
+[[case]]
+query = "KW13 -Marktleistung"
+expect_top = "KW13 -Marktleistung"
+expect_tier = 1
+
+# Fix 2: dotted compounds; `ai` alone never satisfies `jasper.ai`.
+[[case]]
+query = "jasper.ai"
+expect_top = "Jasper.ai"
+must_not_appear = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers", "👉🏻 Data Engineering"]
+
+# Fix 3: five typed letters, one typo, title only.
+[[case]]
+query = "gitub"
+expect_top = "GitHub"
+expect_tier = 1
+
+# Fix 4: the title equal to the whole query beats compound titles with backlinks (DataOps has 5).
+[[case]]
+query = "data"
+expect_top = "data"
+expect_in_top = ["DataOps"]

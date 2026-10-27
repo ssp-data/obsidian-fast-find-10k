@@ -12,13 +12,15 @@ pub struct Token {
     pub byte_end: u32,
 }
 
+/// Characters that join a compound word: `data-engineering`, `foo_bar`, `jasper.ai`, `3.5`.
+const JOINERS: [char; 3] = ['-', '_', '.'];
+
 fn is_word_char(c: char) -> bool {
     if c.is_ascii() {
-        return c.is_ascii_alphanumeric() || c == '-' || c == '_';
+        return c.is_ascii_alphanumeric() || JOINERS.contains(&c);
     }
     c.is_alphanumeric()
-        || c == '-'
-        || c == '_'
+        || JOINERS.contains(&c)
         || matches!(
             get_general_category(c),
             GeneralCategory::NonspacingMark | GeneralCategory::SpacingMark
@@ -31,9 +33,9 @@ fn words(raw: &str, out: &mut Vec<(usize, usize)>) {
     let mut start: Option<usize> = None;
     let mut push = |s: usize, e: usize| {
         let w = &raw[s..e];
-        let t = w.trim_start_matches(['-', '_']);
+        let t = w.trim_start_matches(JOINERS);
         let s2 = s + (w.len() - t.len());
-        let t = t.trim_end_matches(['-', '_']);
+        let t = t.trim_end_matches(JOINERS);
         if !t.is_empty() {
             out.push((s2, s2 + t.len()));
         }
@@ -110,10 +112,10 @@ pub fn for_each_token_with(
     };
     for &(ws, we) in spans.iter() {
         let word = &raw[ws..we];
-        // Leaves: hyphen/underscore parts, each further split at camelCase boundaries.
+        // Leaves: hyphen/underscore/dot parts, each further split at camelCase boundaries.
         leaves.clear();
         let mut off = 0;
-        for part in word.split(['-', '_']) {
+        for part in word.split(JOINERS) {
             if !part.is_empty() {
                 camel_pieces(part, ws + off, leaves);
             }
@@ -214,6 +216,17 @@ mod tests {
         for raw in ["Obsidian: Trouble-shoot!", "DataEngineering 10K", "", "--", "Spa\u{308}ti ハ\u{3099}"] {
             assert_eq!(count_tokens(raw), tokenize(raw).len(), "{raw:?}");
         }
+    }
+
+    #[test]
+    fn dot_joins_compounds_like_hyphen() {
+        assert_eq!(texts("jasper.ai 3.5 e.g. end. .start"), ["jasper.ai", "jasper", "ai", "3.5", "3", "5", "e.g", "e", "g", "end", "start"]);
+        assert_eq!(tokenize_query_term("Perplexity.ai"), ["perplexity.ai", "perplexity", "ai"]);
+        // Dotted compounds take one position per leaf, like hyphenated ones.
+        let t = tokenize("a jasper.ai b");
+        let pos: Vec<_> = t.iter().map(|t| (t.text.as_str(), t.pos)).collect();
+        assert_eq!(pos, [("a", 0), ("jasper.ai", 1), ("jasper", 1), ("ai", 2), ("b", 3)]);
+        assert_eq!(count_tokens("x.y.z"), tokenize("x.y.z").len());
     }
 
     #[test]

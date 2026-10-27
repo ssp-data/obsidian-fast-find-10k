@@ -32,6 +32,9 @@ const SECTION_BONUS: f32 = 15.0;
 const TITLE_UNMATCHED_STEP: f32 = 0.15;
 const TITLE_UNMATCHED_FLOOR: f32 = 0.5;
 const BACKLINK_BONUS: f32 = 2.0;
+/// Tier 1, when the title's words are exactly the query's words (any order): `data` → "data"
+/// above "DataOps" and "DataFusion", which also count as fully covered (docs/recall.md fix 4).
+const WHOLE_TITLE_BONUS: f32 = 15.0;
 const SHORT_NOTE_WORDS: u32 = 20;
 const SHORT_NOTE_FACTOR: f32 = 0.8;
 const FRECENCY_WEIGHT: f32 = 20.0;
@@ -673,6 +676,24 @@ fn unmatched_title_words(index: &Index, id: DocId, units: &[Unit], slots: &Slots
         .fold(title, usize::min)
 }
 
+/// The normalized title's words are exactly the query's term words, in any order (no phrases).
+fn whole_title_equal(title_norm: &str, query: &Query) -> bool {
+    if !query.phrases.is_empty() || query.terms.is_empty() {
+        return false;
+    }
+    if title_norm == query.normalized {
+        return true;
+    }
+    let mut a: SmallVec<[&str; 8]> = title_norm.split(is_whitespace_like).filter(|w| !w.is_empty()).collect();
+    if a.len() != query.terms.len() {
+        return false;
+    }
+    let mut b: SmallVec<[&str; 8]> = query.terms.iter().map(|t| t.norm.as_str()).collect();
+    a.sort_unstable();
+    b.sort_unstable();
+    a == b
+}
+
 /// `path_norm` is the doc's cached normalized path; `folders` are pre-normalized. No allocation.
 fn downranked(path_norm: &str, folders: &[String]) -> bool {
     if folders.is_empty() {
@@ -715,7 +736,8 @@ fn score<'a>(
     };
     let fields = raw_fields * title_factor;
     let prox = if tier <= 3 { proximity(units, &slots) } else { 0.0 };
-    let structural = BACKLINK_BONUS * (1.0 + index.backlinks(id) as f32).ln();
+    let whole = tier == 1 && index.title_keys(id).is_some_and(|k| whole_title_equal(&k.norm, query));
+    let structural = BACKLINK_BONUS * (1.0 + index.backlinks(id) as f32).ln() + if whole { WHOLE_TITLE_BONUS } else { 0.0 };
     let exact_title = units
         .iter()
         .zip(&slots)
@@ -753,9 +775,30 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
     if query.is_empty() {
         return recent(index, opts, extras);
     }
+    // `#115` is a tag filter only when some note carries that tag; otherwise it is the word
+    // `115` (titles such as "Newsletter #115"; docs/recall.md fix 1).
+    let as_words = query.with_tags_as_words(|t| !index.docs_with_tag(t).is_empty());
+    let query = as_words.as_ref().unwrap_or(query);
+    let (ranked, full) = rank_query(index, query, cfg, opts, extras);
+    if full {
+        return ranked;
+    }
+    // `-NET` excludes only when something is left; a query whose exclusions leave no tier 1–3
+    // hit is retried with them as words ("KW13 -Marktleistung"; docs/recall.md fix 1).
+    if let Some(q) = query.with_excludes_as_words() {
+        let (retry, full) = rank_query(index, &q, cfg, opts, extras);
+        if full {
+            return retry;
+        }
+    }
+    ranked
+}
+
+/// `rank` for one parsed query; the flag says whether any candidate reached tiers 1–3.
+fn rank_query(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, extras: &Extras) -> (Ranked, bool) {
     let units = build_units(index, query, cfg, opts.mode == Mode::FilesOnly);
     if units.is_empty() && !query.has_filters() {
-        return Ranked { hits: Vec::new(), candidates: 0 };
+        return (Ranked { hits: Vec::new(), candidates: 0 }, false);
     }
     let mut cands = candidates(index, &units);
     apply_filters(index, query, &mut cands);
@@ -782,6 +825,7 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
         scored.extend(ghost_scored(index, gs, &ghost_units, ctx));
     }
     let total = scored.len();
+    let any_full = scored.iter().any(|s| s.tier <= 3);
 
     let show_partial = match cfg.partial {
         PartialMode::Always => true,
@@ -793,7 +837,7 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
     }
 
     if opts.limit == 0 {
-        return Ranked { hits: Vec::new(), candidates: total };
+        return (Ranked { hits: Vec::new(), candidates: total }, any_full);
     }
     if scored.len() > opts.limit {
         scored.select_nth_unstable_by(opts.limit - 1, cmp_scored);
@@ -807,7 +851,7 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
             _ => page_hit(index, s, &units, cfg, opts),
         })
         .collect();
-    Ranked { hits, candidates: total }
+    (Ranked { hits, candidates: total }, any_full)
 }
 
 /// Ghosts take part in plain term/phrase queries only: tag and path filters never match them.
