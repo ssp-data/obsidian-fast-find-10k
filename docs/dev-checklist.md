@@ -400,8 +400,10 @@ loaded):
 
 ## Release
 
+`make release VERSION=x.y.z` does steps 1–4 (clean tree and `gh` required); by hand:
+
 1. Bump `version` in `manifest.json` (repo root) and `plugin/package.json`; add the version → `minAppVersion` line to `versions.json`.
-2. `bash scripts/build-wasm.sh && cd plugin && npm ci && npm run build` → `plugin/dist/{main.js,manifest.json,styles.css}`.
+2. `make build` → `plugin/dist/{main.js,manifest.json,styles.css}`.
 3. Commit, tag the version without a `v` prefix (`git tag 0.1.0 && git push --tags`).
 4. GitHub release named after the tag with the three files from `plugin/dist` attached as individual assets (not zipped).
 5. Test on desktop and mobile through BRAT (`ssp-data/obsidian-fast-find-10k`), then submit to the community plugin list (<https://github.com/obsidianmd/obsidian-releases>): `manifest.json` and `versions.json` are in the repo root for that reason.

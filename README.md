@@ -48,7 +48,13 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 Until the plugin is in the community list, install a release with [BRAT](https://github.com/TfTHacker/obsidian42-brat) (add `ssp-data/obsidian-fast-find-10k` as a beta plugin; this also works on mobile), or build it yourself:
 
 ```sh
-bash scripts/build-wasm.sh                  # needs the wasm32-unknown-unknown target and wasm-bindgen-cli 0.2.128
+make install VAULT=<vault>                  # builds wasm + plugin and symlinks plugin/dist into the vault
+```
+
+That needs Rust with the `wasm32-unknown-unknown` target, `wasm-bindgen-cli` 0.2.128 and Node. Without make:
+
+```sh
+bash scripts/build-wasm.sh
 cd plugin && npm ci && npm run build        # dist/main.js (wasm and worker embedded), manifest.json, styles.css
 V=<vault>/.obsidian/plugins/fast-find-10k
 mkdir -p $V && ln -sf $PWD/dist/main.js $PWD/dist/manifest.json $PWD/dist/styles.css $V/
@@ -223,6 +229,7 @@ On a 9,385-note / 27 MB vault: warm start about 1.2–1.4 s to fully indexed (se
 
 ## Development
 
+- `make build` (wasm + plugin), `make test` (Rust, golden, typo recall, plugin), `make install VAULT=…`, `make recall VAULT=…`, `make release VERSION=x.y.z` (bumps the version files, builds, commits, tags and creates the GitHub release with `gh`)
 - Build: `cargo build --release` (CLI binary: `target/release/ff10k`)
 - Test: `cargo test --workspace`; plugin: `cd plugin && npm test`
 - Golden: `cargo test -p ff10k-core --features golden --test golden`, or `ff10k golden <vault> <golden.toml>` (exit 1 on failures)
