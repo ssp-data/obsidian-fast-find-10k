@@ -252,7 +252,11 @@ export class FastFindModal extends Modal {
 		this.resultsEl = body.createDiv({ cls: 'ff10k-results' });
 		const right = body.createDiv({ cls: 'ff10k-right' });
 		this.previewEl = right.createDiv({ cls: 'ff10k-preview' });
-		this.preview = new Preview(this.previewEl);
+		this.preview = new Preview(this.previewEl, (target, from) => {
+			if (/^https?:\/\//i.test(target)) return target;
+			const file = this.app.metadataCache.getFirstLinkpathDest(decodeURIComponent(target), from);
+			return file ? this.app.vault.getResourcePath(file) : null;
+		});
 		this.similar = new SimilarPanel(right.createDiv({ cls: 'ff10k-similar' }));
 		this.similar.onOpen((path) => void this.openPath(path));
 		this.resultsEl.addEventListener('scroll', () => {

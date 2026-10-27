@@ -325,6 +325,15 @@
 	color: var(--color-purple);
 }
 
+.ff10k-preview-img {
+	display: block;
+	max-width: 100%;
+	max-height: 260px;
+	margin: var(--size-4-1) 0;
+	border-radius: var(--radius-s);
+	object-fit: contain;
+}
+
 .ff10k-preview mark {
 	background: var(--text-highlight-bg);
 	color: inherit;

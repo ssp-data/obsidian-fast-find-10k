@@ -177,13 +177,34 @@ export function segmentLine(text: string, terms: string[], budget: Budget, plain
 	return out;
 }
 
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
+
+/** The image target when the whole line is one image embed (`![[pic.png|300]]`, `![alt](pic.png)`,
+ * `![alt](https://…/pic.png)`); null otherwise. The preview shows such lines as a picture. */
+export function imageEmbed(line: string): string | null {
+	const t = line.trim();
+	let m = /^!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/.exec(t);
+	if (m) return IMAGE_EXT.test(m[1].trim()) ? m[1].trim() : null;
+	m = /^!\[[^\]]*\]\(<?([^)>\s]+)>?(?:\s+"[^"]*")?\)$/.exec(t);
+	if (m) {
+		const target = decodeURIComponent(m[1]).replace(/[?#].*$/, '');
+		return IMAGE_EXT.test(target) ? m[1] : null;
+	}
+	return null;
+}
+
+/** Resolves an image target of a note to a URL the webview can load (null: unknown file). */
+export type ImageResolver = (target: string, fromPath: string) => string | null;
+
 export class Preview {
 	private readonly el: HTMLElement;
 	private readonly texts = new Map<string, string | null>();
+	private readonly resolveImage: ImageResolver | null;
 	private token = 0;
 
-	constructor(el: HTMLElement) {
+	constructor(el: HTMLElement, resolveImage: ImageResolver | null = null) {
 		this.el = el;
+		this.resolveImage = resolveImage;
 	}
 
 	/** Renders `hit`'s note; a completion for an older call (selection moved on) is dropped. */
@@ -238,6 +259,18 @@ export class Preview {
 			const div = frag.createDiv({ cls: line.kind === 'text' ? 'ff10k-line' : `ff10k-line ff10k-${line.kind}` });
 			if (i >= lazyFrom) div.addClass('ff10k-lazy');
 			if (line.text === '') div.appendText('\u200b'); // keep empty lines one line tall
+			const image = line.kind === 'text' && this.resolveImage ? imageEmbed(line.text) : null;
+			const src = image ? this.resolveImage!(image, hit.path) : null;
+			if (src) {
+				// one lazy <img> per embed line; a file that fails to load falls back to the text
+				const img = div.createEl('img', { cls: 'ff10k-preview-img', attr: { src, loading: 'lazy', alt: image ?? '' } });
+				img.addEventListener('error', () => {
+					img.remove();
+					div.setText(line.text);
+				});
+				if (i === anchor && anchor !== markLine) target = div;
+				continue;
+			}
 			for (const s of segs[i]) {
 				const host = s.style ? div.createSpan({ cls: `ff10k-${s.style}` }) : div;
 				if (s.mark) {

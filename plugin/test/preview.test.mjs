@@ -19,7 +19,18 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { classifyLines, segmentLine, queryTerms, MAX_LINE_CHARS, MAX_LINE_STYLES } = await load('src/ui/preview.ts');
+const { classifyLines, segmentLine, queryTerms, imageEmbed, MAX_LINE_CHARS, MAX_LINE_STYLES } = await load('src/ui/preview.ts');
+
+test('image embeds: a whole-line wiki or markdown image yields its target, anything else null', () => {
+	assert.equal(imageEmbed('![[pic.png]]'), 'pic.png');
+	assert.equal(imageEmbed('  ![[folder/Pic Name.JPG|300]]  '), 'folder/Pic Name.JPG');
+	assert.equal(imageEmbed('![alt text](qecdqiiybk.png)'), 'qecdqiiybk.png');
+	assert.equal(imageEmbed('![](https://example.com/a/b.webp?x=1 "title")'), 'https://example.com/a/b.webp?x=1');
+	assert.equal(imageEmbed('![[note]]'), null);
+	assert.equal(imageEmbed('![[doc.pdf]]'), null);
+	assert.equal(imageEmbed('see ![[pic.png]] here'), null);
+	assert.equal(imageEmbed('[link](pic.png)'), null);
+});
 const { reasonLabel } = await load('src/ui/similar.ts');
 
 const seg = (text, style = null, mark = false) => ({ text, style, mark });

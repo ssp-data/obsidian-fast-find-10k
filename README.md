@@ -3,7 +3,8 @@
 A fast note finder for large vaults (10k+ notes). A Rust search engine compiled to WebAssembly runs in a worker and powers instant fuzzy, field-weighted, frecency-ranked search with optional semantic "similar notes".
 
 I've built for my dream search for Obsidian based on fzf/Telescope form Neovim for preview style and fuzzy search, Omnisearch for smarter search, and Smart Connections for similar notes, all based on Rust WASM to be super fast. This is how it looks:
-![image](docs/images/find-fast-preview.webp)
+![image](docs/images/find-fast-preview.png)
+
 
 ## Origin Story
 
@@ -36,7 +37,7 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 - **Similar notes, to avoid creating a note twice.** The panel bottom right lists near-duplicates of the selected result, and every row carries an `N similar` pill. Similarity comes from title overlap, plus [Smart Connections](#smart-connections) embeddings when that plugin is installed. Before creating a note with Shift+Enter, the create guard shows the closest existing notes first ("Already have?"). This is the feature that stops a vault with no folders from collecting "AI", "AI and Data Engineering" and "AI for Data Engineers" three times over.
 - **Create when nothing exists.** Shift+Enter creates a note named after the query (Mod+Shift+Enter in a new tab). Unresolved `[[links]]` show as ghost rows (`[ghost x2]` = linked from two notes) and can be created the same way.
 - **Files only (Ctrl+F)** switches to titles, aliases and paths, as a Quick Switcher replacement.
-- **Telescope layout with preview.** Results left, the note preview right with the matches highlighted, vim keys to move (Ctrl+J/K) and to scroll the preview (Shift+J/K). Enter opens, Mod+Enter in a new tab, Mod+Alt+Enter in a split, Alt+Shift+Enter opens all shown results (10 or fewer).
+- **Telescope layout with preview.** Results left, the note preview right with the matches highlighted (plain text for speed; embedded images are shown as pictures), vim keys to move (Ctrl+J/K) and to scroll the preview (Shift+J/K). Enter opens, Mod+Enter in a new tab, Mod+Alt+Enter in a split, Alt+Shift+Enter opens all shown results (10 or fewer).
 - **Query syntax** for narrowing: `"exact phrase"`, `#tag`, `path:folder`, `-exclude`. Optional words (`a an the of to in on i` by default) never exclude a note, and abbreviations expand (`oss` → "open source"), both editable in the settings.
 - **Respects your vault setup.** Obsidian's "Excluded files" are never indexed, you can add ignored globs, and folders such as an archive can be downranked instead of hidden.
 - **Semantic results** through Smart Connections embeddings, as a separate tier below the text matches: on by default for every query (a query embedding takes a few milliseconds), or on demand with Ctrl+S.
