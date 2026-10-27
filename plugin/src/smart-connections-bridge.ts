@@ -3,6 +3,7 @@
 // failure logs one warning per kind and turns the bridge off until the next modal open.
 
 import type { App } from 'obsidian';
+import { debugLog } from './debug';
 import type { EngineClient } from './engine-client';
 import type { FastFindSettings } from './settings';
 
@@ -242,7 +243,7 @@ export class SmartConnectionsBridge {
 		}
 		this.vectorsLoaded = true;
 		this.lastFingerprint = fp;
-		if (this.settings.logTimings) console.log(`[ff10k] vectors: ${packed.paths.length} notes (dims ${dims}, skipped ${packed.skipped})`);
+		debugLog(`vectors: ${packed.paths.length} notes (dims ${dims}, skipped ${packed.skipped})`);
 		return true;
 	}
 

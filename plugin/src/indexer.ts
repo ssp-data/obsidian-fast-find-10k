@@ -5,6 +5,7 @@ import { type App, type EventRef, type TAbstractFile, TFile } from 'obsidian';
 import type { NoteCache, NoteRow } from './cache';
 import type { EngineClient } from './engine-client';
 import type { DocInput } from './protocol';
+import { debugLog } from './debug';
 import type { FastFindSettings } from './settings';
 
 export interface IndexStatus {
@@ -68,7 +69,7 @@ export class Indexer {
 		private readonly app: App,
 		private readonly engine: EngineClient,
 		private readonly cache: NoteCache,
-		private readonly settings: Pick<FastFindSettings, 'ignoredGlobs' | 'logTimings'>,
+		settings: Pick<FastFindSettings, 'ignoredGlobs'>,
 	) {
 		this.globs = settings.ignoredGlobs.map(globToRegExp);
 	}
@@ -194,7 +195,7 @@ export class Indexer {
 		const docs = await this.engine.stats();
 		const elapsedMs = Math.round(performance.now() - t0);
 		this.setStatus({ indexed: docs, total: files.length, done: true, elapsedMs });
-		if (this.settings.logTimings) console.log(`[ff10k] indexed ${docs} docs in ${elapsedMs} ms (warm: ${fromCache} from cache, ${changed.length} re-read)`);
+		debugLog(`indexed ${docs} docs in ${elapsedMs} ms (warm: ${fromCache} from cache, ${changed.length} re-read)`);
 	}
 
 	/** Reads the files, sends them to the engine and stores them in the cache.

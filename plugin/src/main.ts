@@ -1,6 +1,7 @@
 import { Notice, Platform, Plugin } from 'obsidian';
 import workerSource from 'virtual:worker-source';
 import { NoteCache } from './cache';
+import { setDebugLogging } from './debug';
 import { EngineClient } from './engine-client';
 import { FrecencyTracker } from './frecency';
 import { Indexer } from './indexer';
@@ -33,6 +34,7 @@ export default class FastFindPlugin extends Plugin {
 		this.settings = mergeSettings(await this.loadData());
 		if (migrateKeymap(this.settings.keymap, Platform.isMacOS)) await this.saveSettings();
 		this.languagesActive = this.settings.languages.length > 0;
+		setDebugLogging(this.settings.logTimings);
 
 		const engine = new EngineClient(workerSource);
 		this.engine = engine;
@@ -55,6 +57,7 @@ export default class FastFindPlugin extends Plugin {
 	async saveSettings(): Promise<void> {
 		window.clearTimeout(this.saveTimer);
 		this.saveTimer = 0;
+		setDebugLogging(this.settings.logTimings);
 		await this.saveData(this.settings);
 	}
 
@@ -154,7 +157,7 @@ export default class FastFindPlugin extends Plugin {
 				}),
 			);
 		});
-		this.stopGhosts = watchGhosts(this.app, engine, indexer, () => this.settings.logTimings);
+		this.stopGhosts = watchGhosts(this.app, engine, indexer);
 		indexer.start().catch((e: unknown) => console.error('Fast Find 10K: indexing failed', e));
 		// Smart Connections loads its env late; the bridge polls for it and then hands over the vectors
 		this.app.workspace.onLayoutReady(() => this.bridge?.start());

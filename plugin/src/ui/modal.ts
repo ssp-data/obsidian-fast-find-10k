@@ -4,6 +4,7 @@
 import { type App, Modal, Notice, Platform, Scope, TFile, type WorkspaceLeaf } from 'obsidian';
 import { createGhostNote, createNote, ghostNotePath, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
+import { debugLog } from '../debug';
 import type { Hit, Mode, SearchResponse, SemanticHit } from '../protocol';
 import type { EngineClient } from '../engine-client';
 import { keyLabel as keyLabelFor, parseKeySpec } from '../keys';
@@ -335,7 +336,7 @@ export class FastFindModal extends Modal {
 				const t0 = performance.now();
 				this.render(res);
 				const paintMs = performance.now() - t0;
-				if (this.plugin.settings.logTimings) console.log('[ff10k] search', query, res.elapsedUs, 'us', paintMs);
+				debugLog('search', query, res.elapsedUs, 'us', paintMs);
 				// after the lexical paint, never before it
 				void this.addSemantic(this.semanticForced === query);
 			},

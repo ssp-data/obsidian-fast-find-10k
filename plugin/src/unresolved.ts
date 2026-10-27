@@ -2,6 +2,7 @@
 // engine, which shows them as tier-1 rows until the note exists.
 
 import type { App, EventRef } from 'obsidian';
+import { debugLog } from './debug';
 import type { EngineClient } from './engine-client';
 import type { Indexer } from './indexer';
 import type { Ghost } from './protocol';
@@ -56,13 +57,13 @@ export function throttle(fn: () => void, ms: number): { call(): void; cancel(): 
 
 /** Keeps the engine's ghosts current: after each indexer run and on metadata `resolved`
  * (at most every 2 s). Returns the dispose function. */
-export function watchGhosts(app: App, engine: Pick<EngineClient, 'setGhosts'>, indexer: Indexer, log: () => boolean = () => false): () => void {
+export function watchGhosts(app: App, engine: Pick<EngineClient, 'setGhosts'>, indexer: Indexer): () => void {
 	let capLogged = false;
 	const refresh = throttle(() => {
 		const ghosts = collectGhosts(app, (p) => indexer.isExcluded(p));
-		if (ghosts.length > MAX_GHOSTS && !capLogged && log()) {
+		if (ghosts.length > MAX_GHOSTS && !capLogged) {
 			capLogged = true;
-			console.log(`[ff10k] ${ghosts.length} unresolved link targets; keeping the ${MAX_GHOSTS} most linked`);
+			debugLog(`${ghosts.length} unresolved link targets; keeping the ${MAX_GHOSTS} most linked`);
 		}
 		engine.setGhosts(ghosts.slice(0, MAX_GHOSTS));
 	}, REFRESH_MS);
