@@ -2,12 +2,12 @@
 
 A fast note finder for large vaults (10k+ notes). A Rust search engine compiled to WebAssembly runs in a worker and powers instant fuzzy, field-weighted, frecency-ranked search with optional semantic "similar notes".
 
+I've built for my dream search for Obsidian based on fzf/Telescope form Neovim for preview style and fuzzy search, Omnisearch for smarter search, and Smart Connections for similar notes, all based on Rust WASM to be super fast. This is how it looks:
+
 This is how it looks:
 ![image](docs/images/find-fast-preview.webp)
 
 ## Origin Story
-
-I've built my dream search for [[Obsidian]] based on [[fzf]]/[Telescope](https://github.com/nvim-telescope/telescope.nvim) form Neovim for preview style and fuzzy search, Omnisearch for smarter search, and [[Obsidian Smart Connections|Smart Connections]] for similar notes, all based on Rust [[WebAssembly (WASM)|WASM]] to be super fast. This is how it looks:
 
 I used Omnisearch for 5+ yearso, plus, and I ran into the 10k limitation of Obsidian. luckly Kepano, the CEO Obsidian [quickly solved](https://bsky.app/profile/stephango.com/post/3mvljvuhwks2p). The problem was that wikilinks starting with `[[` didn't show notes that existed in the vault. I knew it, sometimes they showed, sometimes they didn't, see the video [here]().
 
@@ -28,7 +28,7 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 
 - **Fast on big vaults.** The index is a Rust engine compiled to WebAssembly, running in a Web Worker. On the 9,385-note / 27 MB test vault the finder is searchable about 0.3 s after Obsidian loads (fully indexed after 1.2–1.4 s), and a query takes 4–18 ms inside Obsidian (1–8 ms native). There is no input debounce: every keystroke is a query, and the screen is repainted in under 30 ms. Notes are cached in IndexedDB, so a reload re-indexes only what changed; an edit is picked up within half a second.
 - **Accurate ranking in tiers.** A note that matches every word in its title or an alias always ranks above one that matches only in a heading, which ranks above body-only matches. Within a tier, field weights, prefix and typo quality, how many title words the query left unmatched, word proximity, backlinks and your own opening history (frecency) decide the order. See [How ranking works](#how-ranking-works).
-- **Fuzzy, but guarded.** `troubelshoot` still finds "Obsidian Troubleshooting" (one typo for 6–9 letter words, two for 10+, and one typo in titles already at 5 letters: `Gitub` finds "GitHub"), while scattered subsequences are rejected, so `writing` does not match "Airbyte Checkpointing". Word order never matters: `ai writing` and `writing ai` return the same list.
+- **Fuzzy, but guarded.** `troubelshoot` still finds "Obsidian Troubleshooting" (one typo for 6–9 letter words, two for 10+, and one typo in titles already at 5 letters: `Gitub` finds "GitHub"), while scattered subsequences are rejected, so `writing` does not match "Airbyte Checkpointing", and a typo never borrows a letter from the next word, so `invoice` does not match "Brand Voice" (`n` + `voice`); a dropped space still works: `database` finds "Data Base Design". Word order never matters: `ai writing` and `writing ai` return the same list.
 - **Why ranked here (Ctrl+R).** Every row can show its tier, which field each word hit (exact, prefix or fuzzy, with the quality), and every score component. When a result surprises you, one key shows the reason:
 
   ![why ranked](docs/images/why-ranked.webp)

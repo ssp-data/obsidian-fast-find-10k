@@ -167,9 +167,11 @@ query = "data"
 expect_top = "data"
 expect_in_top = ["DataOps"]
 
-# Exact/prefix hits sort above fuzzy hits within a tier (owner ruling 2026-10-27): `invoice`
-# fuzzy-matches "Brand Voice" (short title, few unmatched words) but the exact title match wins.
+# Exact/prefix hits sort above fuzzy hits within a tier (owner ruling 2026-10-27). "Brand Voice"
+# (`n` + `voice`) is not a typo of `invoice` at all: a fuzzy alignment may span words only when
+# each touched word carries 3+ matched letters.
 [[case]]
 query = "invoice"
 expect_top = "Sales Invoice Process and Cashflow Notes"
 expect_tier = 1
+must_not_appear = ["Brand Voice"]

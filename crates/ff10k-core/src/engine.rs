@@ -1220,6 +1220,7 @@ mod tests {
     #[test]
     fn exact_and_prefix_hits_rank_above_fuzzy_hits_in_the_same_tier() {
         let mut e = Engine::new();
+        e.upsert("Invoce Template.md", 0.0, "a typo in the title, with enough words to pass the short note rule, words words words words words");
         e.upsert("Brand Voice.md", 0.0, "tone of voice guidelines, with enough words to pass the short note rule, words words words words");
         e.upsert("Sales Invoice Process and Cashflow Notes.md", 0.0, "how invoices are sent, with enough words to pass the short note rule, words words words words");
         e.upsert("Invoices Overview.md", 0.0, "all invoices, with enough words to pass the short note rule, words words words words words words");
@@ -1227,14 +1228,16 @@ mod tests {
         let t = titles(&r);
         let pos = |name: &str| t.iter().position(|x| *x == name).unwrap_or(usize::MAX);
         // Without the rule the short fuzzy title scores higher (one unmatched word vs four).
-        let voice = hit(&r, "Brand Voice").unwrap();
-        assert_eq!(voice.debug.as_ref().unwrap().per_term[0].2, crate::matcher::MatchKind::Fuzzy);
-        assert!(pos("Sales Invoice Process and Cashflow Notes") < pos("Brand Voice"), "{t:?}");
-        assert!(pos("Invoices Overview") < pos("Brand Voice"), "{t:?}");
-        assert_eq!(voice.tier, 1);
+        let typo = hit(&r, "Invoce Template").unwrap();
+        assert_eq!(typo.debug.as_ref().unwrap().per_term[0].2, crate::matcher::MatchKind::Fuzzy);
+        assert!(pos("Sales Invoice Process and Cashflow Notes") < pos("Invoce Template"), "{t:?}");
+        assert!(pos("Invoices Overview") < pos("Invoce Template"), "{t:?}");
+        assert_eq!(typo.tier, 1);
+        // `n` + `voice` is not a typo of `invoice`: no hit at all.
+        assert!(hit(&r, "Brand Voice").is_none(), "{t:?}");
         // A typo in the query leaves every hit fuzzy: the score order is untouched.
         let r = e.search("invoce", &opts());
-        assert!(hit(&r, "Brand Voice").is_some() || hit(&r, "Invoices Overview").is_some());
+        assert!(hit(&r, "Invoce Template").is_some() || hit(&r, "Invoices Overview").is_some());
     }
 
     #[test]

@@ -263,6 +263,38 @@ fn finish(index: &Index, field: Field, doc: DocId, mut acc: Acc) -> TermHit {
 
 /// Minimum `score / self_score` of a fuzzy hit (spec §16).
 const MIN_FUZZY_RATIO: f32 = 0.65;
+/// A fuzzy alignment spanning several words needs this many matched chars in each of them.
+const MIN_CHARS_PER_WORD: usize = 3;
+
+/// False when the matched char `indices` of `s` touch more than one word and some touched word
+/// holds fewer than `MIN_CHARS_PER_WORD` of them (words: runs of alphanumeric chars).
+fn words_contribute_enough(s: &str, indices: &[u32]) -> bool {
+    // `indices` are byte offsets (see `byte_ranges`): one entry per byte.
+    let mut word_of: Vec<u32> = Vec::with_capacity(s.len());
+    let (mut word, mut prev_alnum) = (0u32, false);
+    for c in s.chars() {
+        let alnum = c.is_alphanumeric();
+        if alnum && !prev_alnum {
+            word += 1;
+        }
+        for _ in 0..c.len_utf8() {
+            word_of.push(if alnum { word } else { 0 });
+        }
+        prev_alnum = alnum;
+    }
+    let mut counts: SmallVec<[(u32, usize); 4]> = SmallVec::new();
+    for &i in indices {
+        let Some(&w) = word_of.get(i as usize) else { continue };
+        if w == 0 {
+            continue;
+        }
+        match counts.iter_mut().find(|(id, _)| *id == w) {
+            Some(e) => e.1 += 1,
+            None => counts.push((w, 1)),
+        }
+    }
+    counts.len() <= 1 || counts.iter().all(|&(_, n)| n >= MIN_CHARS_PER_WORD)
+}
 
 /// frizbee match indices are byte offsets of matched bytes; widen each to its whole char.
 /// Returns the merged char ranges and the number of distinct matched chars.
@@ -304,6 +336,13 @@ impl FuzzyRules {
         if ratio < MIN_FUZZY_RATIO || matched_chars + self.typos < self.needle_chars || span > self.max_span {
             return None;
         }
+        // A typo stays inside one word: an alignment over several words is only a match when
+        // every touched word contributes MIN_CHARS_PER_WORD matched chars (`database` →
+        // "data base design"), never when it borrows a letter from a neighbour (`invoice` →
+        // "brand voice": `n` + `voice`). Owner report 2026-10-27.
+        if !words_contribute_enough(s, indices) {
+            return None;
+        }
         Some((ratio, char_ranges))
     }
 
@@ -327,11 +366,17 @@ impl FuzzyRules {
                 continue;
             }
             let end = chars.get(i + self.max_span).map_or(s.len(), |x| x.0);
-            if b == 0 && end == s.len() {
-                continue; // the whole string, already judged
+            // The word alone as well: frizbee's best alignment of a wider window may borrow a
+            // letter from the next word (`obsidain` → "obsidi" + `a` + `n` of "notes"), which
+            // `judge` rejects, while the in-word 1-typo alignment passes.
+            let word_end = chars[i..].iter().find(|x| !x.1.is_alphanumeric()).map_or(s.len(), |x| x.0);
+            for e in [end, word_end] {
+                if (b == 0 && e == s.len()) || starts.last().is_some_and(|&l| l == b && windows.last().is_some_and(|w| w.len() == e - b)) {
+                    continue; // the whole string (already judged) or a duplicate window
+                }
+                starts.push(b);
+                windows.push(&s[b..e]);
             }
-            starts.push(b);
-            windows.push(&s[b..end]);
         }
         // Scores first (cheap); indices only for the windows whose score can pass.
         let min_score = MIN_FUZZY_RATIO * self.self_score;
@@ -530,6 +575,36 @@ mod tests {
     use crate::query::Query;
 
     const NORMAL: FuzzyLevel = FuzzyLevel { enabled: true, loose: false };
+
+    #[test]
+    fn fuzzy_match_may_not_borrow_a_letter_from_a_neighbour_word() {
+        let mut index = Index::new();
+        for (path, text) in [
+            ("Brand Voice of Airbyte.md", "tone"),
+            ("My Writing Voice.md", "tone"),
+            ("Data Base Design.md", "schema"),
+            ("Invoce Template.md", "typo in the title"),
+        ] {
+            index.upsert(extract(path, text, 0.0));
+        }
+        let titles = |q: &str| -> Vec<String> {
+            let t = &Query::parse(q).terms[0];
+            let mut v: Vec<String> = match_term(&index, t, false, NORMAL)
+                .into_iter()
+                .filter(|h| h.field == Field::Title)
+                .map(|h| index.get(h.doc).unwrap().title.clone())
+                .collect();
+            v.sort();
+            v
+        };
+        // `n` + `voice` and `n` (from writing) + `voice` are not typos of `invoice`.
+        assert_eq!(titles("invoice"), ["Invoce Template"]);
+        // A missing space is fine when both words carry the needle.
+        assert_eq!(titles("database"), ["Data Base Design"]);
+        assert!(words_contribute_enough("data base design", &[0, 1, 2, 3, 5, 6, 7, 8]));
+        assert!(!words_contribute_enough("brand voice", &[3, 6, 7, 8, 9, 10]));
+        assert!(words_contribute_enough("voice", &[1, 2, 3, 4]));
+    }
 
     fn ix() -> Index {
         let mut ix = Index::new();
