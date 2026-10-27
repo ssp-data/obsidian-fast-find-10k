@@ -68,7 +68,7 @@ release: check-clean
 	node scripts/bump-version.mjs "$(VERSION)" "$(MIN_APP)"
 	$(MAKE) build
 	git add manifest.json versions.json $(PLUGIN_DIR)/package.json $(PLUGIN_DIR)/package-lock.json
-	git commit -m "release $(VERSION)"
+	@git diff --quiet --cached && echo "version files already at $(VERSION), nothing to commit" || git commit -m "release $(VERSION)"
 	git tag -a "$(VERSION)" -m "Fast Find 10K $(VERSION)"
 	git push && git push origin "$(VERSION)"
 	gh release create "$(VERSION)" $(ASSETS) --title "$(VERSION)" --notes "Fast Find 10K $(VERSION). Install with BRAT (ssp-data/obsidian-fast-find-10k) or copy main.js, manifest.json and styles.css into <vault>/.obsidian/plugins/fast-find/."
