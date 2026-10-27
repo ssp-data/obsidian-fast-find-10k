@@ -1,6 +1,6 @@
 # Dev checklist: build, install, reload, verify
 
-Test vault: a copy of a real vault (`<path>/trouble-tags-testvault` on the owner's machine, 9,385 notes); never the live vault.
+Test vault: `<path>/trouble-tags-testvault` on the owner's machine, never the live vault. About half of it is real documentation markdown pulled in with `bash scripts/make-test-vault.sh <vault>` (DuckDB, dbt, Kubernetes, VS Code docs, the Rust book; permissive licences, about 5,000 notes under `Docs/`), the rest the owner's own test notes.
 Every Obsidian CLI call below targets it explicitly with `vault=trouble-tags-testvault`; Obsidian must be running with that vault open.
 
 ## Build
