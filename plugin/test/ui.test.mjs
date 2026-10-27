@@ -19,7 +19,15 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { mapTitleRanges } = await load('src/ui/results.ts');
+const { mapTitleRanges, shortFolder } = await load('src/ui/results.ts');
+
+test('deep folders keep their first and last two segments', () => {
+	assert.equal(shortFolder('a/b'), 'a/b');
+	assert.equal(shortFolder('a/b/c/d'), 'a/b/c/d');
+	assert.equal(shortFolder('💡 Resources/🌍 Wiki 📂 Files/🔗 Data Engineering/BigData/Conferences'), '💡 Resources/…/BigData/Conferences');
+	assert.equal(shortFolder('a/b/c/d/e', 1), 'a/…/e');
+	assert.equal(shortFolder(''), '');
+});
 
 test('title ranges map case-insensitively onto the display title', () => {
 	assert.deepEqual(mapTitleRanges('Obsidian Troubleshoot', 'obsidian troubleshoot', [[0, 8], [9, 14]]), [[0, 8], [9, 14]]);

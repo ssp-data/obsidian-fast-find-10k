@@ -51,6 +51,14 @@ function folderOf(path: string): string {
 	return i < 0 ? '' : path.slice(0, i);
 }
 
+/** The folder for the row: deep paths keep their first and last two segments (`a/…/y/z`), so
+ * the specific end stays readable when the row is narrow; the full path is in the row tooltip. */
+export function shortFolder(folder: string, keepEnd = 2): string {
+	const parts = folder.split('/');
+	if (parts.length <= keepEnd + 2) return folder;
+	return [parts[0], '…', ...parts.slice(-keepEnd)].join('/');
+}
+
 /** Fills `el` (an empty row div) with the hit's badge, title, context and pills. */
 export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 	el.addClass('ff10k-row');
@@ -78,7 +86,7 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 			appendHighlighted(ex, hit.excerpt.text, hit.excerpt.ranges);
 		}
 		const folder = folderOf(hit.path);
-		if (folder) main.createSpan({ cls: 'ff10k-folder', text: folder });
+		if (folder) main.createSpan({ cls: 'ff10k-folder', text: shortFolder(folder) });
 	}
 	if (hit.expanded) main.createSpan({ cls: 'ff10k-expanded-badge', text: 'via word list' });
 	if (hit.similarCount > 0) main.createSpan({ cls: 'ff10k-similar-badge', text: `${hit.similarCount} similar` });

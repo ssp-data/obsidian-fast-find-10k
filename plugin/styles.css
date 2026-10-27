@@ -229,8 +229,17 @@
 	color: var(--text-muted);
 }
 
+/* The folder gives way first (shrinks a thousand times faster than the title) and keeps a stub;
+   the title only shrinks once the folder is down to that stub. */
 .ff10k-folder {
+	flex: 0 1000 auto;
+	min-width: 8ch;
 	color: var(--text-faint);
+}
+
+.ff10k-heading,
+.ff10k-excerpt {
+	flex-shrink: 10;
 }
 
 .ff10k-ghost {
