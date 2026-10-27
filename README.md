@@ -19,7 +19,7 @@ In this new plugin I created with Claude Code, i integrated Quick Seach, OMnisea
 
 It will nicely show the different titles, and h1-3 and body, plus you can toggle why they were found.
 
-And bottom right, there's similar notes to show and avoid creating an existing note twice, which is most important to [my obsidian workflow](TODO), as i don't relay on folders, but all by seach. So if search does not work anymore, I will create 10 of the same notes over and over again, plus i might not find my notes, usually i remember when I create a note and want to find a spefific, but in case I forgot, then this plusign helps me too.
+And bottom right, there's similar notes to show and avoid creating an existing note twice, which is most important to [my obsidian workflow](https://www.ssp.sh/blog/obsidian-note-taking-workflow/), as i don't relay on folders, but all by seach. So if search does not work anymore, I will create 10 of the same notes over and over again, plus i might not find my notes, usually i remember when I create a note and want to find a spefific, but in case I forgot, then this plusign helps me too.
 
 > NOTE "The name"
 > The name comes from finding fast notes, which is the key of this plugin and the 10k is a hint to my personal limitation I got from 10k above. It's not meant to stay like this, or not usable below 10k, it will work peferctly fine too for low files, but that's the reason why I created it, and hence the name.
@@ -183,6 +183,26 @@ The same for `de: data engineering`: alone, `de` is an exact two-letter word and
 
 Without Smart Connections the panel uses title overlap only: "👉🏻 Data Engineering" lists "AI in Data Engineering", "Airflow for Data Engineering", "Data Engineering Glossary" and so on.
 
+### Compared with Omnisearch
+
+Same vault, same queries, Omnisearch 1.31.0 with its default fuzziness. First three results each:
+
+| Query | Fast Find 10K | Omnisearch |
+|---|---|---|
+| `obsidian trouble` | Obsidian Troubleshoot · Obsidian Trouble Tags Plugin · Obsidian (### Troubleshooting) | Obsidian Trouble Tags Plugin · Obsidian Troubleshoot · Vimrc for Obsidian |
+| `obsidian troubelshoot` | Obsidian Troubleshoot · Obsidian (### Troubleshooting) · Vimrc for Obsidian | no results |
+| `oss` | Open Source (alias OSS) · dbt (alias) · OSS git Analytics and insights | OSS git Analytics and insights · Open Source · Podcast Bedag - OSS Data Engineering |
+
+Recall over the vault's own titles (every note queried by its full title, its first two words, and its title with one letter deleted; the note must be the first hit), same 939-note sample for both:
+
+| Query | Fast Find 10K | Omnisearch |
+|---|---|---|
+| full title | 97.3 % first, 99.7 % in top 5 | 97.8 % first, 100 % in top 5 |
+| first two words | 56.5 % first, 80.8 % in top 5 | 71.5 % first, 87.4 % in top 5 |
+| one letter deleted | 91.6 % first, 94.6 % in top 5 | 78.2 % first, 83.8 % in top 5 |
+
+Over all 9,385 notes Fast Find 10K finds 97.8 % by full title as the first hit and 99.5 % in the top 5. The remaining misses are known and listed with their causes in [docs/recall.md](docs/recall.md): titles containing `#123` or a word starting with `-` (parsed as tag or exclude filters), dotted names such as `jasper.ai`, and a deleted letter in a 6-letter word. Run `ff10k recall <vault>` to get the numbers for your own vault.
+
 
 ### LLMs or AI
 Everything here shown is based locally, no AI model used, no local and also no frontier or online model. Smart Connection creates local embeddings in `.smart-env` (small local embedding model), and these we use for showing similar notes. Everything else is just local index based on your notes.
@@ -199,6 +219,7 @@ On a 9,385-note / 27 MB vault: warm start about 1.2–1.4 s to fully indexed (se
 - Test: `cargo test --workspace`; plugin: `cd plugin && npm test`
 - Golden: `cargo test -p ff10k-core --features golden --test golden`, or `ff10k golden <vault> <golden.toml>` (exit 1 on failures)
 - Typo recall: `cargo test -p ff10k-core --features golden --test typo_recall -- --nocapture` (one typo in a title word must keep the note in tier 1)
+- Recall on your own vault: `ff10k recall <vault> [--every 10] [--all-misses]` queries every note by its full title, its first two words and its title with one letter deleted, and prints how often the note is the first hit, in the top 5 and in the top 10, with every miss (`--sample-out file.json` writes the queries for running the same set through another search plugin)
 - Benches: `cargo bench -p ff10k-core` (criterion), `ff10k bench <vault>` (p50/p95 in microseconds, 200 runs per query), `ff10k profile <vault>` (ingest time per phase, engine heap)
 
 ### CLI (`ff10k`)
@@ -210,6 +231,7 @@ ff10k similar <vault> <vault-relative-path> [--smart-env]
 ff10k golden  <vault> <golden.toml>
 ff10k bench   <vault>
 ff10k profile <vault>                                   # read / extract / tokenize / insert / keys split, heap
+ff10k recall  <vault> [--every K] [--sample-out f.json] [--all-misses]   # title / two-word / one-typo recall @1 @5 @10
 ```
 
 The vault walk skips dot-folders and non-`.md` files and honours Obsidian "Excluded files"

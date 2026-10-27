@@ -58,6 +58,20 @@ enum Cmd {
     Bench { vault: PathBuf },
     /// Index a vault and print the time split across read / extract / tokenize / insert / keys.
     Profile { vault: PathBuf },
+    /// Recall check over the vault's own titles: for every note (or every k-th), query its full
+    /// title, its first two words and its title with one typo, and report where the note ranks.
+    Recall {
+        vault: PathBuf,
+        /// Check every k-th note (sorted by path) instead of all.
+        #[arg(long, default_value_t = 1)]
+        every: usize,
+        /// Write the sampled notes and their queries as JSON (for running the same set elsewhere).
+        #[arg(long)]
+        sample_out: Option<PathBuf>,
+        /// Print every miss (default: the first 25 per variant).
+        #[arg(long)]
+        all_misses: bool,
+    },
 }
 
 /// Reads `<vault>/.obsidian/app.json` once and builds the exclusion predicate.
@@ -146,6 +160,91 @@ fn rss_kb() -> Option<u64> {
     s.lines().find(|l| l.starts_with("VmRSS:"))?.split_whitespace().nth(1)?.parse().ok()
 }
 
+/// Query variants derived from a note title (shared with the Omnisearch harness via `--sample-out`).
+struct RecallQueries {
+    full: String,
+    /// First two words, when the title has at least three.
+    two: Option<String>,
+    /// The longest word of 6+ letters with its middle character deleted, when there is one.
+    typo: Option<String>,
+}
+
+fn recall_queries(title: &str) -> RecallQueries {
+    let words: Vec<&str> = title.split_whitespace().collect();
+    let two = (words.len() >= 3).then(|| words[..2].join(" "));
+    let longest = words.iter().filter(|w| w.chars().count() >= 6 && w.chars().all(char::is_alphanumeric)).max_by_key(|w| w.chars().count());
+    let typo = longest.map(|w| {
+        let n = w.chars().count();
+        let typoed: String = w.chars().enumerate().filter(|(i, _)| *i != n / 2).map(|(_, c)| c).collect();
+        words.iter().map(|x| if *x == *w { typoed.as_str() } else { x }).collect::<Vec<_>>().join(" ")
+    });
+    RecallQueries { full: title.to_string(), two, typo }
+}
+
+struct RecallTally {
+    name: &'static str,
+    queries: usize,
+    at: [usize; 3],
+    /// Same title, other path, in the top 1 (duplicate notes).
+    dup_at1: usize,
+    misses: Vec<String>,
+    micros: Vec<u64>,
+}
+
+impl RecallTally {
+    fn new(name: &'static str) -> Self {
+        RecallTally { name, queries: 0, at: [0; 3], dup_at1: 0, misses: Vec::new(), micros: Vec::new() }
+    }
+
+    fn record(&mut self, engine: &Engine, query: &str, path: &str, title: &str) {
+        let opts = SearchOptions { mode: Mode::All, limit: 10, now_secs: now_secs(), debug: false };
+        let r = engine.search(query, &opts);
+        self.queries += 1;
+        self.micros.push(r.elapsed_us);
+        let rank = r.hits.iter().position(|h| h.path == path);
+        match rank {
+            Some(i) => {
+                for (k, n) in [1usize, 5, 10].into_iter().enumerate() {
+                    if i < n {
+                        self.at[k] += 1;
+                    }
+                }
+            }
+            None => {
+                let top: Vec<String> = r.hits.iter().take(3).map(|h| format!("{}{}", h.title, if h.is_ghost { " [ghost]" } else { "" })).collect();
+                self.misses.push(format!("{query:?} → {path:?}: top {top:?}"));
+            }
+        }
+        if rank != Some(0) && r.hits.first().is_some_and(|h| h.title == title && !h.is_ghost) {
+            self.dup_at1 += 1;
+        }
+    }
+
+    fn print(&mut self, all: bool) {
+        let q = self.queries.max(1) as f64;
+        self.micros.sort_unstable();
+        let pct = |p: f64| self.micros.get(((self.micros.len() as f64 * p) as usize).min(self.micros.len().saturating_sub(1))).copied().unwrap_or(0);
+        println!(
+            "{:<6} {:>5} queries  @1 {:>6.2}%  @5 {:>6.2}%  @10 {:>6.2}%  (same-title duplicate first: {})  p50 {:.1} ms  p95 {:.1} ms",
+            self.name,
+            self.queries,
+            100.0 * self.at[0] as f64 / q,
+            100.0 * self.at[1] as f64 / q,
+            100.0 * self.at[2] as f64 / q,
+            self.dup_at1,
+            pct(0.5) as f64 / 1000.0,
+            pct(0.95) as f64 / 1000.0
+        );
+        let shown = if all { self.misses.len() } else { self.misses.len().min(25) };
+        for m in &self.misses[..shown] {
+            println!("    miss {m}");
+        }
+        if shown < self.misses.len() {
+            println!("    … {} more misses (--all-misses)", self.misses.len() - shown);
+        }
+    }
+}
+
 fn now_secs() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64())
 }
@@ -210,6 +309,52 @@ fn main() -> Result<()> {
             println!("tier\tscore\tbadge\ttitle\tpath\theading/excerpt");
             for h in &r.hits {
                 print_hit(h, debug);
+            }
+        }
+        Cmd::Recall { vault, every, sample_out, all_misses } => {
+            let ex = exclusion(&vault)?;
+            let notes = read_vault_with(&vault, &*ex)?;
+            let mut engine = Engine::new();
+            for n in &notes {
+                engine.upsert(&n.path, n.mtime, &n.text);
+            }
+            engine.set_ghosts(ghosts(&notes));
+            engine.warm_up();
+            let every = every.max(1);
+            let sample: Vec<(&str, String, RecallQueries)> = notes
+                .iter()
+                .step_by(every)
+                .map(|n| {
+                    let title = n.path.rsplit('/').next().unwrap_or(&n.path).trim_end_matches(".md").to_string();
+                    let q = recall_queries(&title);
+                    (n.path.as_str(), title, q)
+                })
+                .collect();
+            if let Some(out) = sample_out {
+                let rows: Vec<serde_json::Value> = sample
+                    .iter()
+                    .map(|(p, t, q)| serde_json::json!({"path": p, "title": t, "full": q.full, "two": q.two, "typo": q.typo}))
+                    .collect();
+                std::fs::write(&out, serde_json::to_string(&rows)?)?;
+                println!("sample written: {} notes → {}", rows.len(), out.display());
+            }
+            println!("{} notes indexed, {} checked (every {every})", notes.len(), sample.len());
+            let mut full = RecallTally::new("full");
+            let mut two = RecallTally::new("two");
+            let mut typo = RecallTally::new("typo");
+            for (path, title, q) in &sample {
+                full.record(&engine, &q.full, path, title);
+                if let Some(t) = &q.two {
+                    two.record(&engine, t, path, title);
+                }
+                if let Some(t) = &q.typo {
+                    typo.record(&engine, t, path, title);
+                }
+            }
+            println!("full: the whole title; two: its first two words (titles of 3+ words); typo: the longest 6+ letter word minus its middle letter.");
+            println!("@k: the note itself is within the first k hits.");
+            for t in [&mut full, &mut two, &mut typo] {
+                t.print(all_misses);
             }
         }
         Cmd::Similar { vault, path, smart_env } => {
