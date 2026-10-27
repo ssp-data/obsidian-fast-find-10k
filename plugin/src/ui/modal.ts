@@ -520,6 +520,7 @@ export class FastFindModal extends Modal {
 			[[km.toggleDebug], 'why ranked'],
 			[[km.toggleLanguages], 'languages'],
 			[[km.openAll], 'open all'],
+			[[km.clearQuery], 'clear'],
 			[[km.showHelp], 'help'],
 			[['Esc'], 'close'],
 		];
