@@ -205,7 +205,7 @@ Recall over the vault's own titles (every note queried by its full title, its fi
 | first two words | 56.5 % first, 80.8 % in top 5 | 71.5 % first, 87.4 % in top 5 |
 | one letter deleted | 91.6 % first, 94.6 % in top 5 | 78.2 % first, 83.8 % in top 5 |
 
-Over all 9,385 notes Fast Find 10K finds 97.8 % by full title as the first hit and 99.5 % in the top 5. The remaining misses are known and listed with their causes in [docs/recall.md](docs/recall.md): titles containing `#123` or a word starting with `-` (parsed as tag or exclude filters), dotted names such as `jasper.ai`, and a deleted letter in a 6-letter word. Run `ff10k recall <vault>` to get the numbers for your own vault.
+The sample was measured before the fixes that this run led to. Over all 9,385 notes Fast Find 10K now finds 98.9 % by full title as the first hit (99.97 % in the top 5) and 97.9 % with one letter deleted (99.8 % in the top 5); every miss, its cause and the fix are in [docs/recall.md](docs/recall.md). Run `ff10k recall <vault>` to get the numbers for your own vault.
 
 
 ### LLMs or AI

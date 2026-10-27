@@ -26,15 +26,16 @@ ff10k recall <vault> --every 10 --sample-out s.json    # the 939-note sample use
 
 ## Results
 
-Fast Find 10K, every note (9,385 notes, 19,780 queries):
+Fast Find 10K, every note (9,385 notes), before and after the four fixes below (same vault, same
+queries; "after" was run after the fixes, so the five fixture notes are not in it):
 
-| Variant | Queries | @1 | @5 | @10 | duplicate first | p50 | p95 |
-|---|---|---|---|---|---|---|---|
-| full | 9,385 | 97.81 % | 99.53 % | 99.61 % | 58 | 2.5 ms | 11.9 ms |
-| two | 4,072 | 57.66 % | 79.94 % | 86.12 % | 6 | 2.4 ms | 6.2 ms |
-| typo | 6,323 | 91.03 % | 94.48 % | 94.97 % | 32 | 3.0 ms | 13.8 ms |
+| Variant | Queries | @1 before → after | @5 before → after | @10 before → after | p50 | p95 |
+|---|---|---|---|---|---|---|
+| full | 9,385 | 97.81 % → **98.91 %** | 99.53 % → **99.97 %** | 99.61 % → 99.98 % | 2.8 ms | 12.9 ms |
+| two | 4,072 | 57.66 % → 57.57 % | 79.94 % → 79.89 % | 86.12 % → 86.23 % | 2.7 ms | 6.5 ms |
+| typo | 6,323 | 91.03 % → **97.90 %** | 94.48 % → **99.84 %** | 94.97 % → 99.98 % | 3.3 ms | 14.8 ms |
 
-Same 939-note sample (every 10th note), both tools:
+Same 939-note sample (every 10th note), both tools, before the fixes:
 
 | Variant | Fast Find 10K @1 / @5 / @10 | Omnisearch @1 / @5 / @10 | FF10K p50 / p95 | Omnisearch p50 / p95 |
 |---|---|---|---|---|
@@ -46,39 +47,51 @@ Latencies are not directly comparable: Fast Find 10K ran natively (release build
 Omnisearch inside Obsidian's renderer. Inside Obsidian a Fast Find 10K query takes about 5 ms for
 one word and 15 ms for three (see [perf.md](perf.md)).
 
-## What the misses are (Fast Find 10K)
+## What the misses were (Fast Find 10K, before the fixes)
 
 Full title, 37 misses at @10 out of 9,385 (every one inspected):
 
 - **`#` in the title (20).** `RW Data Engineering Weekly #115`, `RW Joe's Nerdy Rants #6`,
-  `#657 — Professor John Vervaeke …`: `#115` is parsed as a tag filter, no note has that tag, the
-  result is empty. Omnisearch finds these.
+  `#657 — Professor John Vervaeke …`: `#115` was parsed as a tag filter, no note has that tag, the
+  result was empty.
 - **A word starting with `-` (4).** `KW13 -Marktleistung`, `Regular Expression in SSIS with C# &
-  -NET`, `xattr -rd com.apple.quarantine`: `-NET` is parsed as an exclusion and removes the note
+  -NET`, `xattr -rd com.apple.quarantine`: `-NET` was parsed as an exclusion and removed the note
   itself.
 - **Dotted names (7).** `jasper.ai`, `Otter.ai`, `Perplexity.ai`, `Gable.ai`, `Bodo.ai`,
-  `vanna.ai`: the tokenizer joins compounds only on `-`, so `jasper.ai` becomes the two words
-  `jasper` and `ai`. The engine takes the first as the whole term and, where it does not match,
-  falls back to the remaining part alone, so `ai` matches about a thousand notes at quality 0.95.
-  The real note matches `jasper` exactly but is charged for `ai` as an unmatched title word
-  (`titleFactor ×0.85`) and lands around rank 100.
-- **Exact one-word title tied with compounds (1).** `data` → the empty note `data.md` ranks 20th
-  behind `DataFusion`, `HelloDATA`, `DataOps`: all score the same 100 (camel-case titles count as
-  one fully covered word) and backlinks break the tie. There is no bonus for a title that equals
-  the whole query.
-- **Not findable by text (5).** `💡` (emoji only, no token), `Gonto Meetings -Office Hour Meeting`
-  (also `-`), and three titles with both problems.
+  `vanna.ai`: the tokenizer joined compounds only on `-`, so `jasper.ai` became the two words
+  `jasper` and `ai`; the engine took the first as the whole term and, where it did not match,
+  fell back to the remaining part alone, so `ai` matched about a thousand notes at quality 0.95
+  while the real note was charged for `ai` as an unmatched title word.
+- **Exact one-word title tied with compounds (1).** `data` → the empty note `data.md` ranked 20th
+  behind `DataFusion`, `HelloDATA`, `DataOps`: all scored the same and backlinks broke the tie.
+- **Bible chapters (4).** `1 Chr 1` ranked below `1 Chr 11`: a hit marks only the first
+  occurrence of a word, so the second `1` counted as unmatched.
+- **Not findable by text (1).** `💡` (emoji only, no token).
 
-Typo, 318 misses out of 6,323: almost all are 6-letter words with a letter deleted (`Gitub`,
-`Ollma`, `Klana`, `Entty`, `Menor`). The typo budget is computed from the typed length (spec
-§6.2: 6–9 typed letters allow one typo, 10+ two), and a 5-letter query gets none, so a deletion
-in a 6-letter word is never recovered while a substitution (`Githab`) is. The 204-query typo
-test in `tests/typo_recall.rs` did not catch this because its fixtures have few 6-letter words.
+Typo, 318 misses out of 6,323: almost all 6-letter words with a letter deleted (`Gitub`, `Ollma`,
+`Klana`, `Entty`, `Menor`). The typo budget came from the typed length (6–9 typed letters allow
+one typo, 10+ two), so a 5-letter query got none.
 
 Two words: not a recall problem. `RW The`, `RW How`, `RW Data` each match dozens of notes
 equally (`RW` is a Readwise prefix on 2,000 notes); which of the equals is first comes down to
-backlinks. Omnisearch's BM25 does better here at @1 (71.5 % vs 56.5 %) because it rewards
-shorter documents; Fast Find 10K ranks equals by backlinks, then modification time.
+backlinks. Omnisearch's BM25 does better here at @1 because it rewards shorter documents.
+
+## Fixes applied (owner-approved 2026-10-27, commits `7d6ed82`, `b15ad29`)
+
+1. `#word` is a tag filter only when some note carries that tag, otherwise the word; `-word`
+   with other words is retried as a word when excluding leaves no tier 1–3 hit (`-word` alone
+   stays an exclusion).
+2. The tokenizer joins compounds on `.` as on `-` and `_` (`jasper.ai` → `jasper.ai`, `jasper`,
+   `ai`), so the part fallback needs every part and the title counts as covered.
+3. Five typed letters get one typo against Title and Alias strings only (`Gitub` → "GitHub").
+4. +15 in tier 1 when the title's words equal the query's words in any order; a repeated title
+   word counts as covered.
+
+Each fix has a unit test, a golden case with a fixture note (`tests/golden/core.toml`), and the
+typo test now includes deletions in 6-letter words (234 queries, 0 misses). Remaining full-title
+misses after the fixes: 2 (`-NET`, where excluding leaves other partial hits, and the emoji
+title); remaining typo misses: 1 (`Fraen`, three notes titled "Fragen" in other folders rank
+first).
 
 ## What the misses are (Omnisearch)
 
@@ -86,6 +99,14 @@ Typo: 15.3 % of the sampled one-typo queries return nothing at all (`RW DucDB + 
 `RW Shold We Get Rid of ETLs`, `Bascs`, `Conig`), including words of 8+ letters; its fuzziness
 `1` tolerates fewer edits than frizbee with the guard rules. `obsidian troubelshoot` (two
 letters swapped) returns zero results.
+
+## Open question found on the way (not applied)
+
+`invoice` ranks "Brand Voice of AIrbyte" and "My Writing Voice" (fuzzy: `n voice` matches 6 of
+7 letters) above "Sales Invoice (ungleich Revenue)" (exact, but three unmatched title words,
+`titleFactor ×0.55`). Within a tier the match kind does not order results, so a fuzzy hit in a
+short title can beat an exact hit in a long one. Candidate rule: within a tier, a note whose
+every unit matched only fuzzily sorts after notes with an exact or prefix hit.
 
 ## Tests that exist
 
@@ -95,14 +116,3 @@ letters swapped) returns zero results.
 - 144 unit tests in the core (tokenizer, markdown extractor, index, matcher guard rules,
   ranking, optional words, abbreviations, similar, vectors).
 - `ff10k recall`, this document: every note of a real vault, the number to watch.
-
-## Open proposals (not applied; the owner asked for findings first)
-
-1. Treat `#word` and `-word` as filters only when the tag or the excluded word exists in the
-   index; otherwise search them as plain words. Fixes 24 of the 37 full-title misses.
-2. Join compounds on `.` and `_` the way `-` is joined, and credit every matched part for title
-   coverage. Fixes the `x.ai` family.
-3. Typo budget from `max(typed length, token length)` for prefix candidates, or allow one typo
-   at 5 typed letters when the query is a single word and the fuzzy hit is in the title. Fixes
-   most of the 318 typo misses; needs a precision check on the golden decoys.
-4. A small bonus when the whole title equals the query (`data` → `data.md`).
