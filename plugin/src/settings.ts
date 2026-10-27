@@ -7,6 +7,7 @@ import type { EngineConfig, PartialMode, Weights } from './protocol';
 export type FuzzySetting = 'off' | 'normal' | 'loose';
 /** Semantic tier: automatically when few lexical hits (and on Ctrl+S), only on Ctrl+S, or never. */
 export type SemanticSetting = 'always' | 'auto' | 'onDemand' | 'never';
+export type KeyHintsSetting = 'desktop' | 'always' | 'never';
 
 /** Modal key bindings as `Mod+Alt+Enter` style strings (`Mod` = Cmd on macOS, Ctrl elsewhere). */
 export interface Keymap {
@@ -81,6 +82,10 @@ export interface FastFindSettings {
 	semanticMinSimilarity: number;
 	createGuard: boolean;
 	previewOpen: boolean;
+	/** Preview open when the search opens on a phone or tablet (no Ctrl+P there; a pill toggles it). */
+	previewOpenMobile: boolean;
+	/** Footer key hints: shown on desktop only (default), always, or never. */
+	keyHints: KeyHintsSetting;
 	debugByDefault: boolean;
 	logTimings: boolean;
 	keymap: Keymap;
@@ -118,6 +123,8 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	semanticMinSimilarity: 0.6,
 	createGuard: true,
 	previewOpen: true,
+	previewOpenMobile: false,
+	keyHints: 'desktop',
 	debugByDefault: false,
 	logTimings: false,
 	keymap: { ...DEFAULT_KEYMAP },
@@ -141,6 +148,7 @@ function pick<T extends object>(defaults: T, saved: unknown): T {
 const FUZZY_VALUES: readonly FuzzySetting[] = ['off', 'normal', 'loose'];
 const PARTIAL_VALUES: readonly PartialMode[] = ['whenFew', 'always', 'never'];
 const SEMANTIC_VALUES: readonly SemanticSetting[] = ['always', 'auto', 'onDemand', 'never'];
+const KEY_HINTS_VALUES: readonly KeyHintsSetting[] = ['desktop', 'always', 'never'];
 
 /** `v` when it is one of `allowed`, else `fallback`. */
 function oneOf<T extends string>(v: T, allowed: readonly T[], fallback: T): T {
@@ -169,6 +177,7 @@ export function mergeSettings(saved: unknown): FastFindSettings {
 	s.fuzzy = oneOf(s.fuzzy, FUZZY_VALUES, d.fuzzy);
 	s.partial = oneOf(s.partial, PARTIAL_VALUES, d.partial);
 	s.semantic = oneOf(s.semantic, SEMANTIC_VALUES, d.semantic);
+	s.keyHints = oneOf(s.keyHints, KEY_HINTS_VALUES, d.keyHints);
 	s.fewThreshold = clamp(s.fewThreshold, 1, 50, d.fewThreshold, true);
 	s.minSimilarity = clamp(s.minSimilarity, 0.5, 0.95, d.minSimilarity);
 	s.semanticMinSimilarity = clamp(s.semanticMinSimilarity, 0.3, 0.95, d.semanticMinSimilarity);

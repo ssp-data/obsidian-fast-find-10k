@@ -172,6 +172,10 @@ test('languages: empty by default, saved list kept, only sent while language exp
 	mergeSettings(null).languages.push('y');
 	assert.equal(DEFAULT_SETTINGS.languages.length, 0);
 	assert.equal(DEFAULT_KEYMAP.toggleLanguages, 'Ctrl+L');
+	assert.equal(DEFAULT_SETTINGS.previewOpenMobile, false);
+	assert.equal(DEFAULT_SETTINGS.keyHints, 'desktop');
+	assert.equal(mergeSettings({ keyHints: 'sometimes' }).keyHints, 'desktop');
+	assert.equal(mergeSettings({ keyHints: 'never' }).keyHints, 'never');
 	assert.equal(DEFAULT_KEYMAP.panelRight, 'Shift+L');
 	assert.equal(DEFAULT_KEYMAP.panelLeft, 'Shift+H');
 });

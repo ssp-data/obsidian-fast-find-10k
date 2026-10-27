@@ -7,7 +7,7 @@ import { type App, Notice, Platform, PluginSettingTab, requireApiVersion, Settin
 import { validateBinding } from './keys';
 import type FastFindPlugin from './main';
 import type { PartialMode, Weights } from './protocol';
-import { DEFAULT_KEYMAP, DEFAULT_WEIGHTS, type FuzzySetting, type Keymap, type SemanticSetting } from './settings';
+import { DEFAULT_KEYMAP, DEFAULT_WEIGHTS, type FuzzySetting, type KeyHintsSetting, type Keymap, type SemanticSetting } from './settings';
 import { helpGroups } from './ui/help';
 
 const WEIGHT_NAMES: Record<keyof Weights, string> = {
@@ -174,7 +174,17 @@ export class FastFindSettingTab extends PluginSettingTab {
 				heading: 'Behaviour',
 				items: [
 					{ name: 'Create guard', desc: 'Before creating a note, show existing notes with a similar name ("Already have?").', control: { type: 'toggle', key: 'createGuard' } },
-					{ name: 'Preview open by default', control: { type: 'toggle', key: 'previewOpen' } },
+					{ name: 'Preview open by default', desc: 'On desktop. Ctrl+P toggles it in the search.', control: { type: 'toggle', key: 'previewOpen' } },
+					{
+						name: 'Preview open by default on mobile',
+						desc: 'On a phone or tablet the preview starts closed unless this is on; the "preview" pill in the search toggles it.',
+						control: { type: 'toggle', key: 'previewOpenMobile' },
+					},
+					{
+						name: 'Key hints in the footer',
+						desc: 'The shortcut line under the results. "Desktop only" hides it on phones and tablets, which have no keyboard shortcuts.',
+						control: { type: 'dropdown', key: 'keyHints', options: { desktop: 'Desktop only', always: 'Always', never: 'Never' } },
+					},
 				],
 			},
 			{
@@ -460,11 +470,33 @@ export class FastFindSettingTab extends PluginSettingTab {
 			);
 		new Setting(el)
 			.setName('Preview open by default')
+			.setDesc('On desktop. Ctrl+P toggles it in the search.')
 			.addToggle((t) =>
 				t.setValue(this.s.previewOpen).onChange((v) => {
 					this.s.previewOpen = v;
 					this.save();
 				}),
+			);
+		new Setting(el)
+			.setName('Preview open by default on mobile')
+			.setDesc('On a phone or tablet the preview starts closed unless this is on; the "preview" pill in the search toggles it.')
+			.addToggle((t) =>
+				t.setValue(this.s.previewOpenMobile).onChange((v) => {
+					this.s.previewOpenMobile = v;
+					this.save();
+				}),
+			);
+		new Setting(el)
+			.setName('Key hints in the footer')
+			.setDesc('The shortcut line under the results. "Desktop only" hides it on phones and tablets.')
+			.addDropdown((d) =>
+				d
+					.addOptions({ desktop: 'Desktop only', always: 'Always', never: 'Never' })
+					.setValue(this.s.keyHints)
+					.onChange((v) => {
+						this.s.keyHints = v as KeyHintsSetting;
+						this.save();
+					}),
 			);
 	}
 

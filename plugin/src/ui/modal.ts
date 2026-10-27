@@ -221,7 +221,7 @@ export class FastFindModal extends Modal {
 			selected: 0,
 			totalDocs: 0,
 			elapsedUs: 0,
-			previewOpen: startState(resume, plugin.settings.previewOpen, '').previewOpen,
+			previewOpen: startState(resume, Platform.isMobile ? plugin.settings.previewOpenMobile : plugin.settings.previewOpen, '').previewOpen,
 			debug: plugin.settings.debugByDefault,
 		};
 		this.registerKeys(plugin.settings.keymap);
@@ -230,20 +230,32 @@ export class FastFindModal extends Modal {
 	onOpen(): void {
 		this.modalEl.addClass('ff10k-modal');
 		this.modalEl.toggleClass('ff10k-preview-hidden', !this.state.previewOpen);
+		this.modalEl.toggleClass('ff10k-mobile', Platform.isMobile);
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass('ff10k-content');
 
 		const bar = contentEl.createDiv({ cls: 'ff10k-bar' });
 		this.inputEl = bar.createEl('input', { cls: 'ff10k-input', type: 'text', attr: { placeholder: 'Find a note…', spellcheck: 'false' } });
-		this.pillAll = bar.createSpan({ cls: 'ff10k-pill', text: 'all' });
-		this.pillFiles = bar.createSpan({ cls: 'ff10k-pill', text: `files only ${keyLabel(this.plugin.settings.keymap.filesOnly)}` });
-		this.pillLang = bar.createSpan({
+		// pills: tap targets; their key labels are omitted on mobile (no keyboard shortcuts there)
+		const key = (spec: string) => (Platform.isMobile ? '' : ` ${keyLabel(spec)}`);
+		const pills = Platform.isMobile ? bar.createDiv({ cls: 'ff10k-pills' }) : bar;
+		this.pillAll = pills.createSpan({ cls: 'ff10k-pill', text: 'all' });
+		this.pillFiles = pills.createSpan({ cls: 'ff10k-pill', text: `files only${key(this.plugin.settings.keymap.filesOnly)}` });
+		this.pillLang = pills.createSpan({
 			cls: 'ff10k-pill',
-			text: `+languages ${keyLabel(this.plugin.settings.keymap.toggleLanguages)}`,
+			text: `+languages${key(this.plugin.settings.keymap.toggleLanguages)}`,
 			attr: { title: 'Also search the German word list and the dictionary note' },
 		});
-		this.statusEl = bar.createSpan({ cls: 'ff10k-status' });
+		if (Platform.isMobile) {
+			const pillPreview = pills.createSpan({ cls: 'ff10k-pill', text: 'preview' });
+			pillPreview.toggleClass('is-active', this.state.previewOpen);
+			pillPreview.addEventListener('click', () => {
+				this.togglePreview();
+				pillPreview.toggleClass('is-active', this.state.previewOpen);
+			});
+		}
+		this.statusEl = pills.createSpan({ cls: 'ff10k-status' });
 		this.pillAll.addEventListener('click', () => this.setMode('all'));
 		this.pillFiles.addEventListener('click', () => this.setMode('filesOnly'));
 		this.pillLang.addEventListener('click', () => this.toggleLanguages());
@@ -264,7 +276,8 @@ export class FastFindModal extends Modal {
 			if (r.scrollTop + r.clientHeight >= r.scrollHeight - 80) this.renderUpTo(this.state.hits.length);
 		});
 
-		this.renderFooter(contentEl.createDiv({ cls: 'ff10k-footer' }));
+		const hints = this.plugin.settings.keyHints;
+		if (hints === 'always' || (hints === 'desktop' && !Platform.isMobile)) this.renderFooter(contentEl.createDiv({ cls: 'ff10k-footer' }));
 		this.helpEl = contentEl.createDiv({ cls: 'ff10k-help' });
 		this.helpEl.hide();
 
