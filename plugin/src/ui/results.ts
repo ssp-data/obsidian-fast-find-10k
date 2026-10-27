@@ -51,6 +51,21 @@ function folderOf(path: string): string {
 	return i < 0 ? '' : path.slice(0, i);
 }
 
+/** Heading text for the row: link syntax reduced to its text (`[[a|b]]` → b, `[t](url)` → t, an
+ * empty link text → the URL's host), inline code marks dropped; whitespace collapsed. */
+export function displayHeading(text: string): string {
+	return text
+		.replace(/!?\[\[([^\]|]*)(?:\|([^\]]*))?\]\]/g, (_, target: string, alias?: string) => alias || target)
+		.replace(/!?\[([^\]]*)\]\(([^)]*)\)/g, (_, label: string, url: string) => {
+			if (label.trim()) return label;
+			const m = /^[a-z]+:\/\/([^/?#]+)/i.exec(url.trim());
+			return ` ${m ? m[1] : url.trim()} `; // spaced: the link may touch the next word
+		})
+		.replace(/`/g, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
 /** The folder for the row: deep paths keep their first and last two segments (`a/…/y/z`), so
  * the specific end stays readable when the row is narrow; the full path is in the row tooltip. */
 export function shortFolder(folder: string, keepEnd = 2): string {
@@ -79,7 +94,7 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 		main.createSpan({ cls: 'ff10k-context', text: `not created · linked from ${hit.ghostRefs} notes` });
 	} else {
 		if (hit.heading && (hit.badge === 'H1' || hit.badge === 'H2' || hit.badge === 'H3')) {
-			main.createSpan({ cls: 'ff10k-heading', text: `${'#'.repeat(hit.heading.level)} ${hit.heading.text}` });
+			main.createSpan({ cls: 'ff10k-heading', text: `${'#'.repeat(hit.heading.level)} ${displayHeading(hit.heading.text)}` });
 		}
 		if (hit.excerpt && hit.badge === 'Body') {
 			const ex = main.createSpan({ cls: 'ff10k-excerpt' });

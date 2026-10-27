@@ -19,7 +19,15 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { mapTitleRanges, shortFolder } = await load('src/ui/results.ts');
+const { mapTitleRanges, shortFolder, displayHeading } = await load('src/ui/results.ts');
+
+test('headings display their link text, or the host for an empty link text', () => {
+	assert.equal(displayHeading('[](https://gist.github.com/andersevenrud/015e61af2fd264371032763d4ed965b6#vim)vim'), 'gist.github.com vim');
+	assert.equal(displayHeading('See [the docs](https://example.com/x) and [[Note|alias]] and [[Plain]]'), 'See the docs and alias and Plain');
+	assert.equal(displayHeading('Use `code` here'), 'Use code here');
+	assert.equal(displayHeading('![](img.png) Figure'), 'img.png Figure');
+	assert.equal(displayHeading('Plain heading'), 'Plain heading');
+});
 
 test('deep folders keep their first and last two segments', () => {
 	assert.equal(shortFolder('a/b'), 'a/b');

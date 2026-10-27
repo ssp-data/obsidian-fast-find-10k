@@ -183,7 +183,8 @@
 
 .ff10k-title {
 	flex: 0 1 auto;
-	min-width: 0;
+	/* never squeezed below 40 % of the row by a long heading, excerpt or folder */
+	min-width: min(40%, 100%);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	color: var(--text-normal);
