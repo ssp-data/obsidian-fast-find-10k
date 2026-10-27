@@ -9,7 +9,7 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc --noEmit && node esbuild.config.mjs production",
 		"typecheck": "tsc --noEmit",
-		"test": "node --test test/"
+		"test": "node --test test/*.test.mjs"
 	},
 	"author": "Simon Späti",
 	"license": "MIT",
