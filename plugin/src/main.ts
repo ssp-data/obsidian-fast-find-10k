@@ -25,11 +25,14 @@ export default class FastFindPlugin extends Plugin {
 	private globsTimer = 0;
 	/** Lines of the dictionary note (settings.dictionaryFile), merged into the abbreviations. */
 	private dictionaryLines: string[] = [];
+	/** Language expansion (German list + dictionary note) for this session; Ctrl+L flips it. */
+	languagesActive = false;
 
 	async onload(): Promise<void> {
 		// one object for the plugin's lifetime: the bridge and the indexer keep a reference
 		this.settings = mergeSettings(await this.loadData());
 		if (migrateKeymap(this.settings.keymap, Platform.isMacOS)) await this.saveSettings();
+		this.languagesActive = this.settings.languages.length > 0;
 
 		const engine = new EngineClient(workerSource);
 		this.engine = engine;
@@ -57,7 +60,14 @@ export default class FastFindPlugin extends Plugin {
 
 	/** Pushes the ranking settings to the engine (no reindex). */
 	applyEngineConfig(): void {
-		this.engine?.setConfig(settingsToEngineConfig(this.settings, this.dictionaryLines));
+		this.engine?.setConfig(settingsToEngineConfig(this.settings, this.dictionaryLines, this.languagesActive));
+	}
+
+	/** Flips language expansion for this session and pushes the config; returns the new state. */
+	toggleLanguages(): boolean {
+		this.languagesActive = !this.languagesActive;
+		this.applyEngineConfig();
+		return this.languagesActive;
 	}
 
 	/** Reads the dictionary note named in the settings (if any) and pushes the config. */
@@ -122,7 +132,7 @@ export default class FastFindPlugin extends Plugin {
 
 	/** Engine init, cache open, then the indexer; resolves once the engine is searchable. */
 	private async startIndexing(engine: EngineClient): Promise<void> {
-		await engine.init(settingsToEngineConfig(this.settings));
+		await engine.init(settingsToEngineConfig(this.settings, this.dictionaryLines, this.languagesActive));
 		const appId = (this.app as unknown as { appId: string }).appId;
 		const cache = await NoteCache.open(appId);
 		if (!this.engine) return cache.close(); // unloaded meanwhile

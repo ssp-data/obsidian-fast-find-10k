@@ -294,7 +294,7 @@ Modal prefill: current editor selection if any, else empty (not the last query; 
 - Show partial-match tier: only when few results (default) / always / never.
 - Optional words (never required), one per line; default `a an the of to in on i`. Applied live.
 - Abbreviations / synonyms, one group per line (`oss: open source, open-source software`); default empty. Applied live.
-- German words (toggle, `languages: ["de"]`): a built-in English ↔ German dictionary (`crates/ff10k-core/dict/de.txt`, about 400 pairs, no false friends) added to the abbreviation groups. Off by default; nothing else changes.
+- German words on at startup (`languages: ["de"]`): language expansion adds a built-in English ↔ German dictionary (`crates/ff10k-core/dict/de.txt`, about 400 pairs, no false friends) and the dictionary note's lines to the abbreviation groups. Off by default; `Ctrl+L` (keymap `toggleLanguages`) flips it for the session from the modal, shown by a "+languages" pill. While off, nothing is sent to the engine and results are unchanged.
 - Dictionary note (`dictionaryFile`): a vault path whose `word: other, words` lines (list markers allowed; headings, frontmatter and lines without `:` skipped) are appended to the abbreviation lines in the engine config; reloaded on edit of that note.
 - Semantic tier: auto when few results (default) / on demand only / never.
 - Use Smart Connections embeddings (on/off), minimum similarity shown (default 0.70).

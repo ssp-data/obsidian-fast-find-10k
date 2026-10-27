@@ -141,23 +141,32 @@ test('dictionary note: default none, lines parsed from markdown, merged into the
 	assert.deepEqual(parseDictionaryLines(text), ['school: schule', 'data: daten, angaben', 'oss: open source', 'meeting: sitzung']);
 	assert.deepEqual(parseDictionaryLines(''), []);
 	const s = mergeSettings({ synonyms: ['k8s: kubernetes'] });
-	const c = settingsToEngineConfig(s, ['school: schule']);
+	const c = settingsToEngineConfig(s, ['school: schule'], true);
 	assert.deepEqual(c.synonyms, ['k8s: kubernetes', 'school: schule']);
 	assert.deepEqual(s.synonyms, ['k8s: kubernetes']);
+	// Note lines belong to language expansion: not sent while it is off.
+	assert.deepEqual(settingsToEngineConfig(s, ['school: schule']).synonyms, ['k8s: kubernetes']);
 	assert.deepEqual(settingsToEngineConfig(s).synonyms, ['k8s: kubernetes']);
 });
 
-test('languages: empty by default, saved list kept, sent to the engine as a copy', () => {
+test('languages: empty by default, saved list kept, only sent while language expansion is active', () => {
 	assert.deepEqual(DEFAULT_SETTINGS.languages, []);
 	const s = mergeSettings({ languages: ['de'] });
 	assert.deepEqual(s.languages, ['de']);
 	assert.deepEqual(mergeSettings({ languages: 'de' }).languages, []);
-	const c = settingsToEngineConfig(s);
+	// Inactive (the default session state): no languages, no dictionary-note lines.
+	assert.deepEqual(settingsToEngineConfig(s, ['school: schule']).languages, []);
+	assert.deepEqual(settingsToEngineConfig(s, ['school: schule']).synonyms, []);
+	// Active: the saved list, or the built-in German list when none is saved, plus the note's lines.
+	const c = settingsToEngineConfig(s, ['school: schule'], true);
 	assert.deepEqual(c.languages, ['de']);
+	assert.deepEqual(c.synonyms, ['school: schule']);
+	assert.deepEqual(settingsToEngineConfig(mergeSettings(null), [], true).languages, ['de']);
 	c.languages.push('xx');
 	assert.deepEqual(s.languages, ['de']);
 	mergeSettings(null).languages.push('y');
 	assert.equal(DEFAULT_SETTINGS.languages.length, 0);
+	assert.equal(DEFAULT_KEYMAP.toggleLanguages, 'Ctrl+L');
 });
 
 test('key specs split into modifiers and key', () => {

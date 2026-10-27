@@ -170,9 +170,9 @@ export class FastFindSettingTab extends PluginSettingTab {
 				});
 			});
 		new Setting(el)
-			.setName('German words (English ↔ German)')
+			.setName('German words on at startup (English ↔ German)')
 			.setDesc(
-				'Adds a built-in list of about 400 everyday English–German word pairs to the abbreviations, both directions: school finds Schule and Schulen, Kinder finds children. Umlauts are folded. Your own lines above take part as well.',
+				'Language expansion adds a built-in list of about 400 everyday English–German word pairs and the dictionary note to the abbreviations, both directions: school finds Schule and Schulen, Kinder finds children. Umlauts are folded. In the search, Ctrl+L (the "languages" key) switches it on or off for the session; this toggle sets the state at startup. Off by default.',
 			)
 			.addToggle((t) =>
 				t.setValue(this.s.languages.includes('de')).onChange((v) => {

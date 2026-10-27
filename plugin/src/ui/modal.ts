@@ -172,6 +172,7 @@ export class FastFindModal extends Modal {
 	private statusEl!: HTMLElement;
 	private pillAll!: HTMLElement;
 	private pillFiles!: HTMLElement;
+	private pillLang!: HTMLElement;
 	private resultsEl!: HTMLElement;
 	private rowEls: HTMLElement[] = [];
 	private lastTier = -1;
@@ -235,9 +236,15 @@ export class FastFindModal extends Modal {
 		this.inputEl = bar.createEl('input', { cls: 'ff10k-input', type: 'text', attr: { placeholder: 'Find a note…', spellcheck: 'false' } });
 		this.pillAll = bar.createSpan({ cls: 'ff10k-pill', text: 'all' });
 		this.pillFiles = bar.createSpan({ cls: 'ff10k-pill', text: `files only ${keyLabel(this.plugin.settings.keymap.filesOnly)}` });
+		this.pillLang = bar.createSpan({
+			cls: 'ff10k-pill',
+			text: `+languages ${keyLabel(this.plugin.settings.keymap.toggleLanguages)}`,
+			attr: { title: 'Also search the German word list and the dictionary note' },
+		});
 		this.statusEl = bar.createSpan({ cls: 'ff10k-status' });
 		this.pillAll.addEventListener('click', () => this.setMode('all'));
 		this.pillFiles.addEventListener('click', () => this.setMode('filesOnly'));
+		this.pillLang.addEventListener('click', () => this.toggleLanguages());
 
 		const body = contentEl.createDiv({ cls: 'ff10k-body' });
 		this.resultsEl = body.createDiv({ cls: 'ff10k-results' });
@@ -303,6 +310,7 @@ export class FastFindModal extends Modal {
 			previewUp: () => this.scrollPreview(-1),
 			showHelp: () => this.toggleHelp(),
 			openAll: () => void this.openAll(),
+			toggleLanguages: () => this.toggleLanguages(),
 		};
 		const bind = (spec: string, fn: () => void) => {
 			const k = parseKeySpec(spec);
@@ -457,6 +465,7 @@ export class FastFindModal extends Modal {
 			[[km.togglePreview], 'toggle preview'],
 			[[km.focusSimilar], 'similar notes'],
 			[[km.toggleDebug], 'why ranked'],
+			[[km.toggleLanguages], 'languages'],
 			[[km.openAll], 'open all'],
 			[[km.showHelp], 'help'],
 			[['Esc'], 'close'],
@@ -648,6 +657,14 @@ export class FastFindModal extends Modal {
 	private updatePills(): void {
 		this.pillAll.toggleClass('is-active', this.state.mode === 'all');
 		this.pillFiles.toggleClass('is-active', this.state.mode === 'filesOnly');
+		this.pillLang.toggleClass('is-active', this.plugin.languagesActive);
+	}
+
+	/** Ctrl+L: language expansion on/off for this session (the config change precedes the search in the worker queue). */
+	private toggleLanguages(): void {
+		this.plugin.toggleLanguages();
+		this.updatePills();
+		this.search();
 	}
 
 	private togglePreview(): void {

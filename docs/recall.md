@@ -35,13 +35,17 @@ queries; "after" was run after the fixes, so the five fixture notes are not in i
 | two | 4,072 | 57.66 % → 57.57 % | 79.94 % → 79.89 % | 86.12 % → 86.23 % | 2.7 ms | 6.5 ms |
 | typo | 6,323 | 91.03 % → **97.90 %** | 94.48 % → **99.84 %** | 94.97 % → 99.98 % | 3.3 ms | 14.8 ms |
 
-Same 939-note sample (every 10th note), both tools, before the fixes:
+Same 939-note sample (every 10th note), both tools, before the fixes; the last column is Fast
+Find 10K after the fixes (sample re-drawn the same way; the vault changed slightly in between,
+so 400 instead of 421 titles had three or more words):
 
-| Variant | Fast Find 10K @1 / @5 / @10 | Omnisearch @1 / @5 / @10 | FF10K p50 / p95 | Omnisearch p50 / p95 |
-|---|---|---|---|---|
-| full (939) | 97.34 / 99.68 / 99.79 % | 97.76 / 100 / 100 % | 2.8 / 11.4 ms | 5.8 / 58.7 ms |
-| two (421) | 56.53 / 80.76 / 87.89 % | 71.50 / 87.41 / 90.26 % | 2.7 / 6.8 ms | 6.5 / 44 ms |
-| typo (634) | 91.64 / 94.64 / 95.27 % | 78.23 / 83.75 / 84.70 % | 3.1 / 12.9 ms | 4.8 / 63.7 ms |
+| Variant | Fast Find 10K @1 / @5 / @10 | Omnisearch @1 / @5 / @10 | FF10K p50 / p95 | Omnisearch p50 / p95 | FF10K after the fixes @1 / @5 / @10 |
+|---|---|---|---|---|---|
+| full (939) | 97.34 / 99.68 / 99.79 % | 97.76 / 100 / 100 % | 2.8 / 11.4 ms | 5.8 / 58.7 ms | 99.25 / 100 / 100 % |
+| two (421) | 56.53 / 80.76 / 87.89 % | 71.50 / 87.41 / 90.26 % | 2.7 / 6.8 ms | 6.5 / 44 ms | 60.75 / 82.00 / 88.00 % (400) |
+| typo (634) | 91.64 / 94.64 / 95.27 % | 78.23 / 83.75 / 84.70 % | 3.1 / 12.9 ms | 4.8 / 63.7 ms | 98.57 / 100 / 100 % (628) |
+
+No abbreviations, language expansion or dictionary note were active in any run.
 
 Latencies are not directly comparable: Fast Find 10K ran natively (release build, one core),
 Omnisearch inside Obsidian's renderer. Inside Obsidian a Fast Find 10K query takes about 5 ms for
@@ -72,9 +76,14 @@ Typo, 318 misses out of 6,323: almost all 6-letter words with a letter deleted (
 `Klana`, `Entty`, `Menor`). The typo budget came from the typed length (6–9 typed letters allow
 one typo, 10+ two), so a 5-letter query got none.
 
-Two words: not a recall problem. `RW The`, `RW How`, `RW Data` each match dozens of notes
-equally (`RW` is a Readwise prefix on 2,000 notes); which of the equals is first comes down to
-backlinks. Omnisearch's BM25 does better here at @1 because it rewards shorter documents.
+Two words: not a recall problem, and expected to stay below Omnisearch at @1. `RW The`,
+`RW How`, `RW Data` each match dozens of notes equally (`RW` is a Readwise prefix on 2,000
+notes): every query word matched, the same number of title words unmatched, so the order among
+them is a tie-break (backlinks, then modification date). Omnisearch's BM25 prefers the shorter
+document, which agrees with the test's "the note itself" expectation more often. The note is in
+the top 10 in 88 % of these ambiguous queries; one more typed word resolves them. Ranking equals
+by document length would copy that behaviour, but the owner's vault has many short stub notes,
+so it was not adopted.
 
 ## Fixes applied (owner-approved 2026-10-27, commits `7d6ed82`, `b15ad29`)
 

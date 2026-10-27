@@ -26,6 +26,7 @@ export interface Keymap {
 	previewUp: string;
 	showHelp: string;
 	openAll: string;
+	toggleLanguages: string;
 }
 
 export const DEFAULT_KEYMAP: Keymap = {
@@ -47,6 +48,8 @@ export const DEFAULT_KEYMAP: Keymap = {
 	showHelp: 'Ctrl+Shift+/',
 	// Ctrl+Shift+Enter is createTab (Mod+Shift+Enter) off macOS
 	openAll: 'Alt+Shift+Enter',
+	// Ctrl+L is Obsidian's editor "toggle checkbox"; the modal swallows it while open
+	toggleLanguages: 'Ctrl+L',
 };
 
 export interface FastFindSettings {
@@ -194,7 +197,9 @@ export function parseDictionaryLines(text: string): string[] {
 	return out;
 }
 
-export function settingsToEngineConfig(s: FastFindSettings, extraSynonyms: readonly string[] = []): EngineConfig {
+/** The engine config for `s`; `languages` (the built-in lists and the dictionary note's lines)
+ * only when language expansion is active (Ctrl+L in the search, or the setting at startup). */
+export function settingsToEngineConfig(s: FastFindSettings, extraSynonyms: readonly string[] = [], languagesActive = false): EngineConfig {
 	return {
 		weights: { ...s.weights },
 		fuzzy: { enabled: s.fuzzy !== 'off', loose: s.fuzzy === 'loose' },
@@ -203,7 +208,7 @@ export function settingsToEngineConfig(s: FastFindSettings, extraSynonyms: reado
 		downrankFactor: s.downrankFactor,
 		fewThreshold: s.fewThreshold,
 		optionalTerms: [...s.optionalTerms],
-		synonyms: [...s.synonyms, ...extraSynonyms],
-		languages: [...s.languages],
+		synonyms: languagesActive ? [...s.synonyms, ...extraSynonyms] : [...s.synonyms],
+		languages: languagesActive ? (s.languages.length > 0 ? [...s.languages] : ['de']) : [],
 	};
 }
