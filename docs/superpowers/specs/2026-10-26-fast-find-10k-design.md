@@ -152,7 +152,7 @@ Unresolved links are not cached; they come from `app.metadataCache.unresolvedLin
 
 ### 6.1 Query syntax
 
-- Whitespace-separated terms, all must match (AND), order-free.
+- Whitespace-separated terms, all must match (AND), order-free, except **optional terms**: a term whose normalized form is on the "Optional words" list (default `a an the of to in on i`) is never required. Tiers 1–3 and the partial tier are computed over the required terms only; where an optional term does hit, it adds its field weight × quality to the score (and shows in the debug `per_term`). A query of only optional terms treats them all as required.
 - `"exact phrase"` → terms must be adjacent in one field.
 - `-term` → exclude notes where term matches anywhere.
 - `#tag` → filter to notes with that tag (nested tags match parents).
@@ -168,11 +168,11 @@ For each query term, against each field:
 | Term length | Allowed matches |
 |---|---|
 | 1–3 chars, single-term query | whole token only (exact). `ai` matches token `ai`, never `aim`, `Airflow`. |
-| 1–3 chars, multi-term query | exact or prefix. The other terms already narrow the candidates, so `data eng` may reach `engineering`. Exact token matches score 1.0 and prefix matches score `term_len / token_len`, so "AI in Data Engineering" still outranks "Airflow for Data Engineering" on `ai data engineering`. (Design call, see §16.) |
+| 1–3 chars, multi-term query | exact or prefix. "Multi-term" counts required words only (optional words, §6.1, do not narrow the candidates, so `ai the` keeps `ai` exact-only). The other terms already narrow the candidates, so `data eng` may reach `engineering`. Exact token matches score 1.0 and prefix matches score `term_len / token_len`, so "AI in Data Engineering" still outranks "Airflow for Data Engineering" on `ai data engineering`. (Design call, see §16.) |
 | 4–5 chars | exact or prefix |
 | 6+ chars | exact, prefix, or fuzzy on title/alias/heading strings |
 
-Fuzzy uses frizbee (`neo_frizbee`, SIMD Smith-Waterman, same matcher as fff and blink.cmp). Typo budget: 1 typo for 6–9 chars, 2 for 10+. Fuzzy is applied only to title, alias and heading strings; body matching is exact/prefix via the inverted index (fuzzy body matching is noise at this scale and is explicitly not wanted).
+Fuzzy uses frizbee (`neo_frizbee`, SIMD Smith-Waterman, same matcher as fff and blink.cmp). Typo budget: 1 typo for 6–9 chars, 2 for 10+. Fuzzy is applied only to title, alias and heading strings; body matching is exact/prefix via the inverted index (fuzzy body matching is noise at this scale and is explicitly not wanted). A fuzzy hit is accepted only when `score / self_score ≥ 0.65`, at least `needle_chars − max_typos` needle characters are matched (distinct frizbee match indices; frizbee's typo budget counts only missing characters, so substitutions would otherwise be free), and the matched span is at most `needle_chars + 2×max_typos + 1` characters (§16).
 
 Smart case: if the query contains an uppercase letter, case-sensitive bonus like fff; otherwise case-insensitive.
 
@@ -207,7 +207,7 @@ Worked examples (also golden tests):
 - `proximity`: bonus when all terms fall within one heading section, and a larger bonus when within 8 body tokens of each other. Phrase queries require adjacency instead.
 - `frecency`: fff's formula: `Σ exp(−0.0693 × days_since_access)` over the last 30 days (10-day half-life), capped (`10 + sqrt(x − 10)` above 10), scaled into the score. An "access" is **any** note open in Obsidian (`workspace.on("file-open")`), not only opens through the modal, so the signal is useful from day one and the empty-query list behaves like a recent-files list. Opens triggered by the modal itself are recorded once (not double-counted via `file-open`). Stored in IndexedDB store `access` (`path → [timestamps]`, max 128 per path). "Clear frecency" wipes this store. (Design call, see §16.)
 - `combo`: fff's query tracker. If the same normalized query led to opening the same note ≥ 3 times, that note gets a large boost for that query (effectively sticky top). Store `queries` (`query → {path, count}`).
-- `structural`: small bonus for shorter titles (exact-title hits beat long titles containing the words), and `log(1 + backlinks)` as a hub bonus (tiny).
+- `structural`: titles fully covered by the query win: for tiers 1–3 the fields sum is multiplied by `max(0.5, 1 − 0.15 × unmatched)`, where `unmatched` counts the non-stopword title words (stopwords `a an the in of with for and or to`; hyphenated words count per part) that no query term matched (exact, prefix or fuzzy). A matched alias stands in for the title when it leaves fewer words unmatched. Plus `2 × ln(1 + backlinks)` as a hub bonus (tiny).
 - `penalties`: downranked folders multiply by 0.3; notes under 20 words get a small penalty unless title matched exactly.
 
 Ties: more recent `mtime` first, then path.
@@ -218,7 +218,7 @@ Result limit: 50 scored results returned to the UI per query; the UI renders 30 
 
 ### 6.5 "Why ranked here" debug view
 
-Keyboard toggle (default Ctrl+/ in the modal; configurable) shows under each row: tier, per-term field hit and match quality, and the score components. Also the engine returns these in the result payload only when debug is on. This is a tuning tool and should be cheap to keep.
+Keyboard toggle (default Ctrl+R in the modal, was Ctrl+/ until task 23; configurable; the modal swallows the key so Obsidian's "Reload app" never fires while it is open) shows under each row: tier, per-term field hit and match quality, and the score components. Also the engine returns these in the result payload only when debug is on. This is a tuning tool and should be cheap to keep.
 
 ### 6.6 Latency
 
@@ -238,7 +238,7 @@ Rows in the result list that have ≥ 1 similar note (either signal above thresh
 - Shift+Enter creates a note from the query text (Mod+Shift+Enter: in a new tab). Filename = query with `\ / : * ? " < > |` removed and whitespace trimmed; if the selected row is a ghost (unresolved link), the exact link target is used instead. Location follows Obsidian's "Default location for new notes" (same folder as current, configured folder, or vault root), via `fileManager` / `vault.create`, then open.
 - **Create guard**: before creating, the modal swaps the similar panel to "Already have?" showing up to 3 nearest existing notes (title-overlap and, if available, semantic neighbours of the query embedding). Enter on one of them opens it instead; Shift+Enter again confirms creation; Esc cancels. Setting to disable the guard.
 - Ghost rows: unresolved link targets appear as tier-1 candidates, rendered italic with a dashed icon and "not created · linked from N notes". Enter on a ghost = create it (with the guard).
-- Alt+Enter inserts a link to the selected result at the cursor of the active editor (`fileManager.generateMarkdownLink`); for a heading hit, `[[Note#Heading]]`. The modal closes.
+- Insert link (Alt+Enter, `[[link]]` at the editor cursor) was removed on owner request (task 23).
 
 ## 9. Smart Connections integration
 
@@ -270,12 +270,11 @@ Keys (modal; all configurable in settings):
 | Mod+Enter | open in new tab |
 | Mod+Alt+Enter | open in split |
 | Shift+Enter | create note from query / ghost (with guard) |
-| Alt+Enter | insert `[[link]]` at cursor |
 | Ctrl+F (in modal) | toggle files-only mode (tier 1 only, no body index consulted) |
 | Ctrl+S | add semantic tier for this query |
 | Ctrl+J / Ctrl+K, ↑ / ↓ | move selection |
 | Ctrl+P | toggle preview |
-| Ctrl+/ | toggle "why ranked" |
+| Ctrl+R | toggle "why ranked" |
 | Tab | focus similar panel (then Enter opens the similar note) |
 | Esc | close |
 
@@ -292,6 +291,7 @@ Modal prefill: current editor selection if any, else empty (not the last query; 
 - Field weights (title, alias, h1, h2, h3, tag, link, path, body) as sliders with "reset to defaults".
 - Fuzzy typo tolerance: off / normal (default) / loose.
 - Show partial-match tier: only when few results (default) / always / never.
+- Optional words (never required), one per line; default `a an the of to in on i`. Applied live.
 - Semantic tier: auto when few results (default) / on demand only / never.
 - Use Smart Connections embeddings (on/off), minimum similarity shown (default 0.70).
 - Create guard on/off.
@@ -309,7 +309,7 @@ Modal prefill: current editor selection if any, else empty (not the last query; 
   |---|---|---|
   | `obsidian trouble` | Obsidian Troubleshooting | |
   | `data engineering ai` | AI in Data Engineering (tier 1 family) | body-only hits |
-  | `data engineer ai` | same | |
+  | `data engineer ai` | AI for Data Engineers (prefix quality; family in top 5) | |
   | `ai data engineering` | same | |
   | `AI` | notes with token `ai` in title | Airflow, aim decoys |
   | `mlops data engineering` | both MLOps notes, flagged similar | |
@@ -360,3 +360,13 @@ Calls made by the designer after the builder check (owner may override):
 - Short terms (≤3 chars) are exact-only in single-term queries but may prefix-match in multi-term queries. Keeps `AI` alone strict while letting `rust data eng` work.
 - Frecency counts every note open in Obsidian, not only opens via the modal.
 - Smart Connections bridge targets 4.7.2, isolated in one module, self-disables on an unknown major version.
+
+Rulings made during implementation (controller):
+
+- Smart case (§6.2) is deferred: fuzzy matching runs the normalized query against normalized field strings, so case bonuses are inert in v1.
+- Fuzzy hits are rejected when the matched span exceeds `needle_chars + 2×max_typos + 1` characters or the score ratio is below 0.65 (0.5 until task 23), so scattered subsequences (`airflow` → "AI rules for low budgets") never enter tier 1.
+- Fuzzy hits also need at least `needle_chars − max_typos` matched needle characters (distinct frizbee match indices) (task 23, owner feedback). frizbee's `max_typos` counts only missing needle chars, so substitutions were free: `writing` hit "Airbyte Checkpointing" (via "ointing") and "Don't use AI for everything…", `should` hit "Social Media Prescheduled Long Format". Final ratio floor 0.65 (no golden needed tuning in 0.6–0.7); transpositions such as `troubelshoot` → "Obsidian Troubleshooting" still match.
+- Optional terms (§6.1, task 23, owner feedback): `should i change` must find "Change Should Happen" at tier 1 although it has no `i`. Default list `a an the of to in on i` (stopwords and single letters; `ai`, `de`, `my` are not on it); the owner can edit it. The short-term prefix rule counts required words only (task 23 review): `ai the` keeps `ai` exact-only, `ai data` still lets it prefix-match. Optional units never create candidates, so `should i change` on the test vault scores 478 candidates instead of 1,533.
+- The short-term rule applies per compound part (`gen-ai` keeps `ai` exact-only in single-term queries).
+- `data engineer ai` ranks "AI for Data Engineers" first because `engineer`→`engineers` (8/9) outscores `engineer`→`engineering` (8/11); the §6.3 example assumed equal quality.
+- Structural (§6.4): the shorter-title bonus is replaced by an unmatched-title-word factor on the fields sum, `max(0.5, 1 − 0.15 × unmatched)` (step 0.15, floor 0.5), applied to tiers 1–3 with a matched alias standing in for the title, so `obsidian trouble` ranks "Obsidian Troubleshoot" above "Obsidian Trouble Tags Plugin".

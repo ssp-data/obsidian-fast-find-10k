@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (stable, wasm32 target)
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: wasm-bindgen-cli 0.2.128
+        run: cargo install wasm-bindgen-cli --version 0.2.128 --locked
+
+      - name: cargo test --workspace
+        run: cargo test --workspace
+
+      - name: Benches compile
+        run: cargo bench -p ff10k-core --no-run
+
+      - name: Golden queries
+        run: cargo test -p ff10k-core --features golden --test golden
+
+      - name: Typo recall
+        run: cargo test -p ff10k-core --features golden --test typo_recall -- --nocapture
+
+      - name: Build wasm
+        run: bash scripts/build-wasm.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+
+      - name: Plugin build and tests
+        working-directory: plugin
+        run: |
+          npm ci
+          npm run build
+          npm test
+          test "$(stat -c %s dist/main.js)" -lt 3000000

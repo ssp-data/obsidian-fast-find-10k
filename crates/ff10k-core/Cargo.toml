@@ -1,0 +1,39 @@
+[package]
+name = "ff10k-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ff10k_core"
+
+[dependencies]
+neo_frizbee = "0.13"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+unicode-normalization = "0.1"
+unicode-general-category = "1"
+smallvec = "1"
+rustc-hash = "2"
+walkdir = { version = "2", optional = true }
+toml = { version = "0.8", optional = true }
+
+[features]
+default = []
+# Golden query runner (`ff10k_core::golden`), used by tests/golden.rs and the CLI.
+golden = ["dep:walkdir", "dep:toml"]
+
+[dev-dependencies]
+toml = "0.8"
+criterion = "0.5"
+
+[[test]]
+name = "golden"
+required-features = ["golden"]
+
+[[test]]
+name = "typo_recall"
+required-features = ["golden"]
+
+[[bench]]
+name = "engine"
+harness = false

@@ -1,0 +1,23 @@
+{
+	"name": "fast-find-10k",
+	"version": "0.1.0",
+	"description": "Fast fuzzy search built for large vaults.",
+	"main": "dist/main.js",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc --noEmit && node esbuild.config.mjs production",
+		"typecheck": "tsc --noEmit",
+		"test": "node --test test/"
+	},
+	"author": "Simon Späti",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^26.6.5",
+		"builtin-modules": "^5.4.0",
+		"esbuild": "^0.28.2",
+		"obsidian": "^1.14.4",
+		"typescript": "^7.0.2"
+	}
+}

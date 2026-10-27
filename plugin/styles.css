@@ -1,0 +1,434 @@
+/* Fast Find 10K: search modal (Telescope layout). Obsidian CSS variables only, so themes apply. */
+
+.modal.ff10k-modal {
+	width: 90vw;
+	max-width: 90vw;
+	height: 85vh;
+	max-height: 85vh;
+	padding: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+/* Esc closes (footer hint); the close button would sit on top of the status text. */
+.ff10k-modal .modal-close-button,
+.ff10k-modal .modal-header-button,
+.ff10k-modal .modal-header {
+	display: none;
+}
+
+.ff10k-modal .ff10k-content {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	overflow: hidden;
+}
+
+/* Top bar */
+.ff10k-bar {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-4-2) var(--size-4-3);
+	background: var(--background-secondary);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.ff10k-bar .ff10k-input {
+	flex: 1;
+	min-width: 0;
+}
+
+.ff10k-pill {
+	font-size: var(--font-ui-smaller);
+	padding: 2px var(--size-4-2);
+	border-radius: var(--radius-l);
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.ff10k-pill.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.ff10k-status {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Body: results 55% | preview + similar */
+.ff10k-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	background: var(--background-primary);
+}
+
+.ff10k-results {
+	flex: 0 0 55%;
+	min-width: 0;
+	overflow-y: auto;
+	padding: var(--size-4-1) 0;
+	border-right: 1px solid var(--background-modifier-border);
+}
+
+.ff10k-right {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.ff10k-preview {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	padding: var(--size-4-2) var(--size-4-3);
+	border-bottom: 1px solid var(--background-modifier-border);
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+	color: var(--text-normal);
+}
+
+.ff10k-similar {
+	flex: 0 0 auto;
+	max-height: 40%;
+	display: flex;
+	flex-direction: column;
+	padding: var(--size-4-2) var(--size-4-3);
+	background: rgba(var(--color-red-rgb), 0.05);
+}
+
+.ff10k-preview-hidden .ff10k-right {
+	display: none;
+}
+
+.ff10k-preview-hidden .ff10k-results {
+	flex: 1;
+	border-right: none;
+}
+
+/* Tier group labels and rows */
+.ff10k-tier {
+	padding: var(--size-4-2) var(--size-4-3) 2px;
+	font-size: var(--font-ui-smaller);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.ff10k-row {
+	padding: 3px var(--size-4-3);
+	cursor: pointer;
+}
+
+.ff10k-row:hover {
+	background: var(--background-modifier-hover);
+}
+
+.ff10k-row.is-selected {
+	background: var(--background-modifier-active-hover);
+}
+
+.ff10k-row-main {
+	display: flex;
+	align-items: baseline;
+	gap: var(--size-4-2);
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.ff10k-badge,
+.ff10k-similar-badge {
+	flex: 0 0 auto;
+	font-size: var(--font-ui-smaller);
+	padding: 0 6px;
+	border-radius: var(--radius-l);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+}
+
+.ff10k-badge-t1 {
+	border-color: var(--color-green);
+	color: var(--color-green);
+}
+
+.ff10k-badge-t2 {
+	border-color: var(--color-orange);
+	color: var(--color-orange);
+}
+
+.ff10k-badge-t3,
+.ff10k-badge-t4 {
+	color: var(--text-faint);
+}
+
+.ff10k-badge-t5 {
+	border-color: var(--color-purple);
+	color: var(--color-purple);
+}
+
+.ff10k-similar-badge {
+	border-color: var(--color-red);
+	color: var(--color-red);
+}
+
+.ff10k-title {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--text-normal);
+}
+
+.ff10k-hl {
+	color: var(--text-accent);
+	font-weight: var(--font-bold);
+}
+
+.ff10k-heading {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--font-ui-small);
+	color: var(--color-orange);
+}
+
+.ff10k-excerpt,
+.ff10k-folder,
+.ff10k-context {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.ff10k-folder {
+	color: var(--text-faint);
+}
+
+.ff10k-ghost {
+	font-style: italic;
+}
+
+.ff10k-ghost .ff10k-title {
+	color: var(--text-muted);
+}
+
+.ff10k-ghost .ff10k-title::before {
+	content: "+ ";
+	font-style: normal;
+	font-weight: var(--font-bold);
+	color: var(--color-green);
+}
+
+.ff10k-debug {
+	padding-left: var(--size-4-8);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	overflow-wrap: anywhere; /* one line, wrapping when long */
+}
+
+.ff10k-empty {
+	padding: var(--size-4-3);
+	color: var(--text-faint);
+}
+
+/* Footer key hints */
+.ff10k-footer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-4-1) var(--size-4-4);
+	padding: var(--size-4-1) var(--size-4-3);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	background: var(--background-secondary);
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Preview: lightweight rendering of the selected note */
+.ff10k-line {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* lines well below the scroll target: skip their layout until scrolled near */
+.ff10k-line.ff10k-lazy {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 1.5em;
+}
+
+.ff10k-h1,
+.ff10k-h2,
+.ff10k-h3 {
+	font-weight: var(--font-bold);
+}
+
+.ff10k-h1 {
+	color: var(--color-red);
+}
+
+.ff10k-h2 {
+	color: var(--color-orange);
+}
+
+.ff10k-h3 {
+	color: var(--color-yellow);
+}
+
+.ff10k-code {
+	color: var(--text-muted);
+}
+
+.ff10k-link {
+	color: var(--text-accent);
+}
+
+.ff10k-tag {
+	color: var(--color-purple);
+}
+
+.ff10k-preview mark {
+	background: var(--text-highlight-bg);
+	color: inherit;
+}
+
+.ff10k-truncated,
+.ff10k-preview-empty {
+	color: var(--text-faint);
+	font-style: italic;
+}
+
+/* Similar notes panel */
+.ff10k-similar-label {
+	font-size: var(--font-ui-smaller);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--color-red);
+	margin-bottom: 2px;
+}
+
+.ff10k-similar-list {
+	min-height: 0;
+	overflow-y: auto;
+	outline: none;
+}
+
+.ff10k-similar-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	column-gap: var(--size-4-2);
+	padding: 2px var(--size-4-1);
+	border-radius: var(--radius-s);
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.ff10k-similar-row:hover {
+	background: var(--background-modifier-hover);
+}
+
+.ff10k-similar-row.is-selected {
+	background: var(--background-modifier-active-hover);
+}
+
+.ff10k-similar-title,
+.ff10k-similar-path {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ff10k-similar-path {
+	grid-column: 1 / -1;
+	grid-row: 2;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.ff10k-similar-reason {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.ff10k-similar-none {
+	color: var(--text-faint);
+}
+
+.ff10k-similar-hint {
+	margin-top: 2px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+/* Shortcut cheat-sheet overlay */
+.ff10k-modal .ff10k-content {
+	position: relative;
+}
+
+.ff10k-help {
+	position: absolute;
+	inset: var(--size-4-8) 10%;
+	z-index: 10;
+	overflow-y: auto;
+	padding: var(--size-4-4);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-l);
+	font-size: var(--font-ui-small);
+}
+
+.ff10k-help-title {
+	font-weight: var(--font-semibold);
+	margin-bottom: var(--size-4-3);
+}
+
+.ff10k-help-groups {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: var(--size-4-4);
+}
+
+.ff10k-help-group-title {
+	font-size: var(--font-ui-smaller);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	margin-bottom: var(--size-4-1);
+}
+
+.ff10k-help-row {
+	display: flex;
+	gap: var(--size-4-2);
+	padding: 2px 0;
+}
+
+.ff10k-help-keys {
+	flex: 0 0 45%;
+	color: var(--text-muted);
+}
+
+.ff10k-help-note {
+	margin-top: var(--size-4-3);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+/* Settings tab: rejected key binding */
+input.ff10k-invalid {
+	border-color: var(--text-error);
+	box-shadow: 0 0 0 1px var(--text-error);
+}

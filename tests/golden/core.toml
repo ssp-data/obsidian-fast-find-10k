@@ -1,0 +1,135 @@
+# Golden queries against fixtures/vault (spec §12).
+# A name matches a hit when it equals the hit's title or the hit's path ends with it.
+# expect_in_top = within the first 5 hits; expect_similar_count = exact, hit anywhere in the page;
+# must_not_appear = not anywhere in the returned page; expect_in_top3 = within the first 3 hits;
+# expect_tier = the tier every hit named in expect_top / expect_in_top / expect_in_top3 must have.
+
+[[case]]
+query = "obsidian trouble"
+expect_top = "Obsidian Troubleshooting"
+
+[[case]]
+query = "obsidian troubleshoot"
+expect_top = "Obsidian Troubleshooting"
+
+[[case]]
+query = "obsidian troubelshoot"
+expect_top = "Obsidian Troubleshooting"
+expect_similar_count = { "Neovim Troubleshooting" = 0 }
+
+[[case]]
+query = "AI"
+must_not_top3 = ["Airflow Basics", "aim high", "Airflow for Data Engineering"]
+expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
+
+# Top pick rests on the backlink hub bonus: "AI in Data Engineering" ties "Data Engineering with AI"
+# on fields and title coverage and wins 328.6 vs 325.0 on backlinks (5 vs 0).
+[[case]]
+query = "data engineering ai"
+expect_top = "AI in Data Engineering"
+expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
+must_not_top3 = ["👉🏻 Data Engineering", "RW Pandas AI — The Future of Data Analysis"]
+
+# Prefix quality: `engineer`->`engineers` (8/9) outscores `engineer`->`engineering` (8/11); spec §16 ruling.
+[[case]]
+query = "data engineer ai"
+expect_top = "AI for Data Engineers"
+expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
+must_not_top3 = ["👉🏻 Data Engineering", "RW Pandas AI — The Future of Data Analysis"]
+
+# Same backlink-bonus tie-break as "data engineering ai" (328.6 vs 325.0).
+[[case]]
+query = "ai data engineering"
+expect_top = "AI in Data Engineering"
+expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
+
+[[case]]
+query = "mlops data engineering"
+expect_in_top = ["RW MLOps is mostly data engineering", "RW MLOps Is Mostly Data Engineering."]
+expect_similar_count = { "RW MLOps is mostly data engineering" = 1, "RW MLOps Is Mostly Data Engineering." = 1 }
+
+[[case]]
+query = "rust data eng"
+expect_in_top = ["RW Rust for Data Engineering", "RW Rust for Data Engineering  Dataengineering"]
+expect_similar_count = { "RW Rust for Data Engineering" = 1, "RW Rust for Data Engineering  Dataengineering" = 1 }
+
+[[case]]
+query = "llm pipelines"
+expect_top = "LLMs for Pipelines"
+
+[[case]]
+query = "ai data engineer"
+mode = "files"
+expect_in_top = ["LLMs for Pipelines", "AI Data Engineer Workflows"]
+
+[[case]]
+query = "obsidian search lots"
+# The file name has U+00A0 between "Obsidian" and "Search".
+expect_top = "Obsidian\u00A0Search (lots of files)"
+
+[[case]]
+query = "painful repetitive job"
+expect_in_top = [
+  "RW The Most Painful and Repetitive Job of a Data Engineer",
+  "RW The Most Painful and Repetitive Job of a Data Engineer-2",
+]
+expect_similar_count = { "RW The Most Painful and Repetitive Job of a Data Engineer" = 1, "RW The Most Painful and Repetitive Job of a Data Engineer-2" = 1 }
+
+[[case]]
+query = "index"
+expect_in_top = ["💡 Resources/Index.md", "Archive/Index.md"]
+
+[[case]]
+query = "data mesh"
+expect_top = "Data Mesh"
+must_not_top3 = ["Data Platform Engineering"]
+
+[[case]]
+query = '"data engineering"'
+must_not_top3 = ["Data Platform Engineering"]
+
+# Daily notes (YYYY-MM-DD) are not copies of each other.
+[[case]]
+query = "2026-07-01"
+expect_top = "2026-07-01"
+expect_similar_count = { "2026-07-01" = 0 }
+
+# Fully covered short title beats the long title containing the same words (spec §6.4 structural).
+[[case]]
+query = "data engineering"
+# The long title (5 unmatched words, factor floor 0.5) lands 9th here, so no expect_in_top for it.
+expect_top = "👉🏻 Data Engineering"
+
+# The long title wins once its distinctive word is typed.
+[[case]]
+query = "fundamentals data engineering"
+expect_top = "Fundamentals of Data Engineering (Joe Reis, Matt Housley)"
+
+# Fuzzy needs the matched needle chars (>= needle chars - typo budget) and ratio >= 0.65:
+# substitution-heavy alignments ("writing" ~ "checkpointing"/"everything", "should" ~
+# "prescheduled") are rejected. None of the decoys contains "writing" or "should".
+[[case]]
+query = "ai writing"
+must_not_appear = ["Airbyte Checkpointing", "Don't use AI for everything, you stop thinking-learning AI Use"]
+
+# `i` is an optional term (default list `a an the of to in on i`): never required, scored when it hits;
+# "Change Should Happen" has no `i` and still shows. It ranks first (fields 200 x title factor 0.85 =
+# 170 vs 300 x floor 0.5 = 150: four unmatched title words), so no expect_top here (task 23 review).
+[[case]]
+query = "should i change"
+expect_in_top = ["Should I Change My Writing because of AI", "Change Should Happen"]
+must_not_appear = ["Social Media Prescheduled Long Format"]
+
+# Fuzzy title match must not depend on later title words: frizbee's best alignment of `obsidain`
+# borrows the `i`/`n` of "troubleshooting" (0 typos, span too wide) and was rejected, dropping the
+# title to tier 4; the retry over per-token windows finds the local 1-typo alignment (final review).
+[[case]]
+query = "obsidain troubleshooting"
+expect_top = "Obsidian Troubleshooting"
+expect_tier = 1
+
+# The fixture title has a no-break space after "Obsidian".
+[[case]]
+query = "obsidina search"
+expect_in_top3 = ["Obsidian\u00A0Search (lots of files)"]
+expect_tier = 1
