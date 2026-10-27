@@ -25,7 +25,24 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 > The name comes from finding fast notes, which is the key of this plugin and the 10k is a hint to my personal limitation I got from 10k above. It's not meant to stay like this, or not usable below 10k, it will work peferctly fine too for low files, but that's the reason why I created it, and hence the name.
 
 ## Features
-- ... TODO
+
+- **Fast on big vaults.** The index is a Rust engine compiled to WebAssembly, running in a Web Worker. On the 9,385-note / 27 MB test vault the finder is searchable about 0.3 s after Obsidian loads (fully indexed after 1.2–1.4 s), and a query takes 4–18 ms inside Obsidian (1–8 ms native). There is no input debounce: every keystroke is a query, and the screen is repainted in under 30 ms. Notes are cached in IndexedDB, so a reload re-indexes only what changed; an edit is picked up within half a second.
+- **Accurate ranking in tiers.** A note that matches every word in its title or an alias always ranks above one that matches only in a heading, which ranks above body-only matches. Within a tier, field weights, prefix and typo quality, how many title words the query left unmatched, word proximity, backlinks and your own opening history (frecency) decide the order. See [How ranking works](#how-ranking-works).
+- **Fuzzy, but guarded.** `troubelshoot` still finds "Obsidian Troubleshooting" (one typo for 6–9 letter words, two for 10+), while scattered subsequences are rejected, so `writing` does not match "Airbyte Checkpointing". Word order never matters: `ai writing` and `writing ai` return the same list.
+- **Why ranked here (Ctrl+R).** Every row can show its tier, which field each word hit (exact, prefix or fuzzy, with the quality), and every score component. When a result surprises you, one key shows the reason:
+
+  ![why ranked](docs/images/why-ranked.webp)
+
+  "Obsidian Troubleshoot" wins over "Obsidian Trouble Tags Plugin" although the latter matches `trouble` exactly: two of its title words were not in the query (`titleFactor ×0.70`), and the first note was opened before (`frecency +155`).
+- **Similar notes, to avoid creating a note twice.** The panel bottom right lists near-duplicates of the selected result, and every row carries an `N similar` pill. Similarity comes from title overlap, plus [Smart Connections](#smart-connections) embeddings when that plugin is installed. Before creating a note with Shift+Enter, the create guard shows the closest existing notes first ("Already have?"). This is the feature that stops a vault with no folders from collecting "AI", "AI and Data Engineering" and "AI for Data Engineers" three times over.
+- **Create when nothing exists.** Shift+Enter creates a note named after the query (Mod+Shift+Enter in a new tab). Unresolved `[[links]]` show as ghost rows (`[ghost x2]` = linked from two notes) and can be created the same way.
+- **Files only (Ctrl+F)** switches to titles, aliases and paths, as a Quick Switcher replacement.
+- **Telescope layout with preview.** Results left, the note preview right with the matches highlighted, vim keys to move (Ctrl+J/K) and to scroll the preview (Shift+J/K). Enter opens, Mod+Enter in a new tab, Mod+Alt+Enter in a split, Alt+Shift+Enter opens all shown results (10 or fewer).
+- **Query syntax** for narrowing: `"exact phrase"`, `#tag`, `path:folder`, `-exclude`. Optional words (`a an the of to in on i` by default) never exclude a note, and abbreviations expand (`oss` → "open source"), both editable in the settings.
+- **Respects your vault setup.** Obsidian's "Excluded files" are never indexed, you can add ignored globs, and folders such as an archive can be downranked instead of hidden.
+- **Semantic results on demand (Ctrl+S)** through Smart Connections embeddings, as a separate tier below the text matches.
+- **Resume and recall.** "Search (resume last)" reopens the finder with the previous query; notes you keep opening from the same query get a sticky bonus.
+- **Local only.** No language model, no network. See [LLMs or AI](#llms-or-ai).
 ## Install
 
 There is no release yet (a GitHub release with `main.js`, `manifest.json` and `styles.css` comes later). For development, build and symlink the plugin into a vault:
@@ -63,7 +80,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 |---|---|
 | ↓ / Ctrl+J | next result |
 | ↑ / Ctrl+K | previous result |
-| Shift+J / Shift+K | scroll the preview down / up (while bound, capital J and K cannot be typed into the query; rebind to e.g. Alt+J / Alt+K if you need them) |
+| Shift+J / Shift+K | scroll the preview down / up. Search is case-insensitive, so typing lowercase j/k is the same query; only a note created with Shift+Enter would get a lowercase j/k in its name (rebind to Alt+J / Alt+K if that matters) |
 | Tab | focus the similar-notes panel |
 | Enter | open |
 | Mod+Enter | open in a new tab |
@@ -81,7 +98,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 ### Settings
 
 - **Indexing**: ignored folders/globs (never indexed; Obsidian "Excluded files" are always honoured), downranked folders (still searchable, score × 0.3), rebuild index.
-- **Ranking**: field weights (title 100, alias 90, h1 60, h2 50, h3 40, tag 30, link 20, path 15, body 10; a weight of 0 turns the field off), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never), optional words that a query never requires (default `a an the of to in on i`; they still add to the score where they match).
+- **Ranking**: field weights (title 100, alias 90, h1 60, h2 50, h3 40, tag 30, link 20, path 15, body 10; a weight of 0 turns the field off), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never), optional words that a query never requires (default `a an the of to in on i`; they still add to the score where they match), abbreviations and synonyms (one group per line, `oss: open source, open-source software`; typing a single-word member also finds the other members, see [Examples](#examples)).
 - **Semantic**: use Smart Connections embeddings, minimum similarity shown, semantic tier (auto / on demand / never).
 - **Behaviour**: create guard, preview open by default.
 - **Keys**: every modal binding.
@@ -104,9 +121,67 @@ Within a tier the score adds the field weights × match quality (exact 1.0, pref
 When [Smart Connections](https://github.com/brianpetro/obsidian-smart-connections) (4.7.2) is installed and has embedded the vault, Fast Find 10K reads its note vectors (read-only, through one bridge module) and uses them for the semantic tier, the similar-notes panel and the create guard. Without it everything else works and the similar panel uses title similarity only.
 
 ### Examples
-- ordering of search not matter: `ai writing` and `writing ai` should show the note `ai writing.md`
-- fuzzy: so if you type `toubleshoot`, missing the `r`, it will still find the troubleshoot note.
-- TODO
+
+All results below come from the CLI on the 9,385-note test vault (`ff10k query <vault> "<q>"`), which is a copy of my own vault; Obsidian shows the same list.
+
+**Word order does not matter.** `ai writing` and `writing ai` give the same list:
+
+```
+1  AI Writing
+1  How to detect AI Writing
+1  Use Cases of AI Writing (ChatGPT, Lex, etc.)
+1  Writing with AI- SSP Data
+```
+
+**Typos.** `obsidian troubelshoot` (letters swapped) still puts "Obsidian Troubleshoot" first; the rest are notes with a troubleshooting heading:
+
+```
+1  Obsidian Troubleshoot
+2  Obsidian                          ### Troubleshooting
+2  Vimrc for Obsidian                ## Troubleshoot
+2  Obsidian Lag                      ## Debug / Troubleshoot
+```
+
+**Fully covered titles win.** `obsidian trouble` ranks "Obsidian Troubleshoot" above "Obsidian Trouble Tags Plugin", because the second title has two words the query did not mention. Ctrl+R shows it: `trouble→title prefix 0.58 · titleFactor ×1.00` versus `trouble→title exact 1.00 · titleFactor ×0.70`. Type `trouble tags` and the plugin note comes first.
+
+**Phrase, tag, path and exclude.** `"data engineering" duckdb` needs the two words next to each other and `duckdb` anywhere:
+
+```
+1  Reducing complex Data Engineering Architecture with SQLite and DuckDB
+1  What has WebAssembly (WASM) to do with DuckDB and data engineering   [ghost x1]
+2  Data Engineering Whitepapers       ## DuckDB
+```
+
+The second row is a ghost: a `[[link]]` to a note that does not exist yet. Shift+Enter creates it. `path:inbox dagster -airflow` limits the path to `inbox`, requires `dagster` and drops every note that mentions Airflow.
+
+**Optional words.** `should i change` finds "Should I Change My Writing because of AI" first, and a note titled "Change Should Happen" also qualifies for the title tier although it has no `i`, because `i` is on the optional list. Where an optional word does hit, it still adds to the score.
+
+**Abbreviations.** With the setting line `oss: open source, open-source software`, the query `oss` matches notes that say OSS, "open source" or "open-source software" in the title, headings or body:
+
+```
+without the group                        with the group
+1  Open Source (alias OSS)               1  Open Source
+1  dbt (alias)                           1  Supporting Open Source
+1  OSS git Analytics and insights        1  Why Open-Source
+1  Podcast Bedag - OSS Data Engineering  1  dbt (alias)
+                                         1  open-source lock-in
+                                         1  The Death of Open Source
+```
+
+The same for `de: data engineering`: alone, `de` is an exact two-letter word and finds "TJ DeVries" and "Elias DeFaria"; with the group it finds the "Data Engineering" hub notes first. Typing a single-word member finds the others in both directions (`k8s: kubernetes` makes `kubernetes` find the "K8s Cheatsheet" note too); a several-word member is only found, so `open source` does not search for `oss`.
+
+**Files only.** Ctrl+F with `obsidian lag` lists "Obsidian Lag" and then partial title matches ("Obsidian", "Using Obsidian with AI"); headings and body are not searched.
+
+**Similar notes.** Selecting "How to detect AI Writing" shows, from the Smart Connections embeddings:
+
+```
+0.850  AI Writing
+0.838  What I Learned Writing with AI
+0.836  Originality.ai (detecting AI generated articles)
+0.830  Tools to Check Plagiarism and AI-Generated
+```
+
+Without Smart Connections the panel uses title overlap only: "👉🏻 Data Engineering" lists "AI in Data Engineering", "Airflow for Data Engineering", "Data Engineering Glossary" and so on.
 
 
 ### LLMs or AI
@@ -130,7 +205,7 @@ On a 9,385-note / 27 MB vault: warm start about 1.2–1.4 s to fully indexed (se
 
 ```sh
 ff10k index   <vault>                                   # docs, bytes, index time, RSS
-ff10k query   <vault> "<q>" [--files] [--debug] [--limit N] [--smart-env]
+ff10k query   <vault> "<q>" [--files] [--debug] [--limit N] [--smart-env] [--synonym "oss: open source"]...
 ff10k similar <vault> <vault-relative-path> [--smart-env]
 ff10k golden  <vault> <golden.toml>
 ff10k bench   <vault>
