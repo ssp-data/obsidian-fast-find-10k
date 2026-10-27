@@ -24,6 +24,8 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 > NOTE "The name"
 > The name comes from finding fast notes, which is the key of this plugin and the 10k is a hint to my personal limitation I got from 10k above. It's not meant to stay like this, or not usable below 10k, it will work peferctly fine too for low files, but that's the reason why I created it, and hence the name.
 
+## Features
+- ... TODO
 ## Install
 
 There is no release yet (a GitHub release with `main.js`, `manifest.json` and `styles.css` comes later). For development, build and symlink the plugin into a vault:
@@ -53,7 +55,7 @@ Query syntax: plain words are AND-ed and match by prefix and with typo tolerance
 
 An empty query lists recently opened notes. Rows show which field matched (title, alias, heading, content, link) with highlights, a preview on the right, and an `N similar` pill when near-duplicates exist.
 
-## Keys
+### Keys
 
 Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed in the settings, and Ctrl+? shows the current ones in the modal.
 
@@ -76,7 +78,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 | Ctrl+? (Ctrl+Shift+/) | toggle the key help |
 | Esc | close (or leave the similar panel / help) |
 
-## Settings
+### Settings
 
 - **Indexing**: ignored folders/globs (never indexed; Obsidian "Excluded files" are always honoured), downranked folders (still searchable, score × 0.3), rebuild index.
 - **Ranking**: field weights (title 100, alias 90, h1 60, h2 50, h3 40, tag 30, link 20, path 15, body 10; a weight of 0 turns the field off), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never), optional words that a query never requires (default `a an the of to in on i`; they still add to the score where they match).
@@ -100,6 +102,11 @@ Within a tier the score adds the field weights × match quality (exact 1.0, pref
 ### Smart Connections
 
 When [Smart Connections](https://github.com/brianpetro/obsidian-smart-connections) (4.7.2) is installed and has embedded the vault, Fast Find 10K reads its note vectors (read-only, through one bridge module) and uses them for the semantic tier, the similar-notes panel and the create guard. Without it everything else works and the similar panel uses title similarity only.
+
+### Examples
+- ordering of search not matter: `ai writing` and `writing ai` should show the note `ai writing.md`
+- fuzzy: so if you type `toubleshoot`, missing the `r`, it will still find the troubleshoot note.
+- TODO
 
 
 ### LLMs or AI
@@ -137,3 +144,6 @@ The vault walk skips dot-folders and non-`.md` files and honours Obsidian "Exclu
 ## Credits
 
 Ideas and behaviour borrowed from [fff](https://github.com/dmtrKovalenko/fff.nvim), [fzf](https://github.com/junegunn/fzf), [Telescope](https://github.com/nvim-telescope/telescope.nvim), [Omnisearch](https://github.com/scambier/obsidian-omnisearch) and [Smart Connections](https://github.com/brianpetro/obsidian-smart-connections). Fuzzy matching by [neo_frizbee](https://crates.io/crates/neo_frizbee).
+
+
+*See also my other plugins I made, [Obsidian Trouble Tags](https://github.com/sspaeti/obsidian-trouble-tags).*
