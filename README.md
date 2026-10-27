@@ -53,7 +53,11 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 - **Local only.** No language model, no network. See [LLMs or AI](#llms-or-ai).
 ## Install
 
-Until the plugin is in the community list, install a release with [BRAT](https://github.com/TfTHacker/obsidian42-brat) (add `ssp-data/obsidian-fast-find-10k` as a beta plugin; this also works on mobile), or build it yourself:
+**From the community plugins** (desktop and mobile): in Obsidian open Settings → Community plugins → Browse, search for "Fast Find 10K" and install it, or open <https://community.obsidian.md/plugins/fast-find> and click Install. Then enable it.
+
+**Pre-releases**: with [BRAT](https://github.com/TfTHacker/obsidian42-brat), add `ssp-data/obsidian-fast-find-10k` as a beta plugin; BRAT also installs the latest release on mobile.
+
+**From source**:
 
 ```sh
 make install VAULT=<vault>                  # builds wasm + plugin and symlinks plugin/dist into the vault
@@ -68,7 +72,7 @@ V=<vault>/.obsidian/plugins/fast-find
 mkdir -p $V && ln -sf $PWD/dist/main.js $PWD/dist/manifest.json $PWD/dist/styles.css $V/
 ```
 
-Then enable "Fast Find 10K" under Settings → Community plugins. Requires Obsidian 1.5.7 or newer. The plugin's Obsidian id is `fast-find` (manifest ids allow only lowercase letters and hyphens, so no `10k`); that id names the plugin folder and the commands (`fast-find:search`). Everything else, from the repo to the package, keeps the name Fast Find 10K.
+Then enable "Fast Find 10K" under Settings → Community plugins. Requires Obsidian 1.5.7 or newer (1.13 or newer for settings search). The plugin's Obsidian id is `fast-find` (manifest ids allow only lowercase letters and hyphens, so no `10k`); that id names the plugin folder and the commands (`fast-find:search`). Everything else, from the repo to the package, keeps the name Fast Find 10K.
 [docs/dev-checklist.md](docs/dev-checklist.md) has the reload and verification steps.
 
 ## Usage
