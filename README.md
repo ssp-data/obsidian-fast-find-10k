@@ -75,7 +75,7 @@ Commands (bind them to hotkeys in Settings → Hotkeys):
 
 Query syntax: plain words are AND-ed and match by prefix and with typo tolerance; `"exact phrase"`, `#tag`, `path:folder`, `-exclude`. A `#tag` no note carries, or a `-word` that would leave nothing, is searched as a plain word, so pasting a title such as `Newsletter #115` works. No input debounce: every keystroke is a query.
 
-An empty query lists recently opened notes. Rows show which field matched (title, alias, heading, content, link) with highlights, a preview on the right, and an `N similar` pill when near-duplicates exist.
+An empty query lists recently opened notes. Rows show which field matched (title, alias, heading, content, link) with highlights, a preview on the right, and an `N similar` pill when near-duplicates exist: N is the number of rows the similar-notes panel shows for that note (title overlap plus up to five Smart Connections neighbours above the "Minimum similarity shown"); for rows beyond the first ten only the title-overlap part is counted, to keep typing instant.
 
 ### Keys
 

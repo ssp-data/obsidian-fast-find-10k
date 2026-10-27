@@ -31,6 +31,8 @@ export interface EngineConfig {
 	synonyms: string[];
 	/** Built-in dictionaries added to the groups (`de`: English ↔ German). */
 	languages: string[];
+	/** Cosine floor for the `N similar` pill: the similar-notes panel's minimum. */
+	similarMinScore: number;
 }
 
 export interface SearchOptions {

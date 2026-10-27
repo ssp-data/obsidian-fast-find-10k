@@ -220,5 +220,6 @@ export function settingsToEngineConfig(s: FastFindSettings, extraSynonyms: reado
 		optionalTerms: [...s.optionalTerms],
 		synonyms: languagesActive ? [...s.synonyms, ...extraSynonyms] : [...s.synonyms],
 		languages: languagesActive ? (s.languages.length > 0 ? [...s.languages] : ['de']) : [],
+		similarMinScore: s.minSimilarity,
 	};
 }

@@ -32,7 +32,7 @@ type ListKey = 'ignoredGlobs' | 'downrankedFolders' | 'optionalTerms' | 'synonym
 /** Settings edited as one entry per line. */
 const LIST_KEYS: ReadonlySet<string> = new Set<ListKey>(['ignoredGlobs', 'downrankedFolders', 'optionalTerms', 'synonyms']);
 /** Plain settings the engine must hear about at once. */
-const RANKING_KEYS: ReadonlySet<string> = new Set(['fuzzy', 'partial']);
+const RANKING_KEYS: ReadonlySet<string> = new Set(['fuzzy', 'partial', 'minSimilarity']);
 
 export class FastFindSettingTab extends PluginSettingTab {
 	private readonly plugin: FastFindPlugin;
@@ -418,7 +418,7 @@ export class FastFindSettingTab extends PluginSettingTab {
 					.setDynamicTooltip()
 					.onChange((v) => {
 						this.s.minSimilarity = v;
-						this.save();
+						this.saveRanking(); // the engine's similar-count pill uses the same floor
 					}),
 			);
 		new Setting(el)

@@ -49,7 +49,6 @@ const SEMANTIC_COUNT_HITS: usize = 10;
 /// Semantic neighbours merged into `similar`.
 const SEMANTIC_NEIGHBOURS: usize = 5;
 /// Cosine at or above which a semantic neighbour counts toward `similar_count`.
-const SEMANTIC_COUNT_MIN: f32 = 0.80;
 
 impl Engine {
     pub fn new() -> Self {
@@ -58,6 +57,7 @@ impl Engine {
 
     pub fn set_config(&mut self, c: Config) {
         self.config = c;
+        self.similar_counts.borrow_mut().clear(); // the similar floor may have changed
     }
 
     /// Replaces the unresolved link targets shown as ghost hits.
@@ -213,7 +213,8 @@ impl Engine {
         out
     }
 
-    /// Lexical neighbours plus semantic neighbours (`cos >= 0.80`) not already counted.
+    /// What `similar(path, …, config.similar_min_score)` would list: lexical neighbours plus the
+    /// top `SEMANTIC_NEIGHBOURS` semantic ones above the floor that are not already counted.
     fn similar_count(&self, id: crate::index::DocId, path: &str, semantic: bool) -> u32 {
         let vq = self.vectors.as_ref().filter(|_| semantic).and_then(|v| Some((v, v.get(path)?)));
         let Some((v, q)) = vq else {
@@ -223,8 +224,8 @@ impl Engine {
             .into_iter()
             .filter_map(|i| self.index.get(i).map(|d| d.path.as_str()))
             .collect();
-        let sem = v.scan(q, SEMANTIC_COUNT_MIN, |p| p != path && self.index.id_of(p).is_some());
-        (lexical.len() + sem.iter().filter(|(p, _)| !lexical.contains(p)).count()) as u32
+        let sem = v.scan(q, self.config.similar_min_score, |p| p != path && self.index.id_of(p).is_some());
+        (lexical.len() + top(sem, SEMANTIC_NEIGHBOURS).iter().filter(|(p, _)| !lexical.contains(p)).count()) as u32
     }
 
     pub fn search(&self, raw_query: &str, opts: &SearchOptions) -> SearchResponse {
@@ -802,12 +803,13 @@ mod tests {
 
     #[test]
     fn similar_count_includes_uncounted_semantic() {
-        let e = with_vectors(&[
+        let mut e = with_vectors(&[
             ("AI in Data Engineering.md", 0.0),
             ("Data Engineering with AI.md", 10.0), // lexical, also >= 0.80: counted once
             ("RW Pandas AI.md", 20.0),             // semantic only >= 0.80
-            ("Airflow Basics.md", 40.0),           // 0.77: not counted
+            ("Airflow Basics.md", 40.0),           // 0.77: not counted at a 0.80 floor
         ]);
+        e.set_config(Config { similar_min_score: 0.80, ..Config::default() });
         let r = e.search("ai in data engineering", &opts());
         let h = hit(&r, "AI in Data Engineering").unwrap();
         assert_eq!(h.similar_count, 3); // 2 lexical + RW Pandas AI
@@ -1254,5 +1256,22 @@ mod tests {
         let mut e = synonym_corpus();
         e.set_config(Config::default());
         assert!(e.search("open source", &opts()).hits.iter().all(|h| !h.expanded));
+    }
+
+    #[test]
+    fn similar_count_pill_matches_the_panel_list() {
+        // "AI in Data Engineering" and "RW Pandas AI" are near in vector space (cos ≈ 0.98).
+        let mut e = with_vectors(&[("AI in Data Engineering.md", 0.0), ("RW Pandas AI.md", 0.2), ("Airflow Basics.md", 30.0)]);
+        let check = |e: &Engine, min: f32| {
+            let r = e.search("ai in data engineering", &opts());
+            let h = hit(&r, "AI in Data Engineering").unwrap();
+            let panel = e.similar(&h.path, 100, min);
+            assert_eq!(h.similar_count as usize, panel.len(), "floor {min}: pill {} vs panel {:?}", h.similar_count, panel.iter().map(|x| &x.title).collect::<Vec<_>>());
+            h.similar_count
+        };
+        let low = check(&e, 0.5);
+        e.set_config(Config { similar_min_score: 0.99, ..Config::default() });
+        let high = check(&e, 0.99);
+        assert!(low > high, "{low} > {high}");
     }
 }

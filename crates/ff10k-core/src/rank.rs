@@ -84,6 +84,10 @@ pub struct Config {
     /// pairs, `dict/de.txt`). Unknown names are ignored. Empty by default.
     #[serde(default)]
     pub languages: Vec<String>,
+    /// Cosine floor for semantic neighbours in the `similar_count` pill: the same value the
+    /// similar-notes panel uses, so the pill says how many rows the panel will show.
+    #[serde(default = "default_similar_min_score")]
+    pub similar_min_score: f32,
     /// `synonyms` + dictionaries parsed, built on first use (`Config::groups`). Public only so
     /// `Config { .., ..Config::default() }` works outside this module.
     #[serde(skip)]
@@ -111,6 +115,10 @@ impl Config {
     }
 }
 
+pub fn default_similar_min_score() -> f32 {
+    0.7
+}
+
 /// Stopwords and single letters: `a an the of to in on i`.
 pub fn default_optional_terms() -> Vec<String> {
     ["a", "an", "the", "of", "to", "in", "on", "i"].map(String::from).to_vec()
@@ -128,6 +136,7 @@ impl Default for Config {
             optional_terms: default_optional_terms(),
             synonyms: Vec::new(),
             languages: Vec::new(),
+            similar_min_score: default_similar_min_score(),
             groups: std::cell::OnceCell::new(),
         }
     }
