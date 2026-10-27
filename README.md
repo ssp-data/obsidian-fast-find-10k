@@ -6,6 +6,7 @@ I've built my dream search for Obsidian based on fzf/Telescope from Neovim for p
 ![image](docs/images/find-fast-preview.png)
 
 Video showcase:
+
 https://github.com/user-attachments/assets/2a36f06a-0cf9-4156-a0aa-6bbc0249ea34
 
 ## Origin Story
