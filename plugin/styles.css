@@ -344,7 +344,7 @@
 .ff10k-similar-row {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
-	column-gap: var(--size-4-2);
+	gap: 0 var(--size-4-2);
 	padding: 2px var(--size-4-1);
 	border-radius: var(--radius-s);
 	white-space: nowrap;

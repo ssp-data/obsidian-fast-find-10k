@@ -242,7 +242,7 @@ export class SmartConnectionsBridge {
 		}
 		this.vectorsLoaded = true;
 		this.lastFingerprint = fp;
-		console.log(`[ff10k] vectors: ${packed.paths.length} notes (dims ${dims}, skipped ${packed.skipped})`);
+		if (this.settings.logTimings) console.log(`[ff10k] vectors: ${packed.paths.length} notes (dims ${dims}, skipped ${packed.skipped})`);
 		return true;
 	}
 

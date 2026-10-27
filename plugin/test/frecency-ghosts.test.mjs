@@ -20,6 +20,8 @@ async function load(entry) {
 }
 
 const { sanitizeName, ghostNotePath } = await load('src/actions.ts');
+// the plugin uses window.setTimeout (popout-window safe); node has no window
+globalThis.window ??= globalThis;
 const { collectGhosts, throttle } = await load('src/unresolved.ts');
 const { FrecencyTracker } = await load('src/frecency.ts');
 

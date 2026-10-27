@@ -285,7 +285,7 @@ export class FastFindModal extends Modal {
 	onClose(): void {
 		this.closed = true;
 		this.plugin.rememberQuery(this.inputEl.value);
-		cancelAnimationFrame(this.paintFrame);
+		window.cancelAnimationFrame(this.paintFrame);
 		this.hideHelp();
 		this.leaveSimilar();
 		this.unsubscribeStatus?.();
@@ -501,8 +501,8 @@ export class FastFindModal extends Modal {
 	/** Coalesces preview + similar work to one run per frame; each ignores its own stale replies. */
 	private schedulePaint(): void {
 		this.leaveSimilar();
-		cancelAnimationFrame(this.paintFrame);
-		this.paintFrame = requestAnimationFrame(() => {
+		window.cancelAnimationFrame(this.paintFrame);
+		this.paintFrame = window.requestAnimationFrame(() => {
 			this.paintFrame = 0;
 			this.paint();
 		});
@@ -609,7 +609,7 @@ export class FastFindModal extends Modal {
 		await runGuard(lexical, semantic, {
 			current: () => current() && (this.guard === null || this.guard.name === name),
 			show: (items) => {
-				cancelAnimationFrame(this.paintFrame);
+				window.cancelAnimationFrame(this.paintFrame);
 				this.guard = { name, ghost };
 				this.modalEl.removeClass('ff10k-preview-hidden');
 				this.similar.showGuard(items);

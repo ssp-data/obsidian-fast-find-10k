@@ -231,7 +231,7 @@ export class Preview {
 		// Lines from the anchor's neighbourhood down skip off-screen layout; lines above it are
 		// laid out for real so the scroll position is exact.
 		const lazyFrom = Math.max(anchor, 0) + LAZY_MARGIN;
-		const frag = document.createDocumentFragment();
+		const frag = createFragment();
 		let target = null as HTMLElement | null;
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i];

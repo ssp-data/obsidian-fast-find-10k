@@ -38,17 +38,17 @@ export function collectGhosts(app: App, isExcluded: (path: string) => boolean = 
 
 /** Trailing throttle: `call` schedules `fn` once, `ms` later; calls in between are merged. */
 export function throttle(fn: () => void, ms: number): { call(): void; cancel(): void } {
-	let timer: ReturnType<typeof setTimeout> | null = null;
+	let timer: number | null = null;
 	return {
 		call() {
 			if (timer !== null) return;
-			timer = setTimeout(() => {
+			timer = window.setTimeout(() => {
 				timer = null;
 				fn();
 			}, ms);
 		},
 		cancel() {
-			if (timer !== null) clearTimeout(timer);
+			if (timer !== null) window.clearTimeout(timer);
 			timer = null;
 		},
 	};
@@ -56,11 +56,11 @@ export function throttle(fn: () => void, ms: number): { call(): void; cancel(): 
 
 /** Keeps the engine's ghosts current: after each indexer run and on metadata `resolved`
  * (at most every 2 s). Returns the dispose function. */
-export function watchGhosts(app: App, engine: Pick<EngineClient, 'setGhosts'>, indexer: Indexer): () => void {
+export function watchGhosts(app: App, engine: Pick<EngineClient, 'setGhosts'>, indexer: Indexer, log: () => boolean = () => false): () => void {
 	let capLogged = false;
 	const refresh = throttle(() => {
 		const ghosts = collectGhosts(app, (p) => indexer.isExcluded(p));
-		if (ghosts.length > MAX_GHOSTS && !capLogged) {
+		if (ghosts.length > MAX_GHOSTS && !capLogged && log()) {
 			capLogged = true;
 			console.log(`[ff10k] ${ghosts.length} unresolved link targets; keeping the ${MAX_GHOSTS} most linked`);
 		}

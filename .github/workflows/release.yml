@@ -1,0 +1,73 @@
+name: Release
+
+# Builds the plugin from the tagged source, attests the three release assets (GitHub artifact
+# attestations: anyone can verify they came from this repository's workflow) and attaches them
+# to the GitHub release for the tag, creating the release when `make release` did not.
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)build, attest and upload, e.g. 0.1.0'
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+
+      - name: Rust toolchain (stable, wasm32 target)
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: wasm-bindgen-cli 0.2.128
+        run: cargo install wasm-bindgen-cli --version 0.2.128 --locked
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+
+      - name: Check the tag matches manifest.json
+        run: |
+          v=$(node -p "require('./manifest.json').version")
+          test "$v" = "${TAG}" || { echo "manifest.json says $v, tag is ${TAG}"; exit 1; }
+
+      - name: Build (wasm + plugin)
+        run: make build
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            plugin/dist/main.js
+            plugin/dist/manifest.json
+            plugin/dist/styles.css
+
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${TAG}"
+          notes="Fast Find 10K ${tag}. Install with BRAT (ssp-data/obsidian-fast-find-10k) or copy main.js, manifest.json and styles.css into <vault>/.obsidian/plugins/fast-find/. Assets carry GitHub artifact attestations: \`gh attestation verify main.js --repo ${GITHUB_REPOSITORY}\`."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" plugin/dist/main.js plugin/dist/manifest.json plugin/dist/styles.css --clobber
+          else
+            gh release create "$tag" plugin/dist/main.js plugin/dist/manifest.json plugin/dist/styles.css --title "$tag" --notes "$notes"
+          fi

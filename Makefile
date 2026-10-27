@@ -5,7 +5,8 @@
 #   make install VAULT=~/my-vault   symlink plugin/dist into <vault>/.obsidian/plugins/fast-find
 #   make recall VAULT=~/my-vault    title / two-word / one-typo recall over that vault (ff10k recall)
 #   make release VERSION=0.1.1      bump manifest.json, versions.json, plugin/package.json; build; commit;
-#                                   tag; GitHub release with the three plugin files (needs `gh`)
+#                                   tag and push — the Release workflow then builds, attests and publishes
+#   make release-local VERSION=…    publish the local build with `gh` (no attestations)
 #
 # `make release` refuses on a dirty tree or when the tag exists. The tag has no `v` prefix, as
 # Obsidian's community plugin list expects.
@@ -18,7 +19,7 @@ DIST       := $(PLUGIN_DIR)/dist
 ASSETS     := $(DIST)/main.js $(DIST)/manifest.json $(DIST)/styles.css
 CLI        := target/release/ff10k
 
-.PHONY: build wasm plugin cli test test-rust test-plugin install uninstall recall release check-clean clean
+.PHONY: build wasm plugin cli test test-rust test-plugin install uninstall recall release release-local check-clean clean
 
 build: wasm plugin
 
@@ -64,15 +65,18 @@ check-clean:
 release: check-clean
 	@test -n "$(VERSION)" || { echo "usage: make release VERSION=x.y.z [MIN_APP=1.5.7]"; exit 1; }
 	@! git rev-parse -q --verify "refs/tags/$(VERSION)" >/dev/null || { echo "tag $(VERSION) exists"; exit 1; }
-	@command -v gh >/dev/null || { echo "gh (GitHub CLI) is needed"; exit 1; }
 	node scripts/bump-version.mjs "$(VERSION)" "$(MIN_APP)"
 	$(MAKE) build
 	git add manifest.json versions.json $(PLUGIN_DIR)/package.json $(PLUGIN_DIR)/package-lock.json
 	@git diff --quiet --cached && echo "version files already at $(VERSION), nothing to commit" || git commit -m "release $(VERSION)"
 	git tag -a "$(VERSION)" -m "Fast Find 10K $(VERSION)"
 	git push && git push origin "$(VERSION)"
+	@echo "tag $(VERSION) pushed: .github/workflows/release.yml builds, attests and publishes the release (gh run watch to follow)"
+
+# Fallback when CI is unavailable: publish the local build without attestations.
+release-local: build
+	@test -n "$(VERSION)" || { echo "usage: make release-local VERSION=x.y.z"; exit 1; }
 	gh release create "$(VERSION)" $(ASSETS) --title "$(VERSION)" --notes "Fast Find 10K $(VERSION). Install with BRAT (ssp-data/obsidian-fast-find-10k) or copy main.js, manifest.json and styles.css into <vault>/.obsidian/plugins/fast-find/."
-	@echo "released $(VERSION)"
 
 clean:
 	rm -rf $(DIST) crates/ff10k-wasm/pkg

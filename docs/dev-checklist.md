@@ -400,7 +400,7 @@ loaded):
 
 ## Release
 
-`make release VERSION=x.y.z` does steps 1–4 (clean tree and `gh` required); by hand:
+`make release VERSION=x.y.z` does steps 1–3 and pushes the tag; the Release workflow (`.github/workflows/release.yml`) then builds the assets from the tag, attaches GitHub artifact attestations and creates or updates the release (`gh workflow run release.yml -f tag=x.y.z` re-runs it for an existing tag; `make release-local` publishes a local build without attestations). By hand:
 
 1. Bump `version` in `manifest.json` (repo root) and `plugin/package.json`; add the version → `minAppVersion` line to `versions.json`.
 2. `make build` → `plugin/dist/{main.js,manifest.json,styles.css}`.

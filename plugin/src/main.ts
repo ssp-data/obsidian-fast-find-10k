@@ -154,7 +154,7 @@ export default class FastFindPlugin extends Plugin {
 				}),
 			);
 		});
-		this.stopGhosts = watchGhosts(this.app, engine, indexer);
+		this.stopGhosts = watchGhosts(this.app, engine, indexer, () => this.settings.logTimings);
 		indexer.start().catch((e: unknown) => console.error('Fast Find 10K: indexing failed', e));
 		// Smart Connections loads its env late; the bridge polls for it and then hands over the vectors
 		this.app.workspace.onLayoutReady(() => this.bridge?.start());

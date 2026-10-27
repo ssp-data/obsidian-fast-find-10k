@@ -1,7 +1,9 @@
-// The plugin's settings tab (Obsidian `Setting` API only). Ranking changes go to the engine at
-// once; ignored globs rebuild the index after a 1 s pause; keys apply on the next modal open.
+// The plugin's settings tab. On Obsidian 1.13+ the tab is declarative (`getSettingDefinitions`,
+// so every setting is found by the settings search); older versions get the same tab rendered
+// with the `Setting` API (`legacyDisplay`). Ranking changes go to the engine at once; ignored
+// globs rebuild the index after a 1 s pause; keys apply on the next modal open.
 
-import { type App, Notice, Platform, PluginSettingTab, Setting } from 'obsidian';
+import { type App, Notice, Platform, PluginSettingTab, requireApiVersion, Setting, type SettingDefinition, type SettingDefinitionItem } from 'obsidian';
 import { validateBinding } from './keys';
 import type FastFindPlugin from './main';
 import type { PartialMode, Weights } from './protocol';
@@ -26,6 +28,12 @@ const lines = (v: string) =>
 		.map((l) => l.trim())
 		.filter((l) => l.length > 0);
 
+type ListKey = 'ignoredGlobs' | 'downrankedFolders' | 'optionalTerms' | 'synonyms';
+/** Settings edited as one entry per line. */
+const LIST_KEYS: ReadonlySet<string> = new Set<ListKey>(['ignoredGlobs', 'downrankedFolders', 'optionalTerms', 'synonyms']);
+/** Plain settings the engine must hear about at once. */
+const RANKING_KEYS: ReadonlySet<string> = new Set(['fuzzy', 'partial']);
+
 export class FastFindSettingTab extends PluginSettingTab {
 	private readonly plugin: FastFindPlugin;
 
@@ -35,6 +43,14 @@ export class FastFindSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
+		if (requireApiVersion('1.13.0')) {
+			super.display(); // renders getSettingDefinitions()
+			return;
+		}
+		this.legacyDisplay();
+	}
+
+	private legacyDisplay(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 		this.indexing(containerEl);
@@ -48,6 +64,199 @@ export class FastFindSettingTab extends PluginSettingTab {
 	private get s() {
 		return this.plugin.settings;
 	}
+
+	// ---- declarative tab (Obsidian 1.13+) ----
+
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		const labels = new Map(helpGroups(this.s.keymap).flatMap((g) => g.rows.map((r) => [r.action, r.label])));
+		const weights: SettingDefinition[] = (Object.keys(DEFAULT_WEIGHTS) as (keyof Weights)[]).map((k) => ({
+			name: `${WEIGHT_NAMES[k]} weight`,
+			desc: k === 'body' ? `Default ${DEFAULT_WEIGHTS[k]}. 0 turns the field off.` : `Default ${DEFAULT_WEIGHTS[k]}.`,
+			control: { type: 'slider', key: `weights.${k}`, min: 0, max: 150, step: 5 },
+		}));
+		const keys: SettingDefinition[] = (Object.keys(DEFAULT_KEYMAP) as (keyof Keymap)[]).map((action) => ({
+			name: labels.get(action) ?? action,
+			aliases: ['key', 'shortcut', 'hotkey'],
+			control: {
+				type: 'text',
+				key: `keymap.${action}`,
+				validate: (v: string) => validateBinding(this.s.keymap, action, v.trim(), Platform.isMacOS) ?? undefined,
+			},
+		}));
+		return [
+			{
+				type: 'group',
+				heading: 'Indexing',
+				items: [
+					{
+						name: 'Ignored folders and globs',
+						desc: 'One per line, in addition to Obsidian\'s "Excluded files" (e.g. Archive/ or **/drafts/*). The index rebuilds 1 s after the last edit.',
+						control: { type: 'textarea', key: 'ignoredGlobs' },
+					},
+					{ name: 'Downranked folders', desc: 'One per line. Notes in these folders score × 0.3.', control: { type: 'textarea', key: 'downrankedFolders' } },
+					{ name: 'Rebuild index', desc: 'Drops the note cache and re-reads every note.', action: () => void this.plugin.rebuildIndex() },
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Ranking',
+				items: [
+					...weights,
+					{
+						name: 'Reset weights',
+						desc: 'Back to the defaults.',
+						searchable: false,
+						action: () => {
+							this.s.weights = { ...DEFAULT_WEIGHTS };
+							this.saveRanking();
+							this.update();
+						},
+					},
+					{ name: 'Fuzzy typo tolerance', control: { type: 'dropdown', key: 'fuzzy', options: { off: 'Off', normal: 'Normal', loose: 'Loose' } } },
+					{
+						name: 'Partial-match tier',
+						desc: 'Notes matching only some of the words.',
+						control: { type: 'dropdown', key: 'partial', options: { whenFew: 'Only when few results', always: 'Always', never: 'Never' } },
+					},
+					{
+						name: 'Optional words (never required)',
+						desc: 'One per line. A query word on this list need not match; where it does, it still adds to the score. Default: a an the of to in on i.',
+						control: { type: 'textarea', key: 'optionalTerms' },
+					},
+					{
+						name: 'Abbreviations and synonyms',
+						desc: 'One group per line, members separated by commas (the first may end in a colon). Typing a single-word member also finds the others: with "oss: open source, open-source software", the query oss matches notes with OSS, "open source" or "open-source software" in the title, headings or body. Several-word members are found, not expanded: "open source" does not search for oss.',
+						aliases: ['synonym', 'abbreviation', 'expansion'],
+						control: { type: 'textarea', key: 'synonyms', placeholder: 'oss: open source, open-source software\nk8s: kubernetes' },
+					},
+					{
+						name: 'Dictionary note',
+						desc: 'Path of a note in this vault (for example "Dictionary.md") whose lines "english: german, german" join the abbreviations above, so the list can be kept in Obsidian. Headings, blank lines and lines without a colon are ignored; list markers are fine. Reloaded when the note is edited.',
+						aliases: ['translation', 'language'],
+						control: { type: 'text', key: 'dictionaryFile', placeholder: 'Dictionary.md' },
+					},
+					{
+						name: 'German words on at startup (English ↔ German)',
+						desc: 'Language expansion adds a built-in list of about 400 everyday English–German word pairs and the dictionary note to the abbreviations, both directions: school finds Schule and Schulen, Kinder finds children. Umlauts are folded. In the search, Ctrl+L (the "languages" key) switches it on or off for the session; this toggle sets the state at startup. Off by default.',
+						aliases: ['language', 'deutsch', 'translation'],
+						control: { type: 'toggle', key: 'languagesDe' },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Semantic',
+				items: [
+					{
+						name: 'Use Smart Connections embeddings',
+						desc: 'Semantic results and similar notes from the Smart Connections plugin, when it is installed.',
+						control: { type: 'toggle', key: 'useSmartConnections' },
+					},
+					{
+						name: 'Minimum similarity shown',
+						desc: 'Cosine score, as Smart Connections shows it. Default 0.70.',
+						control: { type: 'slider', key: 'minSimilarity', min: 0.5, max: 0.95, step: 0.01 },
+					},
+					{
+						name: 'Semantic tier',
+						control: { type: 'dropdown', key: 'semantic', options: { auto: 'Automatically when few results', onDemand: 'On demand only', never: 'Never' } },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Behaviour',
+				items: [
+					{ name: 'Create guard', desc: 'Before creating a note, show existing notes with a similar name ("Already have?").', control: { type: 'toggle', key: 'createGuard' } },
+					{ name: 'Preview open by default', control: { type: 'toggle', key: 'previewOpen' } },
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Keys',
+				items: [
+					{ name: 'Keys', desc: 'Like Mod+Shift+Enter (Mod is Cmd on macOS, Ctrl elsewhere). Applies the next time the search opens.', searchable: false },
+					...keys,
+					{
+						name: 'Reset keys',
+						desc: 'Back to the default bindings.',
+						searchable: false,
+						action: () => {
+							this.s.keymap = { ...DEFAULT_KEYMAP };
+							this.save();
+							this.update();
+						},
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Debug',
+				items: [
+					{ name: 'Show "why ranked" by default', desc: 'The score breakdown under each result (toggle in the search with its key).', control: { type: 'toggle', key: 'debugByDefault' } },
+					{ name: 'Log engine timings', desc: 'One console line per search, plus index and vector load summaries.', control: { type: 'toggle', key: 'logTimings' } },
+					{ name: 'Clear frecency', desc: 'Forgets which notes you opened and from which queries.', action: () => void this.clearFrecency() },
+				],
+			},
+		];
+	}
+
+	/** Declarative controls read through here: dotted keys reach into weights/keymap, lists are one entry per line. */
+	getControlValue(key: string): unknown {
+		if (key === 'languagesDe') return this.s.languages.includes('de');
+		if (LIST_KEYS.has(key)) return (this.s[key as ListKey] as string[]).join('\n');
+		if (key.startsWith('weights.')) return this.s.weights[key.slice(8) as keyof Weights];
+		if (key.startsWith('keymap.')) return this.s.keymap[key.slice(7) as keyof Keymap];
+		return (this.s as unknown as Record<string, unknown>)[key];
+	}
+
+	setControlValue(key: string, value: unknown): void {
+		if (key === 'languagesDe') {
+			this.s.languages = value ? [...this.s.languages.filter((l) => l !== 'de'), 'de'] : this.s.languages.filter((l) => l !== 'de');
+			return this.saveRanking();
+		}
+		if (LIST_KEYS.has(key)) {
+			(this.s as unknown as Record<string, string[]>)[key] = lines(String(value ?? ''));
+			if (key === 'ignoredGlobs') {
+				this.save();
+				return this.plugin.scheduleIgnoredRebuild();
+			}
+			return this.saveRanking();
+		}
+		if (key.startsWith('weights.')) {
+			const n = Number(value);
+			this.s.weights[key.slice(8) as keyof Weights] = Number.isFinite(n) ? Math.min(150, Math.max(0, Math.round(n))) : 0;
+			return this.saveRanking();
+		}
+		if (key.startsWith('keymap.')) {
+			this.s.keymap[key.slice(7) as keyof Keymap] = String(value ?? '').trim();
+			return this.save();
+		}
+		if (key === 'dictionaryFile') {
+			this.s.dictionaryFile = String(value ?? '').trim();
+			this.save();
+			void this.plugin.reloadDictionary().then((n) => {
+				if (this.s.dictionaryFile) new Notice(`Fast Find 10K: ${n} dictionary lines loaded`);
+			});
+			return;
+		}
+		(this.s as unknown as Record<string, unknown>)[key] = value;
+		if (RANKING_KEYS.has(key)) this.saveRanking();
+		else this.save();
+	}
+
+	private async clearFrecency(): Promise<void> {
+		const frecency = this.plugin.frecency;
+		if (!frecency) return void new Notice('Fast Find 10K: still starting, try again in a moment');
+		try {
+			await frecency.clear();
+			new Notice('Fast Find 10K: frecency cleared');
+		} catch (e) {
+			new Notice(`Fast Find 10K: clearing frecency failed (${String(e)})`);
+		}
+	}
+
+	// ---- imperative tab (Obsidian < 1.13) ----
 
 	private save(): void {
 		void this.plugin.saveSettings();
@@ -107,7 +316,7 @@ export class FastFindSettingTab extends PluginSettingTab {
 			b.setButtonText('Reset weights').onClick(() => {
 				this.s.weights = { ...DEFAULT_WEIGHTS };
 				this.saveRanking();
-				this.display();
+				this.legacyDisplay();
 			}),
 		);
 		new Setting(el)
@@ -262,7 +471,7 @@ export class FastFindSettingTab extends PluginSettingTab {
 			b.setButtonText('Reset keys').onClick(() => {
 				this.s.keymap = { ...DEFAULT_KEYMAP };
 				this.save();
-				this.display();
+				this.legacyDisplay();
 			}),
 		);
 	}
@@ -295,20 +504,6 @@ export class FastFindSettingTab extends PluginSettingTab {
 		new Setting(el)
 			.setName('Clear frecency')
 			.setDesc('Forgets which notes you opened and from which queries.')
-			.addButton((b) =>
-				b
-					.setButtonText('Clear frecency')
-					.setWarning()
-					.onClick(async () => {
-						const frecency = this.plugin.frecency;
-						if (!frecency) return void new Notice('Fast Find 10K: still starting, try again in a moment');
-						try {
-							await frecency.clear();
-							new Notice('Fast Find 10K: frecency cleared');
-						} catch (e) {
-							new Notice(`Fast Find 10K: clearing frecency failed (${String(e)})`);
-						}
-					}),
-			);
+			.addButton((b) => b.setButtonText('Clear frecency').setWarning().onClick(() => void this.clearFrecency()));
 	}
 }

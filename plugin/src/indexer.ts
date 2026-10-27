@@ -58,7 +58,7 @@ export class Indexer {
 	status: IndexStatus = { indexed: 0, total: 0, done: false };
 	private globs: RegExp[];
 	private readonly listeners = new Set<(s: IndexStatus) => void>();
-	private readonly timers = new Map<string, { kind: Pending; timer: ReturnType<typeof setTimeout> }>();
+	private readonly timers = new Map<string, { kind: Pending; timer: number }>();
 	/** Paths currently sent to the engine. */
 	private readonly inEngine = new Set<string>();
 	private run: Promise<void> = Promise.resolve();
@@ -68,7 +68,7 @@ export class Indexer {
 		private readonly app: App,
 		private readonly engine: EngineClient,
 		private readonly cache: NoteCache,
-		settings: Pick<FastFindSettings, 'ignoredGlobs'>,
+		private readonly settings: Pick<FastFindSettings, 'ignoredGlobs' | 'logTimings'>,
 	) {
 		this.globs = settings.ignoredGlobs.map(globToRegExp);
 	}
@@ -130,7 +130,7 @@ export class Indexer {
 
 	dispose(): void {
 		this.disposed = true;
-		for (const { timer } of this.timers.values()) clearTimeout(timer);
+		for (const { timer } of this.timers.values()) window.clearTimeout(timer);
 		this.timers.clear();
 		this.listeners.clear();
 	}
@@ -194,7 +194,7 @@ export class Indexer {
 		const docs = await this.engine.stats();
 		const elapsedMs = Math.round(performance.now() - t0);
 		this.setStatus({ indexed: docs, total: files.length, done: true, elapsedMs });
-		console.log(`[ff10k] indexed ${docs} docs in ${elapsedMs} ms (warm: ${fromCache} from cache, ${changed.length} re-read)`);
+		if (this.settings.logTimings) console.log(`[ff10k] indexed ${docs} docs in ${elapsedMs} ms (warm: ${fromCache} from cache, ${changed.length} re-read)`);
 	}
 
 	/** Reads the files, sends them to the engine and stores them in the cache.
@@ -232,8 +232,8 @@ export class Indexer {
 	private schedule(path: string, kind: Pending): void {
 		if (this.isExcluded(path)) return;
 		const prev = this.timers.get(path);
-		if (prev) clearTimeout(prev.timer);
-		const timer = setTimeout(() => {
+		if (prev) window.clearTimeout(prev.timer);
+		const timer = window.setTimeout(() => {
 			this.timers.delete(path);
 			void this.flush(path, kind).catch((e: unknown) => console.error('[ff10k] update failed', path, e));
 		}, COALESCE_MS);
@@ -257,7 +257,7 @@ export class Indexer {
 		const newIn = !this.isExcluded(newPath);
 		const pending = this.timers.get(oldPath);
 		if (pending) {
-			clearTimeout(pending.timer);
+			window.clearTimeout(pending.timer);
 			this.timers.delete(oldPath);
 		}
 		if (oldIn && newIn) {
