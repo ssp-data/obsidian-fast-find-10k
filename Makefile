@@ -65,20 +65,7 @@ release: check-clean
 	@test -n "$(VERSION)" || { echo "usage: make release VERSION=x.y.z [MIN_APP=1.5.7]"; exit 1; }
 	@! git rev-parse -q --verify "refs/tags/$(VERSION)" >/dev/null || { echo "tag $(VERSION) exists"; exit 1; }
 	@command -v gh >/dev/null || { echo "gh (GitHub CLI) is needed"; exit 1; }
-	node -e ' \
-	  const fs = require("fs"); \
-	  const v = "$(VERSION)"; \
-	  const m = JSON.parse(fs.readFileSync("manifest.json", "utf8")); \
-	  const minApp = "$(MIN_APP)" || m.minAppVersion; \
-	  m.version = v; m.minAppVersion = minApp; \
-	  fs.writeFileSync("manifest.json", JSON.stringify(m, null, "\t") + "\n"); \
-	  const vs = JSON.parse(fs.readFileSync("versions.json", "utf8")); \
-	  vs[v] = minApp; \
-	  fs.writeFileSync("versions.json", JSON.stringify(vs, null, "\t") + "\n"); \
-	  const p = JSON.parse(fs.readFileSync("$(PLUGIN_DIR)/package.json", "utf8")); \
-	  p.version = v; \
-	  fs.writeFileSync("$(PLUGIN_DIR)/package.json", JSON.stringify(p, null, "\t") + "\n"); \
-	'
+	node scripts/bump-version.mjs "$(VERSION)" "$(MIN_APP)"
 	$(MAKE) build
 	git add manifest.json versions.json $(PLUGIN_DIR)/package.json $(PLUGIN_DIR)/package-lock.json
 	git commit -m "release $(VERSION)"
