@@ -47,6 +47,8 @@ pub(crate) fn extract_note(path: &str, text: &str, mtime: f64) -> (Doc, Vec<u32>
     let mut first_body_line = 0;
     if let Some(end) = frontmatter_end(&lines) {
         parse_frontmatter(&lines[1..end], &mut aliases, &mut tags);
+        // a frontmatter `title:` (docs sites, Hugo, Jekyll) is searched like an alias
+        aliases.retain(|a| a != &title);
         first_body_line = end + 1;
     }
 
@@ -174,7 +176,7 @@ fn parse_frontmatter(lines: &[(usize, &str)], aliases: &mut Vec<String>, tags: &
         let Some((key, value)) = line.split_once(':') else {
             continue;
         };
-        let is_alias = matches!(key.trim(), "aliases" | "alias");
+        let is_alias = matches!(key.trim(), "aliases" | "alias" | "title");
         let is_tag = matches!(key.trim(), "tags" | "tag");
         if !is_alias && !is_tag {
             continue;
@@ -513,6 +515,16 @@ mod tests {
         );
         assert_eq!(d.title, "AI in Data Engineering");
         assert_eq!(d.path_segments, vec!["💡 Resources", "🧮 Zettelkasten"]);
+    }
+
+    #[test]
+    fn frontmatter_title_is_an_alias() {
+        let d = extract("stable/data/parquet/overview.md", "---\nlayout: docu\ntitle: Overview of DuckDB Internals\n---\nbody", 0.0);
+        assert_eq!(d.title, "overview");
+        assert_eq!(d.aliases, vec!["Overview of DuckDB Internals"]);
+        // Equal to the file name: no alias; quoted titles are unquoted.
+        let d = extract("Parquet Files.md", "---\ntitle: \"Parquet Files\"\naliases: [pq]\n---\nbody", 0.0);
+        assert_eq!(d.aliases, vec!["pq"]);
     }
 
     #[test]

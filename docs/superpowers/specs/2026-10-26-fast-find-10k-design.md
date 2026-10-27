@@ -99,7 +99,7 @@ Inspirations: [fff](https://github.com/dmtrKovalenko/fff) (Rust engine, frecency
 |---|---|---|
 | `path` | vault path | id |
 | `title` | basename without `.md` | emoji stripped for matching, kept for display |
-| `aliases[]` | frontmatter `aliases` (string or list) | each alias separately (Omnisearch bug to avoid) |
+| `aliases[]` | frontmatter `aliases` (string or list), plus a frontmatter `title:` that differs from the file name (docs sites, Hugo, Jekyll; v1.1) | each alias separately (Omnisearch bug to avoid) |
 | `h1[]`, `h2[]`, `h3[]` | ATX headings `#`, `##`, `###` | deeper headings fold into body; heading line numbers kept for jump-to |
 | `tags[]` | frontmatter `tags` + inline `#tag` | nested `#a/b` yields `a/b`, `a`, `b` |
 | `links[]` | `[[Target]]`, `[[Target|alias]]`, `[[Target#Heading]]` | target and alias text indexed as link text; targets also used for backlink counts |

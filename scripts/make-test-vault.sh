@@ -21,9 +21,13 @@ trap 'rm -rf "$TMP"' EXIT
 
 fetch() { # name url path licence
   local name="$1" url="$2" path="$3" licence="$4"
+  if [ -d "$DOCS/$name" ]; then echo "== $name: exists, skipped"; return; fi
   echo "== $name ($path)"
-  git clone --quiet --depth 1 --filter=blob:none --sparse "$url" "$TMP/$name"
-  git -C "$TMP/$name" sparse-checkout set --no-cone "$path" >/dev/null
+  # images in those folders may live in Git LFS; only *.md is copied, so the LFS filters are
+  # disabled (works without git-lfs installed)
+  local -a nolfs=(-c filter.lfs.smudge= -c filter.lfs.clean= -c filter.lfs.process= -c filter.lfs.required=false)
+  git "${nolfs[@]}" clone --quiet --depth 1 --filter=blob:none --sparse "$url" "$TMP/$name"
+  git "${nolfs[@]}" -C "$TMP/$name" sparse-checkout set --no-cone "$path" >/dev/null
   mkdir -p "$DOCS/$name"
   rsync -a --prune-empty-dirs --include '*/' --include '*.md' --exclude '*' "$TMP/$name/$path/" "$DOCS/$name/"
   printf '# %s\n\nMarkdown copied from <%s> (`%s`), licence: %s. Test data for Fast Find 10K only.\n' "$name" "$url" "$path" "$licence" > "$DOCS/$name/_source.md"
