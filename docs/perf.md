@@ -144,6 +144,6 @@ In Obsidian (see docs/dev-checklist.md): the `[ff10k] indexed … in N ms` conso
 plugin reload; worker memory through the worker's `stats` reply:
 
 ```bash
-o eval code="const w=app.plugins.plugins['fast-find-10k'].engine.worker; w.addEventListener('message', ev=>{ if(ev.data.t==='stats' && ev.data.id===999999) window.__mem=ev.data }); w.postMessage({t:'stats', id:999999}); 'sent'"
+o eval code="const w=app.plugins.plugins['fast-find'].engine.worker; w.addEventListener('message', ev=>{ if(ev.data.t==='stats' && ev.data.id===999999) window.__mem=ev.data }); w.postMessage({t:'stats', id:999999}); 'sent'"
 o eval code="JSON.stringify(window.__mem)"   # → {…,"docs":9385,"wasmBytes":164036608}
 ```

@@ -3,8 +3,6 @@
 A fast note finder for large vaults (10k+ notes). A Rust search engine compiled to WebAssembly runs in a worker and powers instant fuzzy, field-weighted, frecency-ranked search with optional semantic "similar notes".
 
 I've built for my dream search for Obsidian based on fzf/Telescope form Neovim for preview style and fuzzy search, Omnisearch for smarter search, and Smart Connections for similar notes, all based on Rust WASM to be super fast. This is how it looks:
-
-This is how it looks:
 ![image](docs/images/find-fast-preview.webp)
 
 ## Origin Story
@@ -56,7 +54,7 @@ That needs Rust with the `wasm32-unknown-unknown` target, `wasm-bindgen-cli` 0.2
 ```sh
 bash scripts/build-wasm.sh
 cd plugin && npm ci && npm run build        # dist/main.js (wasm and worker embedded), manifest.json, styles.css
-V=<vault>/.obsidian/plugins/fast-find-10k
+V=<vault>/.obsidian/plugins/fast-find
 mkdir -p $V && ln -sf $PWD/dist/main.js $PWD/dist/manifest.json $PWD/dist/styles.css $V/
 ```
 

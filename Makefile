@@ -2,7 +2,7 @@
 #
 #   make build                      wasm + plugin → plugin/dist/{main.js,manifest.json,styles.css}
 #   make test                       Rust (unit, golden, typo recall) + plugin tests
-#   make install VAULT=~/my-vault   symlink plugin/dist into <vault>/.obsidian/plugins/fast-find-10k
+#   make install VAULT=~/my-vault   symlink plugin/dist into <vault>/.obsidian/plugins/fast-find
 #   make recall VAULT=~/my-vault    title / two-word / one-typo recall over that vault (ff10k recall)
 #   make release VERSION=0.1.1      bump manifest.json, versions.json, plugin/package.json; build; commit;
 #                                   tag; GitHub release with the three plugin files (needs `gh`)
@@ -45,13 +45,13 @@ test-plugin:
 install: build
 	@test -n "$(VAULT)" || { echo "usage: make install VAULT=<path to vault>"; exit 1; }
 	@test -d "$(VAULT)/.obsidian" || { echo "$(VAULT) has no .obsidian folder"; exit 1; }
-	mkdir -p "$(VAULT)/.obsidian/plugins/fast-find-10k"
-	ln -sf "$(abspath $(DIST))/main.js" "$(abspath $(DIST))/manifest.json" "$(abspath $(DIST))/styles.css" "$(VAULT)/.obsidian/plugins/fast-find-10k/"
-	@echo "installed into $(VAULT)/.obsidian/plugins/fast-find-10k — enable 'Fast Find 10K' under Community plugins"
+	mkdir -p "$(VAULT)/.obsidian/plugins/fast-find"
+	ln -sf "$(abspath $(DIST))/main.js" "$(abspath $(DIST))/manifest.json" "$(abspath $(DIST))/styles.css" "$(VAULT)/.obsidian/plugins/fast-find/"
+	@echo "installed into $(VAULT)/.obsidian/plugins/fast-find — enable 'Fast Find 10K' under Community plugins"
 
 uninstall:
 	@test -n "$(VAULT)" || { echo "usage: make uninstall VAULT=<path to vault>"; exit 1; }
-	rm -rf "$(VAULT)/.obsidian/plugins/fast-find-10k"
+	rm -rf "$(VAULT)/.obsidian/plugins/fast-find"
 
 recall: cli
 	@test -n "$(VAULT)" || { echo "usage: make recall VAULT=<path to vault> [EVERY=10]"; exit 1; }
@@ -84,7 +84,7 @@ release: check-clean
 	git commit -m "release $(VERSION)"
 	git tag -a "$(VERSION)" -m "Fast Find 10K $(VERSION)"
 	git push && git push origin "$(VERSION)"
-	gh release create "$(VERSION)" $(ASSETS) --title "$(VERSION)" --notes "Fast Find 10K $(VERSION). Install with BRAT (ssp-data/obsidian-fast-find-10k) or copy main.js, manifest.json and styles.css into <vault>/.obsidian/plugins/fast-find-10k/."
+	gh release create "$(VERSION)" $(ASSETS) --title "$(VERSION)" --notes "Fast Find 10K $(VERSION). Install with BRAT (ssp-data/obsidian-fast-find-10k) or copy main.js, manifest.json and styles.css into <vault>/.obsidian/plugins/fast-find/."
 	@echo "released $(VERSION)"
 
 clean:

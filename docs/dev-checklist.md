@@ -21,7 +21,7 @@ The worker (`src/worker.ts` + wasm as bytes) is bundled first as an IIFE string 
 ## Install (once)
 
 ```bash
-V=<vault>/.obsidian/plugins/fast-find-10k
+V=<vault>/.obsidian/plugins/fast-find
 mkdir -p $V && ln -sf $PWD/dist/main.js $PWD/dist/manifest.json $PWD/dist/styles.css $V/
 ```
 
@@ -30,9 +30,9 @@ mkdir -p $V && ln -sf $PWD/dist/main.js $PWD/dist/manifest.json $PWD/dist/styles
 ```bash
 o() { obsidian vault=trouble-tags-testvault "$@"; }
 o eval code="app.plugins.loadManifests().then(()=>0)"   # pick up a newly symlinked plugin
-o plugin:enable id=fast-find-10k filter=community        # once
-o plugin:reload id=fast-find-10k                         # after every build
-o plugin id=fast-find-10k                                # shows "enabled true"
+o plugin:enable id=fast-find filter=community        # once
+o plugin:reload id=fast-find                         # after every build
+o plugin id=fast-find                                # shows "enabled true"
 ```
 
 ## Verify
@@ -40,12 +40,12 @@ o plugin id=fast-find-10k                                # shows "enabled true"
 ```bash
 o dev:debug on                    # start capturing console messages
 o dev:console clear
-o plugin:reload id=fast-find-10k
-o command id=fast-find-10k:search
+o plugin:reload id=fast-find
+o command id=fast-find:search
 o eval code="[...document.querySelectorAll('.notice')].map(n=>n.textContent).join(' | ')"
                                   # → "Fast Find 10K: 9382/9382 indexed, top "Obsidian Troubleshoot""
-o dev:console level=error         # nothing from fast-find-10k
-o dev:errors                      # nothing from fast-find-10k
+o dev:console level=error         # nothing from fast-find
+o dev:errors                      # nothing from fast-find
 o dev:debug off
 ```
 
@@ -53,25 +53,25 @@ o dev:debug off
 second call:
 
 ```bash
-o eval code="const e=app.plugins.plugins['fast-find-10k'].engine; e.upsert([{path:'x/Obsidian Troubleshooting.md',mtime:1,text:'# x'}]); window.__a=e.search('obs','all',5,false).then(()=>'resolved',x=>x); window.__b=e.search('obsidian trouble','all',5,false).then(r=>r.hits[0].title+' '+r.elapsedUs); Promise.all([window.__a,window.__b]).then(v=>window.__ff=v); 'sent'"
+o eval code="const e=app.plugins.plugins['fast-find'].engine; e.upsert([{path:'x/Obsidian Troubleshooting.md',mtime:1,text:'# x'}]); window.__a=e.search('obs','all',5,false).then(()=>'resolved',x=>x); window.__b=e.search('obsidian trouble','all',5,false).then(r=>r.hits[0].title+' '+r.elapsedUs); Promise.all([window.__a,window.__b]).then(v=>window.__ff=v); 'sent'"
 o eval code="JSON.stringify(window.__ff)"   # → ["stale","Obsidian Troubleshooting <elapsedUs>"]
-o eval code="app.plugins.plugins['fast-find-10k'].engine.remove(['x/Obsidian Troubleshooting.md']); 'ok'"
+o eval code="app.plugins.plugins['fast-find'].engine.remove(['x/Obsidian Troubleshooting.md']); 'ok'"
 ```
 
 ## Indexing (cache + indexer)
 
 The console always logs one line per full run:
 `[ff10k] indexed N docs in X ms (warm: Y from cache, Z re-read)`. Live status:
-`app.plugins.plugins['fast-find-10k'].indexer.status` → `{indexed, total, done, elapsedMs}`.
+`app.plugins.plugins['fast-find'].indexer.status` → `{indexed, total, done, elapsedMs}`.
 Cache: IndexedDB `ff10k/<appId>` (stores `notes`, `access`, `queries`, `meta`).
 
 ```bash
-o command id=fast-find-10k:rebuild-index      # clear note cache, re-read every file (cold)
+o command id=fast-find:rebuild-index      # clear note cache, re-read every file (cold)
 o dev:console | grep ff10k                    # → indexed 9382 docs ... (warm: 0 from cache, 9382 re-read)
-o plugin:reload id=fast-find-10k              # warm start
+o plugin:reload id=fast-find              # warm start
 o dev:console | grep ff10k                    # → ... (warm: 9382 from cache, 0 re-read)
 # onload → done, measured around disable/enable:
-o eval code="app.plugins.disablePlugin('fast-find-10k').then(()=>{window.__t1=performance.now(); return app.plugins.enablePlugin('fast-find-10k')}).then(()=>{const p=app.plugins.plugins['fast-find-10k']; const iv=setInterval(()=>{ if(p.indexer?.status.done){clearInterval(iv); window.__r=Math.round(performance.now()-window.__t1)} },5)}); 'sent'"
+o eval code="app.plugins.disablePlugin('fast-find').then(()=>{window.__t1=performance.now(); return app.plugins.enablePlugin('fast-find')}).then(()=>{const p=app.plugins.plugins['fast-find']; const iv=setInterval(()=>{ if(p.indexer?.status.done){clearInterval(iv); window.__r=Math.round(performance.now()-window.__t1)} },5)}); 'sent'"
 o eval code="window.__r"
 ```
 
@@ -103,8 +103,8 @@ driven through `eval`: set the input value and fire `input`; fire `keydown` on `
 (Obsidian's keymap routes it to the modal's `Scope`).
 
 ```bash
-o eval code="app.plugins.plugins['fast-find-10k'].settings.logTimings=true; 'ok'"   # session only
-o command id=fast-find-10k:search                 # or search-files (opens in files-only mode)
+o eval code="app.plugins.plugins['fast-find'].settings.logTimings=true; 'ok'"   # session only
+o command id=fast-find:search                 # or search-files (opens in files-only mode)
 # type a query
 o eval code="const i=document.querySelector('.ff10k-input'); i.value='obsidian trouble'; i.dispatchEvent(new Event('input')); 'ok'"
 # read status, tier labels and the top rows
@@ -153,7 +153,7 @@ synthetic key press force one with `o dev:screenshot` before reading the DOM.
 ```bash
 S=/tmp/ff10k; mkdir -p $S
 K() { o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'$1',bubbles:true,cancelable:true})); 'ok'"; }
-o command id=fast-find-10k:search
+o command id=fast-find:search
 o eval code="const i=document.querySelector('.ff10k-input'); i.value='RW MLOps is mostly data engineering'; i.dispatchEvent(new Event('input')); 'ok'"
 o dev:screenshot path=$S/f.png; K ArrowDown; o dev:screenshot path=$S/f.png
 # similar rows: title ~ path ~ reason
@@ -161,7 +161,7 @@ o eval code="[...document.querySelectorAll('.ff10k-similar-row')].map(r=>[...r.c
 # preview: first visible line (heading hits scroll their heading to the top)
 o eval code="const p=document.querySelector('.ff10k-preview'); const l=[...p.querySelectorAll('.ff10k-line')]; const t=l.find(x=>x.offsetTop-p.offsetTop>=p.scrollTop-1); l.indexOf(t)+' '+t.className+' '+t.textContent"
 # coalescing: wrap docText/similar with counters, then 20 moves in one burst
-o eval code="const e=app.plugins.plugins['fast-find-10k'].engine; e.__o=e.docText; window.__c={doc:0}; e.docText=function(p){window.__c.doc++; return e.__o.call(this,p)}; for(let n=0;n<20;n++) document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true})); 'ok'"
+o eval code="const e=app.plugins.plugins['fast-find'].engine; e.__o=e.docText; window.__c={doc:0}; e.docText=function(p){window.__c.doc++; return e.__o.call(this,p)}; for(let n=0;n<20;n++) document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true})); 'ok'"
 o dev:screenshot path=$S/f.png; o eval code="JSON.stringify(window.__c)"
 K Tab; K Enter                   # similar panel: focus first row, open it
 ```
@@ -212,10 +212,10 @@ on `metadataCache 'resolved'`, at most every 2 s, capped at 5,000 (one console l
 ```bash
 # open notes outside the modal (fires file-open), then read the recent list
 o eval code="const fs=app.vault.getMarkdownFiles().slice(0,3); (async()=>{for(const f of fs){await app.workspace.getLeaf(false).openFile(f); await new Promise(r=>setTimeout(r,300));}})(); 'ok'"
-o command id=fast-find-10k:search; o dev:screenshot path=$S/f.png
+o command id=fast-find:search; o dev:screenshot path=$S/f.png
 o eval code="[...document.querySelectorAll('.ff10k-row')].slice(0,4).map(r=>r.textContent).join('\n')"
 # access store / combo store
-o eval code="app.plugins.plugins['fast-find-10k'].cache.getAccess().then(a=>window.__acc=a.map(x=>x.path+':'+x.ts.length)); 'ok'"
+o eval code="app.plugins.plugins['fast-find'].cache.getAccess().then(a=>window.__acc=a.map(x=>x.path+':'+x.ts.length)); 'ok'"
 o eval code="JSON.stringify(window.__acc)"
 o eval code="const r=indexedDB.open('ff10k/'+app.appId); r.onsuccess=()=>{const q=r.result.transaction('queries').objectStore('queries').getAll(); q.onsuccess=()=>window.__q=JSON.stringify(q.result)}; 'ok'"
 o eval code="window.__q"
@@ -283,14 +283,14 @@ Smart Connections loads after its items: `items` exist before `vec` is readable.
 reference has a `vec`, then syncs.
 
 ```bash
-o plugin:reload id=fast-find-10k
+o plugin:reload id=fast-find
 o dev:console | grep ff10k                       # → [ff10k] vectors: 8383 notes (dims 384, skipped 0)
-o eval code="const b=app.plugins.plugins['fast-find-10k'].bridge; b.available()+' '+b.hasVectors()"   # → true true
+o eval code="const b=app.plugins.plugins['fast-find'].bridge; b.available()+' '+b.hasVectors()"   # → true true
 ```
 
 The CLI's window does not render frames here (`requestAnimationFrame` never fires, cursor-smith
 reports "no frame"), so the preview/similar paint is triggered by hand for checks:
-`app.plugins.plugins['fast-find-10k'].modal.paint()`.
+`app.plugins.plugins['fast-find'].modal.paint()`.
 
 Test vault, 2026-10-26:
 
@@ -331,16 +331,16 @@ key fields validate on `blur`). Settings and the modal cannot be open together, 
 checked by reopening the search.
 
 ```bash
-o eval code="app.setting.open(); app.setting.openTabById('fast-find-10k'); 'ok'"
+o eval code="app.setting.open(); app.setting.openTabById('fast-find'); 'ok'"
 # a slider / textarea / key field by its setting name
 o eval code="const c=app.setting.activeTab.containerEl; const it=[...c.querySelectorAll('.setting-item')].find(i=>i.querySelector('.setting-item-name')?.textContent==='Body weight'); const sl=it.querySelector('input[type=range]'); sl.value='0'; sl.dispatchEvent(new Event('input')); sl.dispatchEvent(new Event('change')); 'ok'"
-o eval code="app.setting.close(); app.commands.executeCommandById('fast-find-10k:search'); 'ok'"
+o eval code="app.setting.close(); app.commands.executeCommandById('fast-find:search'); 'ok'"
 # why ranked (Ctrl+/), help (Ctrl+Shift+/ arrives as key '?'), preview scroll, open all
 o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'/',ctrlKey:true,bubbles:true,cancelable:true})); 'ok'"
 o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'?',code:'Slash',keyCode:191,ctrlKey:true,shiftKey:true,bubbles:true,cancelable:true})); 'ok'"
 o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'J',shiftKey:true,bubbles:true,cancelable:true})); document.querySelector('.ff10k-preview').scrollTop"
 o eval code="document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',altKey:true,shiftKey:true,bubbles:true,cancelable:true})); 'sent'"
-o command id=fast-find-10k:search-resume
+o command id=fast-find:search-resume
 ```
 
 An `eval` that triggers open all often prints nothing (the workspace changes under it); read the
@@ -373,13 +373,13 @@ Numbers, method and before/after tables: [perf.md](perf.md). Native measurements
 core (`taskset -c 2`; this laptop mixes Zen 5 and Zen 5c cores). Worker memory in Obsidian:
 
 ```bash
-o eval code="const w=app.plugins.plugins['fast-find-10k'].engine.worker; w.addEventListener('message', ev=>{ if(ev.data.t==='stats' && ev.data.id===999999) window.__mem=ev.data }); w.postMessage({t:'stats', id:999999}); 'sent'"
+o eval code="const w=app.plugins.plugins['fast-find'].engine.worker; w.addEventListener('message', ev=>{ if(ev.data.t==='stats' && ev.data.id===999999) window.__mem=ev.data }); w.postMessage({t:'stats', id:999999}); 'sent'"
 o eval code="JSON.stringify(window.__mem)"          # wasmBytes = wasm linear memory (peak heap)
 # engine time of a few queries (worker elapsedUs, includes JSON and the UTF-16 range rewrite)
-o eval code="const e=app.plugins.plugins['fast-find-10k'].engine; (async()=>{const out=[]; for (const q of ['data engineer ai','ai','obsidian troubelshoot']) { const r=await e.search(q,'all',50,false); out.push(q+':'+(r.elapsedUs/1000).toFixed(1)); } window.__t=out.join(' | ')})(); 'ok'"
+o eval code="const e=app.plugins.plugins['fast-find'].engine; (async()=>{const out=[]; for (const q of ['data engineer ai','ai','obsidian troubelshoot']) { const r=await e.search(q,'all',50,false); out.push(q+':'+(r.elapsedUs/1000).toFixed(1)); } window.__t=out.join(' | ')})(); 'ok'"
 o eval code="window.__t"
 # rebuild, end to end
-o eval code="window.__rb0=performance.now(); app.plugins.plugins['fast-find-10k'].indexer.rebuild().then(()=>window.__rb=Math.round(performance.now()-window.__rb0)); 'sent'"
+o eval code="window.__rb0=performance.now(); app.plugins.plugins['fast-find'].indexer.rebuild().then(()=>window.__rb=Math.round(performance.now()-window.__rb0)); 'sent'"
 o eval code="window.__rb"
 ```
 
@@ -395,7 +395,7 @@ loaded):
 | `ai` / `obsidian troubelshoot` / `path:resources` | 7.8 / 8.1 / 7.5 ms |
 | typing `data engineerin` at 60 ms/char | 16/16 painted; engine 3.6–18.1 ms (median ≈ 10), render 2.8–5.3 ms |
 | `obsidian trouble` | top hit `Obsidian Troubleshoot` |
-| `dev:errors` | nothing from fast-find-10k |
+| `dev:errors` | nothing from fast-find |
 | `main.js` | 1,427,984 bytes |
 
 ## Release

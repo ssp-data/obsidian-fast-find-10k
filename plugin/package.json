@@ -1,5 +1,5 @@
 {
-	"name": "fast-find-10k",
+	"name": "fast-find",
 	"version": "0.1.0",
 	"description": "Fast fuzzy search built for large vaults.",
 	"main": "dist/main.js",
