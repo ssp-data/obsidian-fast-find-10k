@@ -83,9 +83,9 @@ export interface FastFindSettings {
 export const DEFAULT_WEIGHTS: Weights = {
 	title: 100,
 	alias: 90,
-	h1: 60,
-	h2: 50,
-	h3: 40,
+	h1: 105,
+	h2: 65,
+	h3: 55,
 	tag: 30,
 	link: 20,
 	path: 15,

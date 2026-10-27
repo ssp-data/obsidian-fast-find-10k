@@ -35,7 +35,7 @@ test('merge: weights are clamped to integers 0-150', () => {
 	assert.equal(s.weights.title, 150);
 	assert.equal(s.weights.alias, 0);
 	assert.equal(s.weights.h1, 34);
-	assert.equal(s.weights.h2, 50); // not finite: default
+	assert.equal(s.weights.h2, 65); // not finite: default
 	assert.equal(s.weights.body, 10);
 });
 
@@ -85,7 +85,7 @@ test('merge: unknown keys are dropped, wrongly typed values fall back', () => {
 	const s = mergeSettings({ bogus: 1, weights: { nope: 5, h1: 'x' }, keymap: { fly: 'F' }, ignoredGlobs: 'notalist', minSimilarity: 0.8 });
 	assert.equal('bogus' in s, false);
 	assert.equal('nope' in s.weights, false);
-	assert.equal(s.weights.h1, 60);
+	assert.equal(s.weights.h1, 105);
 	assert.equal('fly' in s.keymap, false);
 	assert.deepEqual(s.ignoredGlobs, []);
 	assert.equal(s.minSimilarity, 0.8);

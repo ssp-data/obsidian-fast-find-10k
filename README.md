@@ -99,7 +99,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 ### Settings
 
 - **Indexing**: ignored folders/globs (never indexed; Obsidian "Excluded files" are always honoured), downranked folders (still searchable, score × 0.3), rebuild index.
-- **Ranking**: field weights (title 100, alias 90, h1 60, h2 50, h3 40, tag 30, link 20, path 15, body 10; a weight of 0 turns the field off), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never), optional words that a query never requires (default `a an the of to in on i`; they still add to the score where they match), abbreviations and synonyms (one group per line, `oss: open source, open-source software`; typing a single-word member also finds the other members, see [Examples](#examples)), German words on at startup (language expansion adds about 400 built-in English ↔ German word pairs and the dictionary note to the abbreviations: `school` finds "Schule Madretsch", `Kinder` finds "children"; off by default, Ctrl+L switches it per session), dictionary note (the path of a note in the vault whose `english: german, german` lines join the abbreviations, reloaded when you edit it).
+- **Ranking**: field weights (title 100, alias 90, h1 105, h2 65, h3 55, tag 30, link 20, path 15, body 10; a weight of 0 turns the field off; H1 is usually the note's own title and gets a hair more than the file name, but a note matched only in its H1 still sits in the headings tier below every title match), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never), optional words that a query never requires (default `a an the of to in on i`; they still add to the score where they match), abbreviations and synonyms (one group per line, `oss: open source, open-source software`; typing a single-word member also finds the other members, see [Examples](#examples)), German words on at startup (language expansion adds about 400 built-in English ↔ German word pairs and the dictionary note to the abbreviations: `school` finds "Schule Madretsch", `Kinder` finds "children"; off by default, Ctrl+L switches it per session), dictionary note (the path of a note in the vault whose `english: german, german` lines join the abbreviations, reloaded when you edit it).
 - **Semantic**: use Smart Connections embeddings, minimum similarity shown, semantic tier (auto / on demand / never).
 - **Behaviour**: create guard, preview open by default.
 - **Keys**: every modal binding.
@@ -171,6 +171,8 @@ without the group                        with the group
 
 **German words.** With language expansion on (Ctrl+L in the search, or the "German words on at startup" setting), `school` also finds "Empfangsstruktur (Schule Madretsch)" and "Schulen im Kanton" (prefix: `schule` → `Schulen`, umlauts folded), and `schule` finds the English "School Notes". The list is about 400 everyday pairs (`crates/ff10k-core/dict/de.txt`); add your own in the abbreviations box, or keep them in a note (`Dictionary.md` with lines such as `invoice: rechnung, faktura`) and name it in the "Dictionary note" setting. Everything stays exact or prefix: no translation model, and nothing changes while the toggle is off.
 
+**Spanish, French, any other language.** The built-in list is German only, but the mechanism is not: put the pairs in the dictionary note (`school: escuela, colegio`, one line per word) or in the abbreviations box, and Ctrl+L switches them with the German list. A built-in list for another language is a text file in the same format: add `crates/ff10k-core/dict/es.txt`, one match arm for `"es"` in `dictionary()` in `crates/ff10k-core/src/rank.rs`, and a toggle next to "German words" in the settings tab; pull requests welcome. Keep false friends and words that are also English words out of such a list (the German file's header says which were dropped and why).
+
 Why not a full dictionary: I tried the free [Ding](https://dict.zero-g.net/) German–English dictionary (414k entries, GPL). Every automatic reduction expands a word to all its senses: `note` becomes Banknote and Hauch, `change` becomes Kleingeld and Münzen, `house` becomes Geschlecht, and the strict rules that remove those also remove `Kind` and `Daten`. A query expansion needs the one everyday translation, which a general dictionary does not mark, so the built-in list is hand-picked and the dictionary note is yours.
 
 The same for `de: data engineering`: alone, `de` is an exact two-letter word and finds "TJ DeVries" and "Elias DeFaria"; with the group it finds the "Data Engineering" hub notes first. Typing a single-word member finds the others in both directions (`k8s: kubernetes` makes `kubernetes` find the "K8s Cheatsheet" note too); a several-word member is only found, so `open source` does not search for `oss`.
@@ -200,15 +202,14 @@ Same vault, same queries, Omnisearch 1.31.0 with its default fuzziness. First th
 
 Recall over the vault's own titles (every note queried by its full title, its first two words, and its title with one letter deleted; the note must be the first hit), a 939-note sample (every 10th note) for both tools. No language expansion or abbreviations were active in any run:
 
-| Query | Fast Find 10K (after the recall fixes) | Fast Find 10K (before) | Omnisearch |
-|---|---|---|---|
-| full title | 99.3 % first, 100 % in top 5 | 97.3 % first, 99.7 % in top 5 | 97.8 % first, 100 % in top 5 |
-| first two words | 60.8 % first, 82.0 % in top 5 | 56.5 % first, 80.8 % in top 5 | 71.5 % first, 87.4 % in top 5 |
-| one letter deleted | 98.6 % first, 100 % in top 5 | 91.6 % first, 94.6 % in top 5 | 78.2 % first, 83.8 % in top 5 |
+| Query              | Fast Find 10K (after the recall fixes) | Omnisearch                    |
+| ------------------ | -------------------------------------- | ----------------------------- |
+| full title         | 99.3 % first, 100 % in top 5           | 97.8 % first, 100 % in top 5  |
+| first two words    | 60.8 % first, 82.0 % in top 5          | 71.5 % first, 87.4 % in top 5 |
+| one letter deleted | 98.6 % first, 100 % in top 5           | 78.2 % first, 83.8 % in top 5 |
 
-The first run found the misses that led to four ranking fixes (all with goldens); the "after" column is the same procedure afterwards. Over all 9,385 notes Fast Find 10K now finds 98.9 % by full title as the first hit (99.97 % in the top 5) and 97.9 % with one letter deleted (99.8 % in the top 5); every miss, its cause and the fix are in [docs/recall.md](docs/recall.md). Run `ff10k recall <vault>` to get the numbers for your own vault.
 
-The "first two words" row is expected, not a gap: a query such as `RW Data` matches about a hundred notes titled "RW Data …" equally (every word matched, same number of unmatched title words), so which equal note comes first is a tie-break. Fast Find 10K breaks ties by backlinks, then by modification date; Omnisearch's BM25 prefers the shorter document, which happens to agree with the test more often. The note you want is in the top 10 in 88 % of these ambiguous queries, and typing one more word resolves it.
+The "first two words" row is expected, not a gap: a query such as `RW Data` matches about a hundred notes titled "RW Data …" equally (every word matched, same number of unmatched title words), so which equal note comes first is a tie-break. Fast Find 10K breaks ties by backlinks, then by modification date; Omnisearch's BM25 prefers the shorter document, which happens to agree with the test more often. The note you want is in the top 10 in 88 % of these ambiguous queries, and typing one more word resolves it. Run `ff10k recall <vault>` to get the numbers for your own vault.
 
 
 ### LLMs or AI

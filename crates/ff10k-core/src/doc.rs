@@ -34,9 +34,11 @@ impl Default for Weights {
         Weights {
             title: 100.0,
             alias: 90.0,
-            h1: 60.0,
-            h2: 50.0,
-            h3: 40.0,
+            // H1 is usually the note's own title and gets a hair more than the file name (owner
+            // request, 2026-10-27); tiers are unchanged: H1-only matches stay in the headings tier.
+            h1: 105.0,
+            h2: 65.0,
+            h3: 55.0,
             tag: 30.0,
             link: 20.0,
             path: 15.0,
@@ -109,9 +111,9 @@ mod tests {
         let w = Weights::default();
         assert_eq!(w.get(Field::Title), 100.0);
         assert_eq!(w.get(Field::Alias), 90.0);
-        assert_eq!(w.get(Field::H1), 60.0);
-        assert_eq!(w.get(Field::H2), 50.0);
-        assert_eq!(w.get(Field::H3), 40.0);
+        assert_eq!(w.get(Field::H1), 105.0);
+        assert_eq!(w.get(Field::H2), 65.0);
+        assert_eq!(w.get(Field::H3), 55.0);
         assert_eq!(w.get(Field::Tag), 30.0);
         assert_eq!(w.get(Field::Link), 20.0);
         assert_eq!(w.get(Field::Path), 15.0);

@@ -203,7 +203,7 @@ Worked examples (also golden tests):
 
 `score = Σ_terms (field_weight × match_quality) + proximity + frecency + combo + structural − penalties`
 
-- `field_weight` defaults: title 100, alias 90, h1 60, h2 50, h3 40, tag 30, link text 20, path segment 15, body 10. Each term counts its best field only.
+- `field_weight` defaults: title 100, alias 90, h1 105, h2 65, h3 55, tag 30, link text 20, path segment 15, body 10 (h1–h3 raised from 60/50/40 on owner request, v1.1: the H1 is the note's own title and should weigh a hair more than the file name; tiers unchanged). Each term counts its best field only.
 - `match_quality` ∈ (0, 1]: exact token 1.0, prefix scaled by `term_len / token_len`, fuzzy = normalized frizbee score.
 - `proximity`: bonus when all terms fall within one heading section, and a larger bonus when within 8 body tokens of each other. Phrase queries require adjacency instead.
 - `frecency`: fff's formula: `Σ exp(−0.0693 × days_since_access)` over the last 30 days (10-day half-life), capped (`10 + sqrt(x − 10)` above 10), scaled into the score. An "access" is **any** note open in Obsidian (`workspace.on("file-open")`), not only opens through the modal, so the signal is useful from day one and the empty-query list behaves like a recent-files list. Opens triggered by the modal itself are recorded once (not double-counted via `file-open`). Stored in IndexedDB store `access` (`path → [timestamps]`, max 128 per path). "Clear frecency" wipes this store. (Design call, see §16.)

@@ -47,6 +47,11 @@ so 400 instead of 421 titles had three or more words):
 
 No abbreviations, language expansion or dictionary note were active in any run.
 
+After the default weights changed (H1 105, H2 65, H3 55; owner request, commit after
+`44e5379`), the same sample reads full 99.15 / 99.89 / 100 %, two 59.75 / 82.75 / 88.00 %,
+typo 98.41 / 100 / 100 %: one or two notes per variant moved, because a note with an H1 equal
+to its title now outranks a tied note without an H1.
+
 Latencies are not directly comparable: Fast Find 10K ran natively (release build, one core),
 Omnisearch inside Obsidian's renderer. Inside Obsidian a Fast Find 10K query takes about 5 ms for
 one word and 15 ms for three (see [perf.md](perf.md)).

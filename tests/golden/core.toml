@@ -22,8 +22,8 @@ query = "AI"
 must_not_top3 = ["Airflow Basics", "aim high", "Airflow for Data Engineering"]
 expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for Data Engineers"]
 
-# Top pick rests on the backlink hub bonus: "AI in Data Engineering" ties "Data Engineering with AI"
-# on fields and title coverage and wins 328.6 vs 325.0 on backlinks (5 vs 0).
+# Top pick rests on the backlink hub bonus and the H1: "AI in Data Engineering" ties "Data Engineering
+# with AI" on title coverage, has an H1 (105 per term vs 100 for a title-only note) and 5 backlinks.
 [[case]]
 query = "data engineering ai"
 expect_top = "AI in Data Engineering"
@@ -31,6 +31,7 @@ expect_in_top = ["AI in Data Engineering", "Data Engineering with AI", "AI for D
 must_not_top3 = ["👉🏻 Data Engineering", "RW Pandas AI — The Future of Data Analysis"]
 
 # Prefix quality: `engineer`->`engineers` (8/9) outscores `engineer`->`engineering` (8/11); spec §16 ruling.
+# Both notes carry an H1 equal to their title (as most notes do), so the H1 weight does not decide.
 [[case]]
 query = "data engineer ai"
 expect_top = "AI for Data Engineers"
