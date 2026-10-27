@@ -48,7 +48,9 @@ const copyStatic = {
 	setup(build) {
 		build.onEnd(async () => {
 			await mkdir(path.join(here, 'dist'), { recursive: true });
-			for (const f of ['manifest.json', 'styles.css']) await copyFile(path.join(here, f), path.join(here, 'dist', f));
+			// manifest.json and versions.json live in the repo root (Obsidian's plugin review expects them there)
+			await copyFile(path.join(here, '..', 'manifest.json'), path.join(here, 'dist', 'manifest.json'));
+			await copyFile(path.join(here, 'styles.css'), path.join(here, 'dist', 'styles.css'));
 		});
 	},
 };

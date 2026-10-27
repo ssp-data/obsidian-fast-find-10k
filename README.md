@@ -45,7 +45,7 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 - **Local only.** No language model, no network. See [LLMs or AI](#llms-or-ai).
 ## Install
 
-There is no release yet (a GitHub release with `main.js`, `manifest.json` and `styles.css` comes later). For development, build and symlink the plugin into a vault:
+Until the plugin is in the community list, install a release with [BRAT](https://github.com/TfTHacker/obsidian42-brat) (add `ssp-data/obsidian-fast-find-10k` as a beta plugin; this also works on mobile), or build it yourself:
 
 ```sh
 bash scripts/build-wasm.sh                  # needs the wasm32-unknown-unknown target and wasm-bindgen-cli 0.2.128

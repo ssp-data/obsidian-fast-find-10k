@@ -45,7 +45,7 @@ Inspirations: [fff](https://github.com/dmtrKovalenko/fff) (Rust engine, frecency
 - **Obsidian plugin packaging.** A community plugin release ships exactly `main.js`, `manifest.json`, `styles.css`. The WASM binary and the worker script must be embedded in `main.js` (base64 / Blob URL) and instantiated at load. Keep the WASM under ~2 MB.
 - **Plugin id/name.** Id `fast-find-10k`, name "Fast Find 10K". Obsidian guidelines forbid "Obsidian" in the name. Repo: `obsidian-fast-find-10k` (current folder `obsidian-fzf` is to be renamed by the owner; builder works in whatever the folder is called).
 - **Toolchain on the dev machine.** Arch Linux, `cargo 1.99` from pacman (not rustup), Node 26. The `wasm32-unknown-unknown` target and `wasm-bindgen-cli` must be installed (Arch packages `rust-wasm` and `wasm-bindgen`, or rustup). Builder verifies.
-- **Test vault.** `/home/sspaeti/git/obsidian/trouble-tags-testvault` (~9.4k notes, Smart Connections installed and indexing). The user's real vault must never be read by tooling or tests. Synthetic fixtures go under `generated/` in the test vault; fixtures committed to the repo must be synthetic, never copies of the user's notes.
+- **Test vault.** a copy of the owner's vault, `<path>/trouble-tags-testvault` (~9.4k notes, Smart Connections installed and indexing). The user's real vault must never be read by tooling or tests. Synthetic fixtures go under `generated/` in the test vault; fixtures committed to the repo must be synthetic, never copies of the user's notes.
 - **Real vault sizing** (for budgets): 9,885 notes, 28.5 MB markdown, 8,013 images, 17,966 files; Smart Connections has 12,441 note vectors (19 MB) and 70,495 block vectors.
 
 ## 4. Architecture

@@ -1,6 +1,6 @@
 # Dev checklist: build, install, reload, verify
 
-Test vault: `/home/sspaeti/git/obsidian/trouble-tags-testvault` (never the real vault).
+Test vault: a copy of a real vault (`<path>/trouble-tags-testvault` on the owner's machine, 9,385 notes); never the live vault.
 Every Obsidian CLI call below targets it explicitly with `vault=trouble-tags-testvault`; Obsidian must be running with that vault open.
 
 ## Build
@@ -21,7 +21,7 @@ The worker (`src/worker.ts` + wasm as bytes) is bundled first as an IIFE string 
 ## Install (once)
 
 ```bash
-V=/home/sspaeti/git/obsidian/trouble-tags-testvault/.obsidian/plugins/fast-find-10k
+V=<vault>/.obsidian/plugins/fast-find-10k
 mkdir -p $V && ln -sf $PWD/dist/main.js $PWD/dist/manifest.json $PWD/dist/styles.css $V/
 ```
 
@@ -397,3 +397,11 @@ loaded):
 | `obsidian trouble` | top hit `Obsidian Troubleshoot` |
 | `dev:errors` | nothing from fast-find-10k |
 | `main.js` | 1,427,984 bytes |
+
+## Release
+
+1. Bump `version` in `manifest.json` (repo root) and `plugin/package.json`; add the version → `minAppVersion` line to `versions.json`.
+2. `bash scripts/build-wasm.sh && cd plugin && npm ci && npm run build` → `plugin/dist/{main.js,manifest.json,styles.css}`.
+3. Commit, tag the version without a `v` prefix (`git tag 0.1.0 && git push --tags`).
+4. GitHub release named after the tag with the three files from `plugin/dist` attached as individual assets (not zipped).
+5. Test on desktop and mobile through BRAT (`ssp-data/obsidian-fast-find-10k`), then submit to the community plugin list (<https://github.com/obsidianmd/obsidian-releases>): `manifest.json` and `versions.json` are in the repo root for that reason.
