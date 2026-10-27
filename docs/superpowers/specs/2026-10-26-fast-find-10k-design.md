@@ -296,7 +296,7 @@ Modal prefill: current editor selection if any, else empty (not the last query; 
 - Abbreviations / synonyms, one group per line (`oss: open source, open-source software`); default empty. Applied live.
 - German words on at startup (`languages: ["de"]`): language expansion adds a built-in English ↔ German dictionary (`crates/ff10k-core/dict/de.txt`, about 400 pairs, no false friends) and the dictionary note's lines to the abbreviation groups. Off by default; `Ctrl+L` (keymap `toggleLanguages`) flips it for the session from the modal, shown by a "+languages" pill. While off, nothing is sent to the engine and results are unchanged.
 - Dictionary note (`dictionaryFile`): a vault path whose `word: other, words` lines (list markers allowed; headings, frontmatter and lines without `:` skipped) are appended to the abbreviation lines in the engine config; reloaded on edit of that note.
-- Semantic tier: auto when few results (default) / on demand only / never.
+- Semantic tier: always (default since v1.1: a query embedding costs ~3 ms, and "when few results" never fired on a 13k vault) / only when few results / on demand only / never.
 - Use Smart Connections embeddings (on/off), minimum similarity shown (similar panel, default 0.70), minimum similarity for semantic results (semantic tier and create guard, default 0.60; v1.1: query-to-note scores are lower than note-to-note, so one threshold left the semantic tier empty).
 - Create guard on/off.
 - Preview on/off by default.

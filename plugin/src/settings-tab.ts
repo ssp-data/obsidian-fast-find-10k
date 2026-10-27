@@ -164,7 +164,8 @@ export class FastFindSettingTab extends PluginSettingTab {
 					},
 					{
 						name: 'Semantic tier',
-						control: { type: 'dropdown', key: 'semantic', options: { auto: 'Automatically when few results', onDemand: 'On demand only', never: 'Never' } },
+						desc: 'Smart Connections neighbours of the query as the last group. Always: after every query (a few ms). When few results: only with fewer than the "few results" threshold of full matches. On demand: Ctrl+S.',
+						control: { type: 'dropdown', key: 'semantic', options: { always: 'Always', auto: 'Only when few results', onDemand: 'On demand only (Ctrl+S)', never: 'Never' } },
 					},
 				],
 			},
@@ -437,7 +438,7 @@ export class FastFindSettingTab extends PluginSettingTab {
 			.setName('Semantic tier')
 			.addDropdown((d) =>
 				d
-					.addOptions({ auto: 'Automatically when few results', onDemand: 'On demand only', never: 'Never' })
+					.addOptions({ always: 'Always', auto: 'Only when few results', onDemand: 'On demand only (Ctrl+S)', never: 'Never' })
 					.setValue(this.s.semantic)
 					.onChange((v) => {
 						this.s.semantic = v as SemanticSetting;

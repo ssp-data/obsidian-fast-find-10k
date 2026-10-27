@@ -25,7 +25,7 @@ test('merge: enum values outside their allowed set fall back to the default', ()
 	const s = mergeSettings({ fuzzy: 'sloppy', partial: 'sometimes', semantic: 'maybe' });
 	assert.equal(s.fuzzy, 'normal');
 	assert.equal(s.partial, 'whenFew');
-	assert.equal(s.semantic, 'auto');
+	assert.equal(s.semantic, 'always');
 	const ok = mergeSettings({ fuzzy: 'off', partial: 'never', semantic: 'onDemand' });
 	assert.deepEqual([ok.fuzzy, ok.partial, ok.semantic], ['off', 'never', 'onDemand']);
 });

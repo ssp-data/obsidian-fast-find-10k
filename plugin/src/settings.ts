@@ -6,7 +6,7 @@ import type { EngineConfig, PartialMode, Weights } from './protocol';
 
 export type FuzzySetting = 'off' | 'normal' | 'loose';
 /** Semantic tier: automatically when few lexical hits (and on Ctrl+S), only on Ctrl+S, or never. */
-export type SemanticSetting = 'auto' | 'onDemand' | 'never';
+export type SemanticSetting = 'always' | 'auto' | 'onDemand' | 'never';
 
 /** Modal key bindings as `Mod+Alt+Enter` style strings (`Mod` = Cmd on macOS, Ctrl elsewhere). */
 export interface Keymap {
@@ -112,7 +112,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	synonyms: [],
 	languages: [],
 	dictionaryFile: '',
-	semantic: 'auto',
+	semantic: 'always',
 	useSmartConnections: true,
 	minSimilarity: 0.7,
 	semanticMinSimilarity: 0.6,
@@ -140,7 +140,7 @@ function pick<T extends object>(defaults: T, saved: unknown): T {
 
 const FUZZY_VALUES: readonly FuzzySetting[] = ['off', 'normal', 'loose'];
 const PARTIAL_VALUES: readonly PartialMode[] = ['whenFew', 'always', 'never'];
-const SEMANTIC_VALUES: readonly SemanticSetting[] = ['auto', 'onDemand', 'never'];
+const SEMANTIC_VALUES: readonly SemanticSetting[] = ['always', 'auto', 'onDemand', 'never'];
 
 /** `v` when it is one of `allowed`, else `fallback`. */
 function oneOf<T extends string>(v: T, allowed: readonly T[], fallback: T): T {

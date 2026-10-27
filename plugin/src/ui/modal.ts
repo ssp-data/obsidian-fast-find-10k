@@ -396,7 +396,8 @@ export class FastFindModal extends Modal {
 		const query = this.state.query;
 		// "few" counts full lexical matches (tiers 1-3), not the partial tier shown because of them (spec 6.3)
 		const full = this.state.hits.filter((h) => h.tier >= 1 && h.tier <= 3).length;
-		const auto = settings.semantic === 'auto' && full < settings.fewThreshold;
+		// `always`: a query embedding costs a few ms, so the tier is appended for every query
+		const auto = settings.semantic === 'always' || (settings.semantic === 'auto' && full < settings.fewThreshold);
 		if (this.semanticShown || !query.trim() || settings.semantic === 'never' || !(forced || auto)) return;
 		if (!settings.useSmartConnections || !bridge?.available() || !bridge.hasVectors() || !engine) return;
 		const gen = this.renderSeq;
