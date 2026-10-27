@@ -98,6 +98,10 @@
 	color: var(--text-normal);
 }
 
+.ff10k-similar.is-collapsed {
+	display: none;
+}
+
 .ff10k-similar {
 	flex: 0 0 auto;
 	max-height: 40%;

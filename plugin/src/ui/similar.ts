@@ -33,7 +33,10 @@ export class SimilarPanel {
 	private token = 0;
 	private openCb: ((path: string) => void) | null = null;
 
+	private readonly el: HTMLElement;
+
 	constructor(el: HTMLElement) {
+		this.el = el;
 		this.labelEl = el.createDiv({ cls: 'ff10k-similar-label', text: SIMILAR_LABEL });
 		this.listEl = el.createDiv({ cls: 'ff10k-similar-list', attr: { tabindex: '-1' } });
 		this.hintEl = el.createDiv({ cls: 'ff10k-similar-hint', text: 'Smart Connections off: title similarity only' });
@@ -45,14 +48,25 @@ export class SimilarPanel {
 		const token = ++this.token;
 		this.labelEl.setText(SIMILAR_LABEL);
 		this.hintEl.toggle(!hasVectors);
-		if (hit.isGhost || hit.tier === 0) return this.renderRows([]);
+		if (hit.isGhost || hit.tier === 0) {
+			this.renderRows([]);
+			return this.collapse(!hasVectors);
+		}
 		let items: SimilarHit[];
 		try {
 			items = await engine.similar(hit.path, LIMIT, minScore);
 		} catch {
 			items = [];
 		}
-		if (token === this.token) this.renderRows(items.map((i) => ({ path: i.path, title: i.title, note: reasonLabel(i.reason) })));
+		if (token !== this.token) return;
+		this.renderRows(items.map((i) => ({ path: i.path, title: i.title, note: reasonLabel(i.reason) })));
+		// Without Smart Connections the panel only has title-overlap rows: hide it when it has none
+		// rather than show an empty box; with embeddings it stays, so the layout does not jump.
+		this.collapse(!hasVectors && items.length === 0);
+	}
+
+	private collapse(on: boolean): void {
+		this.el.toggleClass('is-collapsed', on);
 	}
 
 	/** Create guard: "Already have?" with the given existing notes (drops pending similar replies).
@@ -62,6 +76,7 @@ export class SimilarPanel {
 		const selected = this.selected;
 		this.labelEl.setText('Already have?');
 		this.hintEl.toggle(false);
+		this.collapse(false);
 		this.renderRows(items);
 		if (keepSelection && selected >= 0 && items.length > 0) this.setSelected(Math.min(selected, items.length - 1));
 	}
