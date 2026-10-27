@@ -456,6 +456,12 @@ export class FastFindModal extends Modal {
 			const row = this.resultsEl.createDiv();
 			renderRow(row, hit, i === this.state.selected);
 			row.addEventListener('click', () => {
+				// Mobile with the preview on: the first tap selects (and previews) the row, a tap on
+				// the selected row opens it. Everywhere else a click opens at once.
+				if (Platform.isMobile && this.state.previewOpen && this.state.selected !== i) {
+					this.select(i);
+					return;
+				}
 				this.select(i);
 				void this.openSelected('same');
 			});
