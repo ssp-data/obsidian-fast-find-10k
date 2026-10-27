@@ -114,13 +114,14 @@ Typo: 15.3 % of the sampled one-typo queries return nothing at all (`RW DucDB + 
 `1` tolerates fewer edits than frizbee with the guard rules. `obsidian troubelshoot` (two
 letters swapped) returns zero results.
 
-## Open question found on the way (not applied)
+## Found on the way, applied (owner ruling)
 
-`invoice` ranks "Brand Voice of AIrbyte" and "My Writing Voice" (fuzzy: `n voice` matches 6 of
+`invoice` ranked "Brand Voice of AIrbyte" and "My Writing Voice" (fuzzy: `n voice` matches 6 of
 7 letters) above "Sales Invoice (ungleich Revenue)" (exact, but three unmatched title words,
-`titleFactor ×0.55`). Within a tier the match kind does not order results, so a fuzzy hit in a
-short title can beat an exact hit in a long one. Candidate rule: within a tier, a note whose
-every unit matched only fuzzily sorts after notes with an exact or prefix hit.
+`titleFactor ×0.55`) when no frecency was involved. Rule now: within a tier, notes where every
+required word matched exactly or by prefix sort before notes where some word matched only
+fuzzily; a query with a typo (`invoce`) has no exact hits, so its order is unchanged. Golden
+`invoice` → "Sales Invoice Process and Cashflow Notes" above the fixture "Brand Voice".
 
 ## Tests that exist
 

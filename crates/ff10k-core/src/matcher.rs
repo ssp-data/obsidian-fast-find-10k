@@ -38,6 +38,8 @@ pub struct TermHit {
     pub positions: SmallVec<[u32; 4]>,
     pub heading_idx: Option<u16>,
     pub char_ranges: SmallVec<[(u32, u32); 4]>,
+    /// The hit came from an abbreviation / language alternative, not from the typed word.
+    pub expanded: bool,
 }
 
 /// Fuzzy typo tolerance: normal allows 1 typo for 6–9 chars and 2 for 10+; `loose` adds 1 to each.
@@ -255,6 +257,7 @@ fn finish(index: &Index, field: Field, doc: DocId, mut acc: Acc) -> TermHit {
         positions: acc.positions,
         heading_idx: acc.heading_idx,
         char_ranges: merge(char_ranges),
+        expanded: false,
     }
 }
 
@@ -507,6 +510,7 @@ pub fn match_term_scoped(
                         positions: SmallVec::new(),
                         heading_idx: is_heading(field).then_some(*hidx),
                         char_ranges,
+                        expanded: false,
                     },
                 );
             }

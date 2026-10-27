@@ -189,6 +189,8 @@ pub struct Hit {
     pub is_ghost: bool,
     pub ghost_refs: u32,
     pub similar_count: u32,
+    /// Some typed word matched this note only through an abbreviation or language alternative.
+    pub expanded: bool,
     pub debug: Option<DebugInfo>,
 }
 
@@ -315,7 +317,9 @@ fn alternatives<'g>(groups: &'g [Vec<Member>], term: &Term) -> Vec<&'g Member> {
 /// Restores the unit invariant after merging hit lists: sorted by (doc, field), one hit per
 /// (doc, field), keeping the best quality (the first on ties).
 fn dedupe_hits(hits: &mut Vec<TermHit>) {
-    hits.sort_by(|a, b| (a.doc, a.field as u8).cmp(&(b.doc, b.field as u8)).then(b.quality.total_cmp(&a.quality)));
+    hits.sort_by(|a, b| {
+        (a.doc, a.field as u8).cmp(&(b.doc, b.field as u8)).then(b.quality.total_cmp(&a.quality)).then(a.expanded.cmp(&b.expanded))
+    });
     hits.dedup_by(|b, a| a.doc == b.doc && a.field == b.field);
 }
 
@@ -333,6 +337,8 @@ struct Scored<'a> {
     /// frecency, combo (the last two as added to the score).
     parts: [f32; 7],
     ghost: Option<&'a Ghost>,
+    /// Some required unit matched this doc only fuzzily (sorted after exact/prefix matches).
+    fuzzy: bool,
 }
 
 fn class(f: Field) -> u8 {
@@ -426,6 +432,7 @@ fn phrase_hits(index: &Index, words: &[String], multi: bool) -> Vec<TermHit> {
             positions: starts,
             heading_idx: h0.heading_idx,
             char_ranges: ranges.into_iter().collect(),
+            expanded: false,
         });
     }
     out
@@ -461,15 +468,19 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
         // words follow the term rules without fuzzy (the owner spelled them), several words the
         // phrase rules (adjacent; phrase hits include Body for every doc, as phrase units do).
         let alts = alternatives(groups, t);
+        let expanded = |mut h: TermHit| {
+            h.expanded = true;
+            h
+        };
         for m in &alts {
             if let [word] = m.as_slice() {
                 if let Some(at) = synth_term(word) {
-                    hits.extend(match_term_scoped(index, &at, multi, NO_FUZZY, scope).into_iter().filter(keep));
+                    hits.extend(match_term_scoped(index, &at, multi, NO_FUZZY, scope).into_iter().filter(keep).map(expanded));
                     words.extend(at.parts.iter().map(|p| (p.clone(), prefix_ok(p, multi))));
                     alt_terms.push(at);
                 }
             } else {
-                hits.extend(phrase_hits(index, m, multi).into_iter().filter(keep));
+                hits.extend(phrase_hits(index, m, multi).into_iter().filter(keep).map(expanded));
                 words.extend(m.iter().map(|w| (w.clone(), prefix_ok(w, multi))));
             }
         }
@@ -492,7 +503,10 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
         for (u, t) in units.iter_mut().zip(&query.terms) {
             let mut body = match_term_scoped(index, t, multi, NO_FUZZY, Scope::BodyOnly(&allowed));
             for at in &u.alt_terms {
-                body.extend(match_term_scoped(index, at, multi, NO_FUZZY, Scope::BodyOnly(&allowed)));
+                body.extend(match_term_scoped(index, at, multi, NO_FUZZY, Scope::BodyOnly(&allowed)).into_iter().map(|mut h| {
+                    h.expanded = true;
+                    h
+                }));
             }
             if !body.is_empty() {
                 u.hits.extend(body);
@@ -787,6 +801,9 @@ fn score<'a>(
     }
     let frecency = extras.frecency(&doc.path, now_secs) * FRECENCY_WEIGHT;
     let combo = if extras.combo_count(&query.normalized, &doc.path) >= COMBO_MIN_COUNT { COMBO_BONUS } else { 0.0 };
+    // A typed word that this doc matched only fuzzily (every required unit's best hit decides):
+    // such docs sort after exact/prefix matches of the same tier (docs/recall.md, owner ruling).
+    let fuzzy = required(units, &slots).any(|(u, s)| best_contribution(w, unit_hits(u, s)).is_some_and(|h| h.kind == MatchKind::Fuzzy));
     Scored {
         id,
         doc,
@@ -795,12 +812,14 @@ fn score<'a>(
         slots,
         parts: [fields, title_factor, prox, structural, penalty, frecency, combo],
         ghost: None,
+        fuzzy,
     }
 }
 
 fn cmp_scored(a: &Scored, b: &Scored) -> Ordering {
     a.tier
         .cmp(&b.tier)
+        .then(a.fuzzy.cmp(&b.fuzzy))
         .then(b.score.total_cmp(&a.score))
         .then(a.ghost.is_some().cmp(&b.ghost.is_some()))
         .then(b.doc.mtime.total_cmp(&a.doc.mtime))
@@ -967,6 +986,7 @@ fn recent(index: &Index, opts: &SearchOptions, extras: &Extras) -> Ranked {
             is_ghost: false,
             ghost_refs: 0,
             similar_count: 0,
+            expanded: false,
             debug: None,
         })
         .collect();
@@ -1065,6 +1085,10 @@ fn page_hit(index: &Index, s: &Scored, units: &[Unit], cfg: &Config, opts: &Sear
         None
     };
     let (title_norm, title_ranges) = title_display(s, units, badge);
+    let expanded = units
+        .iter()
+        .zip(&s.slots)
+        .any(|(u, &sl)| best_contribution(&cfg.weights, unit_hits(u, sl)).is_some_and(|h| h.expanded));
     let context = body_context(index, s, units);
     let line = heading.as_ref().map(|h| h.line).or(context.as_ref().map(|c| c.1));
     let debug = opts.debug.then(|| {
@@ -1102,6 +1126,7 @@ fn page_hit(index: &Index, s: &Scored, units: &[Unit], cfg: &Config, opts: &Sear
         is_ghost: s.ghost.is_some(),
         ghost_refs: s.ghost.map_or(0, |g| g.refs),
         similar_count: 0,
+        expanded,
         debug,
     }
 }

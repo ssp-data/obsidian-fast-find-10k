@@ -72,6 +72,8 @@ export interface Hit {
 	isGhost: boolean;
 	ghostRefs: number;
 	similarCount: number;
+	/** Some typed word matched only through an abbreviation or language word (highlighted differently). */
+	expanded: boolean;
 	debug?: DebugInfo | null;
 }
 

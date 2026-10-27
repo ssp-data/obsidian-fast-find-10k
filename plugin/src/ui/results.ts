@@ -56,7 +56,8 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 	el.addClass('ff10k-row');
 	el.toggleClass('is-selected', selected);
 	el.toggleClass('ff10k-ghost', hit.isGhost);
-	el.setAttr('title', hit.path);
+	el.toggleClass('is-expanded', hit.expanded);
+	el.setAttr('title', hit.expanded ? `${hit.path}\nmatched through an abbreviation or language word` : hit.path);
 	const main = el.createDiv({ cls: 'ff10k-row-main' });
 
 	// semantic rows (tier 5) show their cosine as Smart Connections does
@@ -79,6 +80,7 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 		const folder = folderOf(hit.path);
 		if (folder) main.createSpan({ cls: 'ff10k-folder', text: folder });
 	}
+	if (hit.expanded) main.createSpan({ cls: 'ff10k-expanded-badge', text: 'via word list' });
 	if (hit.similarCount > 0) main.createSpan({ cls: 'ff10k-similar-badge', text: `${hit.similarCount} similar` });
 
 	const why = formatWhy(hit);

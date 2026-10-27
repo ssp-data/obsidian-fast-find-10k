@@ -102,6 +102,7 @@ function semanticHit(h: SemanticHit): Hit {
 		isGhost: false,
 		ghostRefs: 0,
 		similarCount: 0,
+		expanded: false,
 	};
 }
 

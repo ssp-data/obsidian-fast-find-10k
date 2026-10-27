@@ -166,3 +166,10 @@ expect_tier = 1
 query = "data"
 expect_top = "data"
 expect_in_top = ["DataOps"]
+
+# Exact/prefix hits sort above fuzzy hits within a tier (owner ruling 2026-10-27): `invoice`
+# fuzzy-matches "Brand Voice" (short title, few unmatched words) but the exact title match wins.
+[[case]]
+query = "invoice"
+expect_top = "Sales Invoice Process and Cashflow Notes"
+expect_tier = 1

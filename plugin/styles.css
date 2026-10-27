@@ -194,6 +194,21 @@
 	font-weight: var(--font-bold);
 }
 
+/* A note matched through an abbreviation or language word: highlights in a second colour. */
+.ff10k-row.is-expanded .ff10k-hl {
+	color: var(--color-orange);
+}
+
+.ff10k-expanded-badge {
+	flex: 0 0 auto;
+	font-size: var(--font-ui-smaller);
+	color: var(--color-orange);
+	border: 1px solid var(--color-orange);
+	border-radius: var(--radius-s);
+	padding: 0 4px;
+	opacity: 0.85;
+}
+
 .ff10k-heading {
 	flex: 0 1 auto;
 	min-width: 0;

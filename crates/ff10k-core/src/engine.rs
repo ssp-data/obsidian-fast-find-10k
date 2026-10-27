@@ -1216,4 +1216,40 @@ mod tests {
         assert_eq!(component(hit(&r, "1 Chr 1").unwrap(), "titleFactor"), 1.0);
         assert_eq!(titles(&r)[0], "1 Chr 1", "{:?}", titles(&r));
     }
+
+    #[test]
+    fn exact_and_prefix_hits_rank_above_fuzzy_hits_in_the_same_tier() {
+        let mut e = Engine::new();
+        e.upsert("Brand Voice.md", 0.0, "tone of voice guidelines, with enough words to pass the short note rule, words words words words");
+        e.upsert("Sales Invoice Process and Cashflow Notes.md", 0.0, "how invoices are sent, with enough words to pass the short note rule, words words words words");
+        e.upsert("Invoices Overview.md", 0.0, "all invoices, with enough words to pass the short note rule, words words words words words words");
+        let r = e.search("invoice", &SearchOptions { debug: true, ..opts() });
+        let t = titles(&r);
+        let pos = |name: &str| t.iter().position(|x| *x == name).unwrap_or(usize::MAX);
+        // Without the rule the short fuzzy title scores higher (one unmatched word vs four).
+        let voice = hit(&r, "Brand Voice").unwrap();
+        assert_eq!(voice.debug.as_ref().unwrap().per_term[0].2, crate::matcher::MatchKind::Fuzzy);
+        assert!(pos("Sales Invoice Process and Cashflow Notes") < pos("Brand Voice"), "{t:?}");
+        assert!(pos("Invoices Overview") < pos("Brand Voice"), "{t:?}");
+        assert_eq!(voice.tier, 1);
+        // A typo in the query leaves every hit fuzzy: the score order is untouched.
+        let r = e.search("invoce", &opts());
+        assert!(hit(&r, "Brand Voice").is_some() || hit(&r, "Invoices Overview").is_some());
+    }
+
+    #[test]
+    fn hits_through_an_alternative_are_flagged_expanded() {
+        let r = synonym_corpus().search("oss", &opts());
+        assert!(hit(&r, "Open Source").unwrap().expanded);
+        assert!(hit(&r, "Open Hardware").unwrap().expanded);
+        assert!(!hit(&r, "OSS Licenses").unwrap().expanded);
+        // The typed word's own hit wins over an equal alternative hit on the same field.
+        let r = synonym_corpus().search("kubernetes", &opts());
+        assert!(!hit(&r, "Kubernetes Basics").unwrap().expanded);
+        assert!(hit(&r, "K8s Cheatsheet").unwrap().expanded);
+        // Without groups nothing is expanded.
+        let mut e = synonym_corpus();
+        e.set_config(Config::default());
+        assert!(e.search("open source", &opts()).hits.iter().all(|h| !h.expanded));
+    }
 }
