@@ -666,14 +666,18 @@ fn proximity(units: &[Unit], slots: &Slots) -> f32 {
     }
 }
 
-/// Title words (`spans` into the normalized title) that no unit hit in Title, by range overlap
-/// (so fuzzy hits count too).
-fn unmatched_in_title(spans: &[(u32, u32)], units: &[Unit], slots: &Slots) -> usize {
+/// Title words (`spans` into the normalized title `norm`) that no unit hit in Title, by range
+/// overlap (so fuzzy hits count too) or by repeating a covered word (a hit range marks only the
+/// first occurrence: "1 Chr 1" for `1 chr 1` has both `1`s covered).
+fn unmatched_in_title(norm: &str, spans: &[(u32, u32)], units: &[Unit], slots: &Slots) -> usize {
     let covered = |s: u32, e: u32| {
+        let word = norm.get(s as usize..e as usize);
         units.iter().zip(slots).any(|(u, &sl)| {
-            unit_hits(u, sl)
-                .iter()
-                .any(|h| h.field == Field::Title && h.char_ranges.iter().any(|&(a, b)| a < e && s < b))
+            unit_hits(u, sl).iter().filter(|h| h.field == Field::Title).any(|h| {
+                h.char_ranges.iter().any(|&(a, b)| {
+                    (a < e && s < b) || (word.is_some() && norm.get(a as usize..b as usize) == word)
+                })
+            })
         })
     };
     spans.iter().filter(|&&(s, e)| !covered(s, e)).count()
@@ -698,7 +702,7 @@ fn alias_coverage(norm: &str, spans: &[(u32, u32)], units: &[Unit], slots: &Slot
 /// Non-stopword title words no unit matched; a matched alias stands in for the title when it is
 /// better covered.
 fn unmatched_title_words(index: &Index, id: DocId, units: &[Unit], slots: &Slots) -> usize {
-    let title = index.title_keys(id).map_or(0, |k| unmatched_in_title(&k.spans, units, slots));
+    let title = index.title_keys(id).map_or(0, |k| unmatched_in_title(&k.norm, &k.spans, units, slots));
     index
         .alias_words(id)
         .iter()

@@ -1205,4 +1205,15 @@ mod tests {
         let c: Config = serde_json::from_str(r#"{"weights":{"title":100,"alias":90,"h1":60,"h2":50,"h3":40,"tag":30,"link":20,"path":15,"body":10},"fuzzy":{"enabled":true,"loose":false},"partial":"whenFew","downrankedFolders":[],"downrankFactor":0.3,"fewThreshold":5}"#).unwrap();
         assert!(c.languages.is_empty());
     }
+
+    #[test]
+    fn repeated_title_word_counts_as_covered() {
+        let mut e = Engine::new();
+        e.upsert("1 Chr 1.md", 0.0, "first chapter, with enough words to pass the short note rule, words words words words words words words");
+        e.upsert("1 Chr 11.md", 0.0, "eleventh chapter, with enough words to pass the short note rule, words words words words words words");
+        e.upsert("1 Chr 10.md", 0.0, "tenth chapter, with enough words to pass the short note rule, words words words words words words words");
+        let r = e.search("1 chr 1", &SearchOptions { debug: true, ..opts() });
+        assert_eq!(component(hit(&r, "1 Chr 1").unwrap(), "titleFactor"), 1.0);
+        assert_eq!(titles(&r)[0], "1 Chr 1", "{:?}", titles(&r));
+    }
 }
