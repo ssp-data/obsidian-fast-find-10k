@@ -125,6 +125,13 @@ Within a tier, notes where every word matched exactly or by prefix come before n
 
 When [Smart Connections](https://github.com/brianpetro/obsidian-smart-connections) (4.7.2) is installed and has embedded the vault, Fast Find 10K reads its note vectors (read-only, through one bridge module) and uses them for the semantic tier, the similar-notes panel and the create guard. Without it everything else works and the similar panel uses title similarity only.
 
+### How the index and the embeddings stay current
+
+Two separate things, both automatic:
+
+- **The note index** is built from the markdown text. On start it comes from the plugin's cache and only changed files are re-read (about 1.3 s for 10k notes); afterwards every create, edit, rename or delete in the vault updates it within half a second. "Rebuild index" in the settings drops the cache and reads every file again; you only need it after changing the ignore globs or if something looks off.
+- **The embeddings** are never computed by this plugin. Each time you open the search, the bridge fingerprints Smart Connections' item list (path, content hash and embedding reference per note), at most once per 30 seconds, and reloads all vectors into the engine when that fingerprint changed. So while Smart Connections is still embedding new notes, every search opened after a pause sees what it has finished so far; nothing to run afterwards. With "Log engine timings" on, the console shows a `vectors: N notes` line at each reload.
+
 ### Examples
 
 All results below come from the CLI on the 9,385-note test vault (`ff10k query <vault> "<q>"`), which is a copy of my own vault; Obsidian shows the same list.
