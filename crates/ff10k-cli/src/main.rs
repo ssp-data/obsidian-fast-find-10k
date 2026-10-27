@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use ff10k_core::engine::{Engine, Hit, Mode, SearchOptions};
+use ff10k_core::engine::{Config, Engine, Hit, Mode, SearchOptions};
 use ff10k_core::golden::{ghosts, load_vault_with, read_vault_with, run_golden_with, VaultStats};
 use ff10k_core::index::UpsertProfile;
 use ff10k_core::similar::SimilarReason;
@@ -41,6 +41,9 @@ enum Cmd {
         /// Load .smart-env vectors.
         #[arg(long)]
         smart_env: bool,
+        /// Abbreviation group, as one settings line (`"oss: open source, open-source software"`); repeatable.
+        #[arg(long = "synonym")]
+        synonyms: Vec<String>,
     },
     /// Notes similar to a note (vault-relative path).
     Similar {
@@ -187,11 +190,14 @@ fn main() -> Result<()> {
                 println!("rss: {:.1} MB", kb as f64 / 1024.0);
             }
         }
-        Cmd::Query { vault, query, files, debug, limit, smart_env } => {
+        Cmd::Query { vault, query, files, debug, limit, smart_env, synonyms } => {
             let ex = exclusion(&vault)?;
             let (mut engine, _) = load(&vault, &*ex)?;
             if smart_env {
                 attach_vectors(&mut engine, &vault)?;
+            }
+            if !synonyms.is_empty() {
+                engine.set_config(Config { synonyms, ..Config::default() });
             }
             let opts = SearchOptions {
                 mode: if files { Mode::FilesOnly } else { Mode::All },
