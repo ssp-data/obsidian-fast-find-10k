@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: ['**']   # not on tags: the Release workflow builds and tests those
   pull_request:
 
 jobs:
