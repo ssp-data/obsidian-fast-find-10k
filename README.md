@@ -208,8 +208,8 @@ Recall over the vault's own titles (every note queried by its full title, its fi
 
 | Query              | Fast Find 10K (after the recall fixes) | Omnisearch                    |
 | ------------------ | -------------------------------------- | ----------------------------- |
-| full title         | 99.3 % first, 100 % in top 5           | 97.8 % first, 100 % in top 5  |
-| first two words    | 60.8 % first, 82.0 % in top 5          | 71.5 % first, 87.4 % in top 5 |
+| full title         | 99.2 % first, 99.9 % in top 5          | 97.8 % first, 100 % in top 5  |
+| first two words    | 61.3 % first, 83.0 % in top 5          | 71.5 % first, 87.4 % in top 5 |
 | one letter deleted | 98.6 % first, 100 % in top 5           | 78.2 % first, 83.8 % in top 5 |
 
 
