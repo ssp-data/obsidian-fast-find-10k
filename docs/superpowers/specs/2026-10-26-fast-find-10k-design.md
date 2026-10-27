@@ -153,6 +153,7 @@ Unresolved links are not cached; they come from `app.metadataCache.unresolvedLin
 ### 6.1 Query syntax
 
 - Whitespace-separated terms, all must match (AND), order-free, except **optional terms**: a term whose normalized form is on the "Optional words" list (default `a an the of to in on i`) is never required. Tiers 1–3 and the partial tier are computed over the required terms only; where an optional term does hit, it adds its field weight × quality to the score (and shows in the debug `per_term`). A query of only optional terms treats them all as required.
+- **Abbreviations / synonyms** (owner request after v1): the "Abbreviations" setting holds one group per line, members separated by `,` (the first may end in `:` or `=`), e.g. `oss: open source, open-source software`. A typed term equal to a single-word member matches as if the user had also typed every other member of its groups: single-word members match like a term (exact/prefix, no fuzzy), multi-word members like a quoted phrase (adjacent tokens). All alternatives merge into the one AND unit, so tiers, the unmatched-title-word factor, highlights and `per_term` see the best alternative; the typed word keeps its own fuzzy/short-term rules. Multi-word members are targets only: typing `open source` stays two AND words and does not pull in `oss`. Empty by default.
 - `"exact phrase"` → terms must be adjacent in one field.
 - `-term` → exclude notes where term matches anywhere.
 - `#tag` → filter to notes with that tag (nested tags match parents).
@@ -292,6 +293,7 @@ Modal prefill: current editor selection if any, else empty (not the last query; 
 - Fuzzy typo tolerance: off / normal (default) / loose.
 - Show partial-match tier: only when few results (default) / always / never.
 - Optional words (never required), one per line; default `a an the of to in on i`. Applied live.
+- Abbreviations / synonyms, one group per line (`oss: open source, open-source software`); default empty. Applied live.
 - Semantic tier: auto when few results (default) / on demand only / never.
 - Use Smart Connections embeddings (on/off), minimum similarity shown (default 0.70).
 - Create guard on/off.
@@ -369,4 +371,5 @@ Rulings made during implementation (controller):
 - Optional terms (§6.1, task 23, owner feedback): `should i change` must find "Change Should Happen" at tier 1 although it has no `i`. Default list `a an the of to in on i` (stopwords and single letters; `ai`, `de`, `my` are not on it); the owner can edit it. The short-term prefix rule counts required words only (task 23 review): `ai the` keeps `ai` exact-only, `ai data` still lets it prefix-match. Optional units never create candidates, so `should i change` on the test vault scores 478 candidates instead of 1,533.
 - The short-term rule applies per compound part (`gen-ai` keeps `ai` exact-only in single-term queries).
 - `data engineer ai` ranks "AI for Data Engineers" first because `engineer`→`engineers` (8/9) outscores `engineer`→`engineering` (8/11); the §6.3 example assumed equal quality.
+- Abbreviations (§6.1, v1.1, owner request): expansion is done by merging hit lists into the typed term's unit (best quality per doc and field), not by rewriting the query, so no new unit kind exists and optional/required, the short-term rule and the title factor need no changes. Expansion words are matched without fuzzy (the owner spelled them) and multi-word members only in the field-to-query direction.
 - Structural (§6.4): the shorter-title bonus is replaced by an unmatched-title-word factor on the fields sum, `max(0.5, 1 − 0.15 × unmatched)` (step 0.15, floor 0.5), applied to tiers 1–3 with a matched alias standing in for the title, so `obsidian trouble` ranks "Obsidian Troubleshoot" above "Obsidian Trouble Tags Plugin".

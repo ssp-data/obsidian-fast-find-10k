@@ -20,7 +20,7 @@ use crate::frecency::frecency_score;
 use crate::markdown::extract;
 use crate::index::{DocId, Index};
 use crate::matcher::{body_docs, match_term, match_term_scoped, DocSet, FuzzyLevel, MatchKind, Scope, TermHit};
-use crate::normalize::{normalize, strip_symbols};
+use crate::normalize::{is_whitespace_like, normalize, strip_symbols};
 use crate::query::{Query, Term};
 use crate::tokenize::tokenize_query_term;
 
@@ -72,6 +72,11 @@ pub struct Config {
     /// Query terms (compared normalized) that are never required, only scored when they hit.
     #[serde(default = "default_optional_terms")]
     pub optional_terms: Vec<String>,
+    /// Abbreviation groups, one per line: members separated by `,` (the first may end in `:` or
+    /// `=`), e.g. `oss: open source, open-source software`. A typed single-word member also
+    /// matches every other member (single words as terms, several words as a phrase).
+    #[serde(default)]
+    pub synonyms: Vec<String>,
 }
 
 /// Stopwords and single letters: `a an the of to in on i`.
@@ -89,6 +94,7 @@ impl Default for Config {
             downrank_factor: 0.3,
             few_threshold: 5,
             optional_terms: default_optional_terms(),
+            synonyms: Vec::new(),
         }
     }
 }
@@ -231,6 +237,51 @@ struct Unit {
     hits: Vec<TermHit>,
     /// Never required (candidates and tiers come from the other units); only scored.
     optional: bool,
+    /// Single-word abbreviation alternatives of a term unit (their Body hits come late, like the
+    /// term's own); phrase alternatives are complete in `hits` from the start.
+    alt_terms: Vec<Term>,
+}
+
+/// One member of an abbreviation group as query words (one word → term, several → phrase).
+type Member = Vec<String>;
+
+/// `Config::synonyms` parsed: groups of at least two members. Members are split on `,`, `:` and
+/// `=`, so `oss: open source, open-source software` and `oss, open source` read the same.
+fn synonym_groups(cfg: &Config) -> Vec<Vec<Member>> {
+    cfg.synonyms
+        .iter()
+        .map(|line| {
+            let mut members: Vec<Member> = line
+                .split([',', ':', '='])
+                .map(|m| m.split(is_whitespace_like).filter_map(|w| tokenize_query_term(w).into_iter().next()).collect::<Member>())
+                .filter(|m| !m.is_empty())
+                .collect();
+            members.dedup();
+            members
+        })
+        .filter(|g| g.len() >= 2)
+        .collect()
+}
+
+/// The other members of every group that lists the term's full compound as a single word.
+fn alternatives<'g>(groups: &'g [Vec<Member>], term: &Term) -> Vec<&'g Member> {
+    let Some(full) = term.parts.first() else { return Vec::new() };
+    let mut out: Vec<&Member> = Vec::new();
+    for g in groups.iter().filter(|g| g.iter().any(|m| m.len() == 1 && m[0] == *full)) {
+        for m in g {
+            if !(m.len() == 1 && m[0] == *full) && !out.contains(&m) {
+                out.push(m);
+            }
+        }
+    }
+    out
+}
+
+/// Restores the unit invariant after merging hit lists: sorted by (doc, field), one hit per
+/// (doc, field), keeping the best quality (the first on ties).
+fn dedupe_hits(hits: &mut Vec<TermHit>) {
+    hits.sort_by(|a, b| (a.doc, a.field as u8).cmp(&(b.doc, b.field as u8)).then(b.quality.total_cmp(&a.quality)));
+    hits.dedup_by(|b, a| a.doc == b.doc && a.field == b.field);
 }
 
 /// Per unit, the range of its `hits` belonging to one doc (None: the unit misses the doc).
@@ -365,14 +416,32 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
     let body_kept = !files_only && cfg.weights.body > 0.0;
     let body_later = body_kept && query.terms.len() + query.phrases.len() > 1;
     let scope = if body_kept && !body_later { Scope::All } else { Scope::NoBody };
+    let groups = synonym_groups(cfg);
     let mut units = Vec::new();
     for (t, &optional) in query.terms.iter().zip(&optional) {
-        units.push(Unit {
-            label: t.norm.clone(),
-            words: t.parts.iter().map(|p| (p.clone(), prefix_ok(p, multi))).collect(),
-            hits: match_term_scoped(index, t, multi, cfg.fuzzy, scope).into_iter().filter(keep).collect(),
-            optional,
-        });
+        let mut words: Vec<(String, bool)> = t.parts.iter().map(|p| (p.clone(), prefix_ok(p, multi))).collect();
+        let mut hits: Vec<TermHit> = match_term_scoped(index, t, multi, cfg.fuzzy, scope).into_iter().filter(keep).collect();
+        let mut alt_terms = Vec::new();
+        // Abbreviations: the other members of the term's groups match as if typed too. Single
+        // words follow the term rules without fuzzy (the owner spelled them), several words the
+        // phrase rules (adjacent; phrase hits include Body for every doc, as phrase units do).
+        let alts = alternatives(&groups, t);
+        for m in &alts {
+            if let [word] = m.as_slice() {
+                if let Some(at) = synth_term(word) {
+                    hits.extend(match_term_scoped(index, &at, multi, NO_FUZZY, scope).into_iter().filter(keep));
+                    words.extend(at.parts.iter().map(|p| (p.clone(), prefix_ok(p, multi))));
+                    alt_terms.push(at);
+                }
+            } else {
+                hits.extend(phrase_hits(index, m, multi).into_iter().filter(keep));
+                words.extend(m.iter().map(|w| (w.clone(), prefix_ok(w, multi))));
+            }
+        }
+        if !alts.is_empty() {
+            dedupe_hits(&mut hits);
+        }
+        units.push(Unit { label: t.norm.clone(), words, hits, optional, alt_terms });
     }
     for p in &query.phrases {
         units.push(Unit {
@@ -380,15 +449,19 @@ fn build_units(index: &Index, query: &Query, cfg: &Config, files_only: bool) -> 
             words: p.iter().map(|w| (w.clone(), prefix_ok(w, multi))).collect(),
             hits: phrase_hits(index, p, multi).into_iter().filter(keep).collect(),
             optional: false,
+            alt_terms: Vec::new(),
         });
     }
     if body_later {
         let allowed = tierable(index, query, &units, multi);
         for (u, t) in units.iter_mut().zip(&query.terms) {
-            let body = match_term_scoped(index, t, multi, NO_FUZZY, Scope::BodyOnly(&allowed));
+            let mut body = match_term_scoped(index, t, multi, NO_FUZZY, Scope::BodyOnly(&allowed));
+            for at in &u.alt_terms {
+                body.extend(match_term_scoped(index, at, multi, NO_FUZZY, Scope::BodyOnly(&allowed)));
+            }
             if !body.is_empty() {
                 u.hits.extend(body);
-                u.hits.sort_by_key(|h| (h.doc, h.field as u8));
+                dedupe_hits(&mut u.hits);
             }
         }
     }
@@ -404,6 +477,9 @@ fn tierable(index: &Index, query: &Query, units: &[Unit], multi: bool) -> DocSet
     let mut all: Option<DocSet> = None;
     for (i, u) in units.iter().enumerate().filter(|(_, u)| !u.optional) {
         let mut docs = query.terms.get(i).map_or_else(DocSet::default, |t| body_docs(index, t, multi));
+        for at in &u.alt_terms {
+            docs.union_with(&body_docs(index, at, multi));
+        }
         for h in &u.hits {
             docs.insert(h.doc);
             if class(h.field) == 1 {

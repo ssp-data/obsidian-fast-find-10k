@@ -59,6 +59,8 @@ export interface FastFindSettings {
 	fewThreshold: number;
 	/** Query words that are never required (stopwords, single letters), only scored. */
 	optionalTerms: string[];
+	/** Abbreviation groups, one per line: `oss: open source, open-source software`. */
+	synonyms: string[];
 	semantic: SemanticSetting;
 	useSmartConnections: boolean;
 	minSimilarity: number;
@@ -92,6 +94,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	partial: 'whenFew',
 	fewThreshold: 5,
 	optionalTerms: ['a', 'an', 'the', 'of', 'to', 'in', 'on', 'i'],
+	synonyms: [],
 	semantic: 'auto',
 	useSmartConnections: true,
 	minSimilarity: 0.7,
@@ -155,6 +158,7 @@ export function mergeSettings(saved: unknown): FastFindSettings {
 	s.ignoredGlobs = [...s.ignoredGlobs];
 	s.downrankedFolders = [...s.downrankedFolders];
 	s.optionalTerms = [...s.optionalTerms];
+	s.synonyms = [...s.synonyms];
 	return s;
 }
 
@@ -175,5 +179,6 @@ export function settingsToEngineConfig(s: FastFindSettings): EngineConfig {
 		downrankFactor: s.downrankFactor,
 		fewThreshold: s.fewThreshold,
 		optionalTerms: [...s.optionalTerms],
+		synonyms: [...s.synonyms],
 	};
 }

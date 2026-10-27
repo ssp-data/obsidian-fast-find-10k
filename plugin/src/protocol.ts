@@ -27,6 +27,8 @@ export interface EngineConfig {
 	fewThreshold: number;
 	/** Query words never required, only scored when they hit (compared normalized). */
 	optionalTerms: string[];
+	/** Abbreviation groups, one per line (`oss: open source, open-source software`). */
+	synonyms: string[];
 }
 
 export interface SearchOptions {

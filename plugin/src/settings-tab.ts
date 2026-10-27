@@ -142,6 +142,18 @@ export class FastFindSettingTab extends PluginSettingTab {
 					this.saveRanking();
 				}),
 			);
+		new Setting(el)
+			.setName('Abbreviations and synonyms')
+			.setDesc(
+				'One group per line, members separated by commas (the first may end in a colon). Typing a single-word member also finds the others: with "oss: open source, open-source software", the query oss matches notes with OSS, "open source" or "open-source software" in the title, headings or body. Several-word members are found, not expanded: "open source" does not search for oss.',
+			)
+			.addTextArea((t) => {
+				t.setPlaceholder('oss: open source, open-source software\nk8s: kubernetes');
+				t.setValue(this.s.synonyms.join('\n')).onChange((v) => {
+					this.s.synonyms = lines(v);
+					this.saveRanking();
+				});
+			});
 	}
 
 	private semantic(el: HTMLElement): void {

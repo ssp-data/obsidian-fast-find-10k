@@ -968,4 +968,101 @@ mod tests {
         let c: Config = serde_json::from_str(&serde_json::to_string(&Config { optional_terms: vec!["I".into()], ..Config::default() }).unwrap()).unwrap();
         assert_eq!(c.optional_terms, ["I"]);
     }
+
+    fn synonym_corpus() -> Engine {
+        let mut e = Engine::new();
+        e.set_config(Config {
+            synonyms: vec!["oss: open source, open-source software".into(), "k8s = kubernetes".into()],
+            ..Config::default()
+        });
+        for (path, text) in [
+            ("Open Source.md", "licenses and communities, a long enough body to avoid the short-note factor, words words words words words words words"),
+            ("Open Source Software.md", "communities and foundations, a long enough body to avoid the short-note factor, words words words words words words"),
+            ("Why I Love Open Source.md", "communities everywhere, a long enough body to avoid the short-note factor, words words words words words words words"),
+            ("OSS Licenses.md", "mit and apache, a long enough body to avoid the short-note factor, words words words words words words words words words"),
+            ("Source Code Open Day.md", "source first, then open: not the phrase; a long enough body to avoid the short-note factor, words words words words"),
+            ("Boss Fight.md", "game notes, a long enough body to avoid the short-note factor, words words words words words words words words words"),
+            ("Kubernetes Basics.md", "pods, a long enough body to avoid the short-note factor, words words words words words words words words words words"),
+            ("K8s Cheatsheet.md", "kubectl, a long enough body to avoid the short-note factor, words words words words words words words words words"),
+            ("Open Hardware.md", "the body says open-source software once; a long enough body to avoid the short-note factor, words words words words"),
+        ] {
+            e.upsert(path, 0.0, text);
+        }
+        e
+    }
+
+    fn component(h: &Hit, name: &str) -> f32 {
+        h.debug.as_ref().unwrap().components.iter().find(|(k, _)| k == name).unwrap().1
+    }
+
+    #[test]
+    fn abbreviation_expands_to_its_phrases() {
+        let r = synonym_corpus().search("oss", &SearchOptions { debug: true, ..opts() });
+        for t in ["Open Source", "Open Source Software", "Why I Love Open Source", "OSS Licenses"] {
+            assert_eq!(hit(&r, t).map(|h| h.tier), Some(1), "{t}: {:?}", titles(&r));
+        }
+        // The phrase must be adjacent, and the typed short word keeps its exact-only rule.
+        assert!(hit(&r, "Source Code Open Day").is_none(), "{:?}", titles(&r));
+        assert!(hit(&r, "Boss Fight").is_none(), "{:?}", titles(&r));
+        // The body-only alternative `open-source software` gives tier 3.
+        assert_eq!(hit(&r, "Open Hardware").map(|h| h.tier), Some(3));
+        // Expansion words cover the title for the unmatched-word factor: "Open Source" is fully
+        // covered and ranks first; "OSS Licenses" has one unmatched word.
+        assert_eq!(component(hit(&r, "Open Source").unwrap(), "titleFactor"), 1.0);
+        assert_eq!(component(hit(&r, "OSS Licenses").unwrap(), "titleFactor"), 0.85);
+        assert_eq!(titles(&r)[0], "Open Source");
+        // Debug keeps the typed word as the label.
+        assert_eq!(hit(&r, "Open Source").unwrap().debug.as_ref().unwrap().per_term[0].0, "oss");
+    }
+
+    #[test]
+    fn single_word_members_expand_both_ways() {
+        let e = synonym_corpus();
+        assert_eq!(hit(&e.search("k8s", &opts()), "Kubernetes Basics").map(|h| h.tier), Some(1));
+        assert_eq!(hit(&e.search("kubernetes", &opts()), "K8s Cheatsheet").map(|h| h.tier), Some(1));
+        // Case and punctuation of the setting do not matter.
+        let mut e = synonym_corpus();
+        e.set_config(Config { synonyms: vec!["  K8S ,  Kubernetes ".into()], ..Config::default() });
+        assert_eq!(hit(&e.search("k8s", &opts()), "Kubernetes Basics").map(|h| h.tier), Some(1));
+    }
+
+    #[test]
+    fn multi_word_members_are_targets_only() {
+        let r = synonym_corpus().search("open source", &opts());
+        assert!(hit(&r, "OSS Licenses").is_none_or(|h| h.tier > 1), "{:?}", titles(&r));
+        assert_eq!(hit(&r, "Source Code Open Day").map(|h| h.tier), Some(1));
+    }
+
+    #[test]
+    fn abbreviation_combines_with_other_terms() {
+        let e = synonym_corpus();
+        let r = e.search("oss licenses", &opts());
+        assert_eq!(titles(&r)[0], "OSS Licenses");
+        assert_eq!(hit(&r, "Open Source").map(|h| h.tier), Some(3));
+        let r = e.search("oss communities", &opts());
+        assert_eq!(hit(&r, "Open Source Software").map(|h| h.tier), Some(3), "{:?}", titles(&r));
+        assert!(hit(&r, "Boss Fight").is_none());
+        // Files-only mode: the body alternative does not count.
+        let r = e.search("oss", &SearchOptions { mode: Mode::FilesOnly, ..opts() });
+        assert!(hit(&r, "Open Hardware").is_none());
+        assert_eq!(hit(&r, "Open Source Software").map(|h| h.tier), Some(1));
+    }
+
+    #[test]
+    fn abbreviation_results_are_identical_without_the_setting_when_unused() {
+        let mut e = synonym_corpus();
+        let with: Vec<String> = titles(&e.search("boss fight", &opts())).iter().map(|t| t.to_string()).collect();
+        e.set_config(Config::default());
+        let without: Vec<String> = titles(&e.search("boss fight", &opts())).iter().map(|t| t.to_string()).collect();
+        assert_eq!(with, without);
+        assert!(hit(&e.search("oss", &opts()), "Open Source").is_none());
+    }
+
+    #[test]
+    fn config_without_synonyms_is_empty() {
+        let c: Config = serde_json::from_str(r#"{"weights":{"title":100,"alias":90,"h1":60,"h2":50,"h3":40,"tag":30,"link":20,"path":15,"body":10},"fuzzy":{"enabled":true,"loose":false},"partial":"whenFew","downrankedFolders":[],"downrankFactor":0.3,"fewThreshold":5}"#).unwrap();
+        assert!(c.synonyms.is_empty());
+        let c: Config = serde_json::from_str(&serde_json::to_string(&Config { synonyms: vec!["oss: open source".into()], ..Config::default() }).unwrap()).unwrap();
+        assert_eq!(c.synonyms, ["oss: open source"]);
+    }
 }

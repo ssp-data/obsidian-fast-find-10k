@@ -119,6 +119,20 @@ test('optional words: default list, saved list wins, sent to the engine as a cop
 	assert.equal(DEFAULT_SETTINGS.optionalTerms.length, 8);
 });
 
+test('abbreviations: empty by default, saved lines kept, sent to the engine as a copy', () => {
+	assert.deepEqual(DEFAULT_SETTINGS.synonyms, []);
+	const s = mergeSettings({ synonyms: ['oss: open source, open-source software', 'k8s: kubernetes'] });
+	assert.deepEqual(s.synonyms, ['oss: open source, open-source software', 'k8s: kubernetes']);
+	assert.deepEqual(mergeSettings({ synonyms: 'oss: open source' }).synonyms, []);
+	assert.deepEqual(mergeSettings({}).synonyms, []);
+	const c = settingsToEngineConfig(s);
+	assert.deepEqual(c.synonyms, s.synonyms);
+	c.synonyms.push('x');
+	assert.equal(s.synonyms.length, 2);
+	mergeSettings(null).synonyms.push('y');
+	assert.equal(DEFAULT_SETTINGS.synonyms.length, 0);
+});
+
 test('key specs split into modifiers and key', () => {
 	assert.deepEqual(parseKeySpec('Enter'), { modifiers: [], key: 'Enter' });
 	assert.deepEqual(parseKeySpec('Mod+Alt+Enter'), { modifiers: ['Mod', 'Alt'], key: 'Enter' });
