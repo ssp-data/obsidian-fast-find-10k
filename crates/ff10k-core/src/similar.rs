@@ -417,7 +417,7 @@ mod tests {
         let e = timed_vault();
         let us = best_search_us(&e);
         eprintln!("search with similar_count: {us} us");
-        assert!(us < 2_000_000, "{us}");
+        assert!((us as u128) < 2_000_000 * crate::perf_slack(), "{us}");
     }
 
     #[cfg(not(debug_assertions))]

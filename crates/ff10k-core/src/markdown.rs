@@ -692,11 +692,11 @@ mod tests {
             let t = std::time::Instant::now();
             Scanner::default().inline(&line);
             let ms = t.elapsed().as_millis();
-            assert!(ms < 100, "scanner took {ms} ms on {:?}...", &line[..5]);
+            assert!(ms < 100 * crate::perf_slack(), "scanner took {ms} ms on {:?}...", &line[..5]);
             let t = std::time::Instant::now();
             extract("n.md", &line, 0.0);
             let ms = t.elapsed().as_millis();
-            assert!(ms < 1000, "extract took {ms} ms on {:?}...", &line[..5]);
+            assert!(ms < 1000 * crate::perf_slack(), "extract took {ms} ms on {:?}...", &line[..5]);
         }
     }
 

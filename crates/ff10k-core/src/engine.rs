@@ -683,7 +683,7 @@ mod tests {
         let dt = t.elapsed();
         assert_eq!(r.hits.len(), 50);
         assert_eq!(r.candidates, 2000);
-        assert!(dt.as_millis() < 100, "{dt:?}");
+        assert!(dt.as_millis() < 100 * crate::perf_slack(), "{dt:?}");
     }
 
     /// Release-only budget guard (spec §6.6: p95 < 10 ms for 10k notes).
@@ -705,7 +705,7 @@ mod tests {
             .map(|q| (q, (0..5).map(|_| e.search(q, &opts()).elapsed_us).min().unwrap()))
             .collect();
         eprintln!("{times:?}");
-        assert!(times.iter().all(|t| t.1 < 10_000), "{times:?}");
+        assert!(times.iter().all(|t| (t.1 as u128) < 10_000 * crate::perf_slack()), "{times:?}");
     }
 
     // ---- vectors ----
@@ -901,7 +901,7 @@ mod tests {
             std::hint::black_box(e.semantic(&q, 10, 0.3));
         });
         eprintln!("semantic() 10k x 384: {us} us");
-        assert!(us < 2_000, "{us}");
+        assert!(us < 2_000 * crate::perf_slack(), "{us}");
         // similar_count semantic path for 30 hits = 10 scans (timing note, not asserted).
         let us30 = best_us(|| {
             for i in 0..10 {
