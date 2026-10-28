@@ -1,7 +1,7 @@
 // Message protocol between the UI thread (EngineClient) and the engine worker,
 // plus TS mirrors of the ff10k-core serde types (camelCase; Field/MatchKind are PascalCase).
 
-export type Field = 'Title' | 'Alias' | 'H1' | 'H2' | 'H3' | 'Tag' | 'Link' | 'Path' | 'Body';
+export type Field = 'Title' | 'Alias' | 'H1' | 'H2' | 'H3' | 'Tag' | 'Link' | 'Path' | 'Body' | 'Property';
 export type MatchKind = 'Exact' | 'Prefix' | 'Fuzzy';
 export type Mode = 'all' | 'filesOnly';
 export type PartialMode = 'whenFew' | 'always' | 'never';
@@ -16,6 +16,8 @@ export interface Weights {
 	link: number;
 	path: number;
 	body: number;
+	/** Frontmatter properties (keys and values), content tier. */
+	property: number;
 }
 
 export interface EngineConfig {

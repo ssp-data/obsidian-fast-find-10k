@@ -175,3 +175,21 @@ query = "invoice"
 expect_top = "Sales Invoice Process and Cashflow Notes"
 expect_tier = 1
 must_not_appear = ["Brand Voice"]
+
+# ---- frontmatter properties (v1.1) ----
+
+# Property values are content-tier hits: `india` lives only in the frontmatter of KAFOJ Espresso.
+[[case]]
+query = "india espresso"
+expect_top = "KAFOJ Espresso"
+expect_tier = 3
+
+# `[key:value]` filters like `#tag`.
+[[case]]
+query = "[herkunftsland:india]"
+expect_top = "KAFOJ Espresso"
+must_not_appear = ["Adrianos Espresso"]
+
+[[case]]
+query = "[price] espresso"
+expect_in_top = ["KAFOJ Espresso", "Adrianos Espresso"]

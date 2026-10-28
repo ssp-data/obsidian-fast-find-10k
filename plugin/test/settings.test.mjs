@@ -18,6 +18,8 @@ test('merge: nothing saved gives the defaults (fresh copies)', () => {
 	s.weights.title = 1;
 	s.keymap.open = 'X';
 	assert.equal(DEFAULT_SETTINGS.weights.title, 100);
+	assert.equal(DEFAULT_SETTINGS.weights.property, 25);
+	assert.equal(mergeSettings({ weights: { body: 10 } }).weights.property, 25);
 	assert.equal(DEFAULT_SETTINGS.keymap.open, 'Enter');
 });
 

@@ -50,7 +50,7 @@ pub struct FuzzyLevel {
     pub loose: bool,
 }
 
-const FIELDS: [Field; 9] = [
+const FIELDS: [Field; 10] = [
     Field::Title,
     Field::Alias,
     Field::H1,
@@ -60,6 +60,7 @@ const FIELDS: [Field; 9] = [
     Field::Link,
     Field::Path,
     Field::Body,
+    Field::Property,
 ];
 
 /// Fields that have normalized strings: fuzzy targets and the ones that carry `char_ranges`.
@@ -95,7 +96,8 @@ impl<'a> Acc<'a> {
     }
 
     fn add(&mut self, field: Field, kind: MatchKind, quality: f32, p: Posting, hl: Option<(&'a str, usize)>) {
-        let heading = is_heading(field);
+        // headings and properties pack their index into the position's high bits
+        let heading = is_heading(field) || field == Field::Property;
         let better = quality > self.quality
             || (quality == self.quality && kind_rank(kind) < kind_rank(self.kind));
         if better {

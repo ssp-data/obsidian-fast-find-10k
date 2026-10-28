@@ -595,6 +595,15 @@ fn apply_filters(index: &Index, query: &Query, cands: &mut HashMap<DocId, Slots>
             index.path_norm(*d).is_some_and(|p| query.paths.iter().all(|f| p.contains(f.as_str())))
         });
     }
+    for (key, value) in &query.props {
+        cands.retain(|d, _| {
+            index.get(*d).is_some_and(|doc| {
+                doc.properties.iter().any(|p| {
+                    normalize(&p.key) == *key && value.as_ref().is_none_or(|v| p.values.iter().any(|pv| normalize(pv) == *v))
+                })
+            })
+        });
+    }
     for ex in &query.excludes {
         let Some(t) = synth_term(ex) else { continue };
         // Excludes obey the short-term rule: `-ai` removes the token `ai`, never `aim`.
@@ -843,6 +852,9 @@ pub fn rank(index: &Index, query: &Query, cfg: &Config, opts: &SearchOptions, ex
     // `115` (titles such as "Newsletter #115"; docs/recall.md fix 1).
     let as_words = query.with_tags_as_words(|t| !index.docs_with_tag(t).is_empty());
     let query = as_words.as_ref().unwrap_or(query);
+    // `[key:value]` is a property filter only when some note carries that key; otherwise words.
+    let props_as_words = query.with_props_as_words(|k| index.has_property_key(k));
+    let query = props_as_words.as_ref().unwrap_or(query);
     let (ranked, full) = rank_query(index, query, cfg, opts, extras);
     if full {
         return ranked;
@@ -1080,6 +1092,25 @@ fn body_context(index: &Index, s: &Scored, units: &[Unit]) -> Option<(Excerpt, u
     Some((Excerpt { text: body[start..end].to_string(), ranges: merge_ranges(ranges) }, line))
 }
 
+/// `Key: value, value` of the property that matched, with the query words highlighted.
+fn property_context(s: &Scored, units: &[Unit]) -> Option<Excerpt> {
+    let idx = units
+        .iter()
+        .zip(&s.slots)
+        .flat_map(|(u, &sl)| unit_hits(u, sl))
+        .find(|h| h.field == Field::Property)
+        .and_then(|h| h.heading_idx)?;
+    let p = s.doc.properties.get(idx as usize)?;
+    let text = format!("{}: {}", p.key, p.values.join(", "));
+    let mut ranges: Vec<(u32, u32)> = Vec::new();
+    crate::tokenize::for_each_token(&text, |tok, _, bs, be| {
+        if units.iter().any(|u| word_matches(tok, &u.words)) {
+            ranges.push((bs, be));
+        }
+    });
+    Some(Excerpt { text, ranges: merge_ranges(ranges) })
+}
+
 fn page_hit(index: &Index, s: &Scored, units: &[Unit], cfg: &Config, opts: &SearchOptions) -> Hit {
     let badge = badge(s, units);
     let heading = if is_heading(badge) {
@@ -1094,11 +1125,13 @@ fn page_hit(index: &Index, s: &Scored, units: &[Unit], cfg: &Config, opts: &Sear
         None
     };
     let (title_norm, title_ranges) = title_display(s, units, badge);
+    // a property hit shows `Key: value` as its context (the frontmatter is not in the body)
+    let property = if badge == Field::Property { property_context(s, units) } else { None };
     let expanded = units
         .iter()
         .zip(&s.slots)
         .any(|(u, &sl)| best_contribution(&cfg.weights, unit_hits(u, sl)).is_some_and(|h| h.expanded));
-    let context = body_context(index, s, units);
+    let context = if property.is_some() { None } else { body_context(index, s, units) };
     let line = heading.as_ref().map(|h| h.line).or(context.as_ref().map(|c| c.1));
     let debug = opts.debug.then(|| {
         let per_term = units
@@ -1130,7 +1163,7 @@ fn page_hit(index: &Index, s: &Scored, units: &[Unit], cfg: &Config, opts: &Sear
         title_norm,
         title_ranges,
         heading,
-        excerpt: context.map(|c| c.0),
+        excerpt: property.or_else(|| context.map(|c| c.0)),
         line,
         is_ghost: s.ghost.is_some(),
         ghost_refs: s.ghost.map_or(0, |g| g.refs),

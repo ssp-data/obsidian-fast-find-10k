@@ -20,6 +20,8 @@ pub struct Query {
     pub excludes: Vec<String>,
     pub tags: Vec<String>,
     pub paths: Vec<String>,
+    /// `[key]` / `[key:value]` property filters, normalized (Obsidian's search syntax).
+    pub props: Vec<(String, Option<String>)>,
     pub normalized: String,
 }
 
@@ -36,6 +38,7 @@ impl Query {
             excludes: Vec::new(),
             tags: Vec::new(),
             paths: Vec::new(),
+            props: Vec::new(),
             normalized: String::new(),
         };
         let mut rest = input;
@@ -77,6 +80,15 @@ impl Query {
             let n = normalize(r);
             if !n.is_empty() {
                 self.tags.push(n);
+            }
+        } else if word.len() > 2 && word.starts_with('[') && word.ends_with(']') {
+            let inner = &word[1..word.len() - 1];
+            let (k, v) = match inner.split_once(':') {
+                Some((k, v)) => (normalize(k), Some(normalize(v))),
+                None => (normalize(inner), None),
+            };
+            if !k.is_empty() {
+                self.props.push((k, v.filter(|v| !v.is_empty())));
             }
         } else if word.len() >= 5 && word.is_char_boundary(5) && word[..5].eq_ignore_ascii_case("path:") {
             let n = normalize(&word[5..]);
@@ -143,7 +155,28 @@ impl Query {
     }
 
     pub fn has_filters(&self) -> bool {
-        !(self.excludes.is_empty() && self.tags.is_empty() && self.paths.is_empty())
+        !(self.excludes.is_empty() && self.tags.is_empty() && self.paths.is_empty() && self.props.is_empty())
+    }
+
+    /// A copy with every property filter whose key `is_key` rejects searched as words instead
+    /// (`[foo:bar]` with no note carrying `foo`). None when nothing changes.
+    pub fn with_props_as_words(&self, is_key: impl Fn(&str) -> bool) -> Option<Query> {
+        if self.props.iter().all(|(k, _)| is_key(k)) {
+            return None;
+        }
+        let mut q = self.clone();
+        q.props.clear();
+        for (k, v) in &self.props {
+            if is_key(k) {
+                q.props.push((k.clone(), v.clone()));
+            } else {
+                q.push_norm_word(k);
+                if let Some(v) = v {
+                    q.push_norm_word(v);
+                }
+            }
+        }
+        Some(q)
     }
 }
 
@@ -180,6 +213,20 @@ mod tests {
         let q = Query::parse("data-engineering");
         assert_eq!(q.terms.len(), 1);
         assert_eq!(q.terms[0].parts, ["data-engineering", "data", "engineering"]);
+    }
+
+    #[test]
+    fn property_filters() {
+        let q = Query::parse("[Herkunftsland:India] [price] espresso []");
+        assert_eq!(q.props, vec![("herkunftsland".to_string(), Some("india".to_string())), ("price".to_string(), None)]);
+        let norms: Vec<_> = q.terms.iter().map(|t| t.norm.as_str()).collect();
+        assert_eq!(norms, ["espresso"]);
+        assert!(q.has_filters());
+        let w = q.with_props_as_words(|k| k == "price").unwrap();
+        assert_eq!(w.props, vec![("price".to_string(), None)]);
+        let norms: Vec<_> = w.terms.iter().map(|t| t.norm.as_str()).collect();
+        assert_eq!(norms, ["espresso", "herkunftsland", "india"]);
+        assert!(q.with_props_as_words(|_| true).is_none());
     }
 
     #[test]

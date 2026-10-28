@@ -20,6 +20,7 @@ const WEIGHT_NAMES: Record<keyof Weights, string> = {
 	link: 'Link text',
 	path: 'Path segment',
 	body: 'Body',
+	property: 'Property (frontmatter)',
 };
 
 const lines = (v: string) =>

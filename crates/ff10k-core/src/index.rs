@@ -130,7 +130,7 @@ impl PostingList {
     }
 }
 
-const FIELDS: [Field; 9] = [
+const FIELDS: [Field; 10] = [
     Field::Title,
     Field::Alias,
     Field::H1,
@@ -140,6 +140,7 @@ const FIELDS: [Field; 9] = [
     Field::Link,
     Field::Path,
     Field::Body,
+    Field::Property,
 ];
 
 fn fidx(f: Field) -> usize {
@@ -237,9 +238,11 @@ pub struct Index {
     records: Vec<Option<Record>>,
     free: Vec<DocId>,
     path_to_id: HashMap<String, DocId>,
-    dicts: [Dict; 9],
+    dicts: [Dict; 10],
     /// normalized link target -> number of links with that target.
     link_counts: HashMap<String, u32>,
+    /// Docs per normalized property key, for the `[key]` / `[key:value]` filters' fallback.
+    prop_keys: HashMap<String, u32>,
     /// Lazily built `field_strings` caches (Title, Alias, H1, H2, H3); every mutator clears them.
     strings: [OnceCell<Vec<(DocId, u16, String)>>; 5],
     /// Lazily built backlink count per DocId (0 for free slots); cleared with `strings`.
@@ -363,6 +366,11 @@ fn derive(doc: &Doc) -> Derived {
     for s in &doc.path_segments {
         add_tokens(&mut maps[fidx(Field::Path)], &strip_symbols(s), None, &mut scratch);
     }
+    // key and values of each property, positions packed with the property index (like headings)
+    for (i, p) in doc.properties.iter().enumerate() {
+        let text = format!("{} {}", p.key, p.values.join(" "));
+        add_tokens(&mut maps[fidx(Field::Property)], &text, Some(i), &mut scratch);
+    }
     let body = &mut maps[fidx(Field::Body)];
     let (mut i, mut pos) = (0, 0);
     let mut line_pos = Vec::with_capacity(doc.body_line_src.len());
@@ -465,6 +473,9 @@ impl Index {
         for l in &doc.links {
             *self.link_counts.entry(link_key(&l.target)).or_insert(0) += 1;
         }
+        for p in &doc.properties {
+            *self.prop_keys.entry(normalize(&p.key)).or_insert(0) += 1;
+        }
     }
 
     /// Drop the doc's postings. Re-derives its terms and filters only those posting lists
@@ -486,6 +497,20 @@ impl Index {
                 }
             }
         }
+        for p in &rec.doc.properties {
+            let k = normalize(&p.key);
+            if let Some(c) = self.prop_keys.get_mut(&k) {
+                *c -= 1;
+                if *c == 0 {
+                    self.prop_keys.remove(&k);
+                }
+            }
+        }
+    }
+
+    /// Whether any note carries a frontmatter property with this (normalized) key.
+    pub fn has_property_key(&self, key: &str) -> bool {
+        self.prop_keys.contains_key(key)
     }
 
     pub fn remove(&mut self, path: &str) -> Option<DocId> {

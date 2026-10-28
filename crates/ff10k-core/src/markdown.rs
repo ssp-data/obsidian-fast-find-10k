@@ -1,6 +1,6 @@
 //! Markdown field extraction: a hand-written line scanner turning a raw note into a `Doc`.
 
-use crate::doc::{Doc, Heading, LinkRef};
+use crate::doc::{Doc, Heading, LinkRef, Property};
 use crate::tokenize::count_tokens;
 
 /// File stem (without `.md`) and parent directory segments of a vault-relative path.
@@ -44,9 +44,10 @@ pub(crate) fn extract_note(path: &str, text: &str, mtime: f64) -> (Doc, Vec<u32>
 
     let mut aliases = Vec::new();
     let mut tags = Vec::new();
+    let mut properties = Vec::new();
     let mut first_body_line = 0;
     if let Some(end) = frontmatter_end(&lines) {
-        parse_frontmatter(&lines[1..end], &mut aliases, &mut tags);
+        parse_frontmatter(&lines[1..end], &mut aliases, &mut tags, &mut properties);
         // a frontmatter `title:` (docs sites, Hugo, Jekyll) is searched like an alias
         aliases.retain(|a| a != &title);
         first_body_line = end + 1;
@@ -133,6 +134,7 @@ pub(crate) fn extract_note(path: &str, text: &str, mtime: f64) -> (Doc, Vec<u32>
         path_segments,
         body,
         body_line_starts,
+        properties,
         body_line_src,
         mtime,
         size: text.len() as u32,
@@ -165,20 +167,31 @@ fn frontmatter_end(lines: &[(usize, &str)]) -> Option<usize> {
         .map(|p| p + 1)
 }
 
-fn parse_frontmatter(lines: &[(usize, &str)], aliases: &mut Vec<String>, tags: &mut Vec<String>) {
+/// Frontmatter keys Obsidian owns: aliases/tags/title feed their own fields, the rest are not
+/// indexed at all (they are not note content).
+fn reserved_key(key: &str) -> bool {
+    matches!(key.to_ascii_lowercase().as_str(), "aliases" | "alias" | "title" | "tags" | "tag" | "cssclasses" | "cssclass" | "created")
+}
+
+fn parse_frontmatter(lines: &[(usize, &str)], aliases: &mut Vec<String>, tags: &mut Vec<String>, props: &mut Vec<Property>) {
     let mut i = 0;
     while i < lines.len() {
         let line = lines[i].1;
         i += 1;
-        if line.starts_with(char::is_whitespace) {
+        if line.starts_with(char::is_whitespace) || line.trim_start().starts_with('#') {
             continue;
         }
         let Some((key, value)) = line.split_once(':') else {
             continue;
         };
-        let is_alias = matches!(key.trim(), "aliases" | "alias" | "title");
-        let is_tag = matches!(key.trim(), "tags" | "tag");
-        if !is_alias && !is_tag {
+        let key = key.trim();
+        if key.is_empty() || key.starts_with('-') {
+            continue;
+        }
+        let is_alias = matches!(key, "aliases" | "alias" | "title");
+        let is_tag = matches!(key, "tags" | "tag");
+        let is_prop = !reserved_key(key);
+        if !is_alias && !is_tag && !is_prop {
             continue;
         }
         let value = value.trim();
@@ -204,6 +217,13 @@ fn parse_frontmatter(lines: &[(usize, &str)], aliases: &mut Vec<String>, tags: &
             );
         } else {
             items.push(unquote(value).to_string());
+        }
+        if is_prop {
+            let values: Vec<String> = items.into_iter().map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect();
+            if !values.is_empty() {
+                props.push(Property { key: key.to_string(), values });
+            }
+            continue;
         }
         for it in items {
             if is_tag {
@@ -515,6 +535,26 @@ mod tests {
         );
         assert_eq!(d.title, "AI in Data Engineering");
         assert_eq!(d.path_segments, vec!["💡 Resources", "🧮 Zettelkasten"]);
+    }
+
+    #[test]
+    fn frontmatter_properties_are_extracted_except_reserved_keys() {
+        let fm = "---\nCreated: 2025-02-08\nRösterei: KAFOJ\nHerkunftsland:\n  - India\n  - \"Sri Lanka\"\nRating: ⭐️⭐️\nMühlstufe: \nPrice: 4\ntags: [coffee]\naliases: [kafoj]\ncssclasses: wide\ninline: [a, b]\nnested:\n  deep: 1\n---\n# KAFOJ Espresso\nbody";
+        let d = extract("KAFOJ Espresso.md", fm, 0.0);
+        let props: Vec<(String, Vec<String>)> = d.properties.iter().map(|p| (p.key.clone(), p.values.clone())).collect();
+        assert_eq!(
+            props,
+            vec![
+                ("Rösterei".to_string(), vec!["KAFOJ".to_string()]),
+                ("Herkunftsland".to_string(), vec!["India".to_string(), "Sri Lanka".to_string()]),
+                ("Rating".to_string(), vec!["⭐️⭐️".to_string()]),
+                ("Price".to_string(), vec!["4".to_string()]),
+                ("inline".to_string(), vec!["a".to_string(), "b".to_string()]),
+            ]
+        );
+        assert_eq!(d.tags, vec!["coffee"]);
+        assert_eq!(d.aliases, vec!["kafoj"]);
+        assert!(!d.body.contains("Herkunftsland"), "frontmatter stays out of the body");
     }
 
     #[test]
