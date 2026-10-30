@@ -178,7 +178,7 @@ export class FastFindSettingTab extends PluginSettingTab {
 					{ name: 'Preview open by default', desc: 'On desktop. Ctrl+P toggles it in the search.', control: { type: 'toggle', key: 'previewOpen' } },
 					{
 						name: 'Preview open by default on mobile',
-						desc: 'On a phone or tablet the preview starts closed unless this is on; the "preview" pill in the search toggles it.',
+						desc: 'On a phone or tablet the preview starts open (default) or closed; the "preview" pill in the search toggles it. Applies to "resume last" too.',
 						control: { type: 'toggle', key: 'previewOpenMobile' },
 					},
 					{
@@ -486,7 +486,7 @@ export class FastFindSettingTab extends PluginSettingTab {
 			);
 		new Setting(el)
 			.setName('Preview open by default on mobile')
-			.setDesc('On a phone or tablet the preview starts closed unless this is on; the "preview" pill in the search toggles it.')
+			.setDesc('On a phone or tablet the preview starts open (default) or closed; the "preview" pill in the search toggles it. Applies to "resume last" too.')
 			.addToggle((t) =>
 				t.setValue(this.s.previewOpenMobile).onChange((v) => {
 					this.s.previewOpenMobile = v;

@@ -54,10 +54,11 @@ export function isCloseSwipe(dx: number, dy: number, ms: number): boolean {
 	return dx <= -80 && Math.abs(dx) >= 2 * Math.abs(dy) && ms < 600;
 }
 
-/** Initial query and preview state: a non-empty `resume` prefills and forces the preview open;
- * otherwise (null or '') the editor selection and the setting apply, as in a plain search. */
+/** Initial query and preview state: a non-empty `resume` prefills the last query; otherwise
+ * (null or '') the editor selection is the query. The preview follows the platform's setting
+ * either way (a resumed search used to force it open, which ignored the mobile setting). */
 export function startState(resume: string | null, previewSetting: boolean, selection: string): { query: string; previewOpen: boolean } {
-	return resume ? { query: resume, previewOpen: true } : { query: selection, previewOpen: previewSetting };
+	return { query: resume || selection, previewOpen: previewSetting };
 }
 
 export interface OpenAllDeps<F extends { path: string }> {

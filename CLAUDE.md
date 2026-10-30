@@ -74,7 +74,7 @@ the source of truth.
   `KEYMAP_MIGRATIONS` so saved configs follow. The modal swallows
   Ctrl+R / Ctrl+L / Ctrl+C while open; Ctrl+C copies when text is selected, else clears.
 - Mobile (`Platform.isMobile` → `.ff10k-mobile`): one column, input line + pill row (preview and
-  matches pills, ✕ close, swipe-left closes), preview off and key hints hidden by default, two-tap
+  matches pills, ✕ close, swipe-left closes), preview on and key hints hidden by default, two-tap
   open when the preview is on, safe-area insets. Footer elements are null there: never touch one
   without `?.` (a throw in the results path silently left the preview empty on mobile).
 - Preview is plain text (speed): image embeds as `<img>`, mermaid fences rendered 250 ms after the

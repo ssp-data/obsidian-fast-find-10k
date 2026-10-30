@@ -150,7 +150,8 @@ test('open all: up to 10 distinct notes, ghosts excluded', () => {
 const { startState, createOpenAll } = await load('src/ui/modal.ts');
 
 test('start state: resume prefills and forces the preview; null or empty resume is a plain search', () => {
-	assert.deepEqual(startState('ai', false, 'sel'), { query: 'ai', previewOpen: true });
+	assert.deepEqual(startState('ai', false, 'sel'), { query: 'ai', previewOpen: false }, 'resume keeps the query, the preview follows the setting');
+	assert.deepEqual(startState('ai', true, 'sel'), { query: 'ai', previewOpen: true });
 	assert.deepEqual(startState(null, false, 'sel'), { query: 'sel', previewOpen: false });
 	assert.deepEqual(startState('', false, 'sel'), { query: 'sel', previewOpen: false });
 	assert.deepEqual(startState('', true, ''), { query: '', previewOpen: true });

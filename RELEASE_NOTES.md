@@ -31,6 +31,7 @@ Search now reaches everything in the vault that carries text: frontmatter proper
 
 <img width="370" alt="Image" src="https://github.com/user-attachments/assets/06164e60-dd47-48bb-a6df-9d74ef6e6dde" />
 
+- "Search (resume last)" always opened the preview; it now follows the "Preview open by default" settings like a plain search. On mobile the preview is now on by default (the `preview` pill hides it).
 - On mobile the preview stayed empty until a result was tapped; it now shows the first result as on desktop (the same bug hid the preview on desktop with key hints set to never).
 - Opening a result in a new tab or split (`Mod+Enter`, `Mod+Alt+Enter`) now keeps focus on the opened note instead of returning it to the note you came from.
 

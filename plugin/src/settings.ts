@@ -138,7 +138,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	semanticMinSimilarity: 0.6,
 	createGuard: true,
 	previewOpen: true,
-	previewOpenMobile: false,
+	previewOpenMobile: true,
 	keyHints: 'desktop',
 	ribbonIcon: true,
 	debugByDefault: false,
