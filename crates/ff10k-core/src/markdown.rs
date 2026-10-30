@@ -9,9 +9,14 @@ pub(crate) fn title_and_segments(path: &str) -> (String, Vec<String>) {
         Some(i) => (&path[..i], &path[i + 1..]),
         None => ("", path),
     };
-    // `.base` files (Obsidian Bases, YAML) are indexed like notes: title from the file name,
-    // the whole text as body (their description block, filters and view names become searchable)
-    let title = file.strip_suffix(".md").or_else(|| file.strip_suffix(".base")).unwrap_or(file).to_string();
+    // `.base` (Obsidian Bases, YAML), `.canvas` (converted to markdown by the engine) and
+    // `.excalidraw` (markdown with a drawing blob) files are indexed like notes: title from the
+    // file name, the text as body
+    let title = [".md", ".base", ".canvas", ".excalidraw"]
+        .iter()
+        .find_map(|ext| file.strip_suffix(ext))
+        .unwrap_or(file)
+        .to_string();
     let segments = dir
         .split('/')
         .filter(|s| !s.is_empty())
@@ -61,22 +66,29 @@ pub(crate) fn extract_note(path: &str, text: &str, mtime: f64) -> (Doc, Vec<u32>
     let mut body_line_off: Vec<u32> = Vec::new();
     let mut headings: Vec<Heading> = Vec::new();
     let mut fence: Option<(char, usize)> = None;
+    // Excalidraw stores its drawing as a `compressed-json` fence (base64, tens of KB): not text
+    let mut blob_fence = false;
     for (idx, &(start, line)) in lines.iter().enumerate().skip(first_body_line) {
         let trimmed = line.trim_start();
         if let Some((fc, flen)) = fence_marker(trimmed) {
             match fence {
                 None => {
                     fence = Some((fc, flen));
+                    blob_fence = trimmed[flen..].trim().eq_ignore_ascii_case("compressed-json");
                     continue;
                 }
                 Some((c, n))
                     if c == fc && flen >= n && trimmed.trim_end().chars().all(|x| x == c) =>
                 {
                     fence = None;
+                    blob_fence = false;
                     continue;
                 }
                 _ => {}
             }
+        }
+        if blob_fence {
+            continue;
         }
         if fence.is_some() {
             body_lines.push(line.to_string());
@@ -557,6 +569,18 @@ mod tests {
         assert_eq!(d.tags, vec!["coffee"]);
         assert_eq!(d.aliases, vec!["kafoj"]);
         assert!(!d.body.contains("Herkunftsland"), "frontmatter stays out of the body");
+    }
+
+    #[test]
+    fn excalidraw_drawing_blob_is_not_body() {
+        let text = "---\nexcalidraw-plugin: parsed\ntags: [excalidraw]\n---\n# Excalidraw Data\n## Text Elements\nLearning ^IgaeFver\n\nstoic ^7KtKd0Em\n\n%%\n## Drawing\n```compressed-json\nN4IgLgngDgpiBcIYA8DGBDANgSwCYCd0B3EAGhAGcBXAW2wDMBDAcwCd0A\nQIIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n```\n%%";
+        let d = extract("venn.excalidraw", text, 0.0);
+        assert_eq!(d.title, "venn");
+        assert!(d.body.contains("Learning") && d.body.contains("stoic"));
+        assert!(!d.body.contains("N4IgLg"), "blob kept: {:?}", d.body);
+        assert!(d.headings.iter().any(|h| h.text == "Drawing"));
+        let d = extract("x.md", "```json\n{\"a\": 1}\n```", 0.0);
+        assert!(d.body.contains("{\"a\": 1}"), "other fences stay");
     }
 
     #[test]

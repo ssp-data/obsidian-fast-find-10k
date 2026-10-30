@@ -5,6 +5,7 @@ use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
+use crate::canvas;
 use crate::index::{Index, UpsertProfile};
 use crate::query::Query;
 use crate::similar::{similar_count_for, similar_for, similar_ids_for, SimilarHit, SimilarReason};
@@ -93,6 +94,13 @@ impl Engine {
     }
 
     pub fn upsert(&mut self, path: &str, mtime: f64, text: &str) {
+        let md;
+        let text = if canvas::is_canvas(path) {
+            md = canvas::canvas_to_markdown(text);
+            md.as_str()
+        } else {
+            text
+        };
         self.index.upsert_note(path, mtime, text);
         self.similar_counts.get_mut().clear();
     }
@@ -1336,5 +1344,21 @@ mod tests {
         assert_eq!(titles(&e.search("[rating]", &opts())), ["KAFOJ Espresso"]);
         e.remove("Coffee/Adrianos Espresso.md");
         assert!(e.search("[herkunftsland:colombia]", &opts()).hits.is_empty());
+    }
+
+    #[test]
+    fn canvas_files_are_indexed_as_markdown_and_preview_that_text() {
+        let mut e = Engine::new();
+        e.upsert("Writing/Book Plan.canvas", 0.0, r#"{"nodes":[{"id":"a","type":"group","label":"Brainstorming","x":0,"y":0,"width":1,"height":1},{"id":"b","type":"text","text":"Chapter about zettelkasten workflows and why folders fail, with enough words to pass the short note rule","x":0,"y":0,"width":1,"height":1},{"id":"c","type":"file","file":"Notes/Outline.md","x":0,"y":0,"width":1,"height":1}],"edges":[]}"#);
+        e.upsert("Notes/Outline.md", 0.0, "the outline, with enough words to pass the short note rule, words words words words words words words words");
+        let r = e.search("zettelkasten workflows", &opts());
+        assert_eq!(hit(&r, "Book Plan").map(|h| h.tier), Some(3), "{:?}", titles(&r));
+        assert_eq!(hit(&e.search("book plan", &opts()), "Book Plan").map(|h| h.tier), Some(1));
+        assert_eq!(hit(&e.search("brainstorming", &opts()), "Book Plan").map(|h| h.tier), Some(2));
+        let text = e.doc_text("Writing/Book Plan.canvas").unwrap();
+        assert!(text.starts_with("## Brainstorming\n\nChapter about"), "{text}");
+        assert!(text.contains("[[Notes/Outline.md]]"));
+        // the file node is a link: the outline gets a backlink from the canvas
+        assert_eq!(e.search("outline", &SearchOptions { debug: true, ..opts() }).hits[0].title, "Outline");
     }
 }

@@ -111,7 +111,7 @@ pub fn read_vault_with(vault_dir: &Path, exclude: &dyn Fn(&str) -> bool) -> std:
     let walker = WalkDir::new(vault_dir).sort_by_file_name().into_iter();
     for entry in walker.filter_entry(|e| e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.')) {
         let entry = entry?;
-        let is_note = entry.path().extension().is_some_and(|x| x == "md" || x == "base");
+        let is_note = entry.path().extension().is_some_and(|x| x == "md" || x == "base" || x == "canvas" || x == "excalidraw");
         if !entry.file_type().is_file() || !is_note {
             continue;
         }

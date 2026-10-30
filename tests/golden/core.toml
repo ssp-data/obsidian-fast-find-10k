@@ -199,3 +199,13 @@ expect_in_top = ["KAFOJ Espresso", "Adrianos Espresso"]
 query = "coffee beans base"
 expect_top = "Coffee Beans Base"
 expect_tier = 1
+
+# Canvas files are indexed as markdown: group labels as headings, text nodes as content.
+[[case]]
+query = "book plan"
+expect_top = "Book Plan"
+expect_tier = 1
+
+[[case]]
+query = "zettelkasten workflows folders"
+expect_top = "Book Plan"

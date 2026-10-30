@@ -338,6 +338,18 @@
 	object-fit: contain;
 }
 
+.ff10k-rich {
+	white-space: pre-wrap;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+}
+
+.ff10k-rich .mermaid,
+.ff10k-rich svg {
+	max-width: 100%;
+	height: auto;
+}
+
 .ff10k-preview mark {
 	background: var(--text-highlight-bg);
 	color: inherit;

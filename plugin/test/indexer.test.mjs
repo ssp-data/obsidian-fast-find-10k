@@ -25,7 +25,7 @@ test('excluded paths', () => {
 });
 
 test('kept paths', () => {
-	for (const p of ['💡 Resources/x.md', 'Showcase.md', 'a.b/c.md', 'my templates/x.md', 'Coffee/Coffee Beans Base.base']) {
+	for (const p of ['💡 Resources/x.md', 'Showcase.md', 'a.b/c.md', 'my templates/x.md', 'Coffee/Coffee Beans Base.base', 'book.canvas', 'venn.excalidraw']) {
 		assert.equal(indexer.isExcluded(p), false, p);
 	}
 });

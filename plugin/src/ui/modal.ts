@@ -1,7 +1,7 @@
 // The search modal: query input, tiered results, data-driven keys, open/create actions,
 // help overlay.
 
-import { type App, Modal, Notice, Platform, Scope, TFile, type WorkspaceLeaf } from 'obsidian';
+import { type App, Component, MarkdownRenderer, Modal, Notice, Platform, Scope, TFile, type WorkspaceLeaf } from 'obsidian';
 import { createGhostNote, createNote, ghostNotePath, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
 import { debugLog } from '../debug';
@@ -177,6 +177,8 @@ export class FastFindModal extends Modal {
 	private readonly plugin: FastFindPlugin;
 	private readonly state: State;
 	private inputEl!: HTMLInputElement;
+	/** Owns what Obsidian's renderer mounts in the preview (diagrams); unloaded with the modal. */
+	private readonly renderComponent = new Component();
 	private statusEl!: HTMLElement;
 	private pillAll!: HTMLElement;
 	private pillFiles!: HTMLElement;
@@ -287,11 +289,16 @@ export class FastFindModal extends Modal {
 		this.resultsEl = body.createDiv({ cls: 'ff10k-results' });
 		const right = body.createDiv({ cls: 'ff10k-right' });
 		this.previewEl = right.createDiv({ cls: 'ff10k-preview' });
-		this.preview = new Preview(this.previewEl, (target, from) => {
-			if (/^https?:\/\//i.test(target)) return target;
-			const file = this.app.metadataCache.getFirstLinkpathDest(decodeURIComponent(target), from);
-			return file ? this.app.vault.getResourcePath(file) : null;
-		});
+		this.renderComponent.load();
+		this.preview = new Preview(
+			this.previewEl,
+			(target, from) => {
+				if (/^https?:\/\//i.test(target)) return target;
+				const file = this.app.metadataCache.getFirstLinkpathDest(decodeURIComponent(target), from);
+				return file ? this.app.vault.getResourcePath(file) : null;
+			},
+			(markdown, el) => MarkdownRenderer.render(this.app, markdown, el, this.state.hits[this.state.selected]?.path ?? '', this.renderComponent),
+		);
 		this.similar = new SimilarPanel(right.createDiv({ cls: 'ff10k-similar' }));
 		this.similar.onOpen((path) => void this.openPath(path));
 		this.resultsEl.addEventListener('scroll', () => {
@@ -324,6 +331,7 @@ export class FastFindModal extends Modal {
 	}
 
 	onClose(): void {
+		this.renderComponent.unload();
 		this.closed = true;
 		this.plugin.rememberQuery(this.inputEl.value);
 		window.cancelAnimationFrame(this.paintFrame);

@@ -41,14 +41,16 @@ export function globToRegExp(glob: string): RegExp {
 	return new RegExp(glob.includes('/') ? `^${re}$` : `(?:^|/)${re}$`);
 }
 
-/** Files the index covers: markdown notes and Obsidian Bases (`.base`, YAML: title from the name, text as body). */
+/** Files the index covers: markdown notes, Obsidian Bases (`.base`, YAML), canvases (`.canvas`,
+ * converted to markdown by the engine) and Excalidraw drawings (`.excalidraw`, markdown with a
+ * drawing blob the engine skips). */
 export function isIndexedExtension(ext: string): boolean {
-	return ext === 'md' || ext === 'base';
+	return ext === 'md' || ext === 'base' || ext === 'canvas' || ext === 'excalidraw';
 }
 
 /** Pure exclusion rule: dot-folders/files anywhere, other extensions, Obsidian "Excluded files", plugin globs. */
 export function isExcludedPath(path: string, isUserIgnored: (p: string) => boolean, globs: RegExp[]): boolean {
-	if (!path.endsWith('.md') && !path.endsWith('.base')) return true;
+	if (!isIndexedExtension(path.slice(path.lastIndexOf('.') + 1))) return true;
 	if (path.startsWith('.') || path.includes('/.')) return true;
 	if (isUserIgnored(path)) return true;
 	return globs.some((g) => g.test(path));
