@@ -244,7 +244,7 @@ Full write-up with screenshots, one query at a time (a two-word topic, two typos
 | Tags / properties | `tag:` / `["key":value]` | as words | `#tag` / `[key:value]` | no |
 | Preview / similar notes | snippets / no | snippets / no | full note with match jumps / yes | no (CLI) |
 | Meaning without shared words | no | no | with Smart Connections vectors | yes, its purpose |
-| Query time here | 0.2–2.5 s, streaming | 7–127 ms | 8–75 ms | 0.1–0.3 s keyword, seconds hybrid |
+| Query time here | 0.2–2.5 s, streaming | 7–127 ms | 8–75 ms | 0.1–0.3 s keyword, 3–7 s hybrid once warm |
 | Mobile | yes | yes | yes | no |
 
 ### When to use which

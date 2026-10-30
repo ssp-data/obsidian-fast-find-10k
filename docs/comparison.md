@@ -127,26 +127,46 @@ model re-read the top hits.
 |---|---|---|
 | ![](images/compare/nl-native.webp) | ![](images/compare/nl-omni.webp) | ![](images/compare/nl-ff10k.webp) |
 
-### QMD with embeddings
+### QMD with embeddings (whole vault)
 
-QMD's semantic modes (`vsearch`, `query`) only work for files that have been embedded, and
-embedding is a long background job: `qmd embed` runs a local model over every file once. On
-this machine it had done about 2,800 of the 17,687 files after 50 minutes, so the full-vault
-run was stopped (see [Indexing](#indexing)) and the semantic runs below use two sub-collections
-embedded separately: `coffee` (the 49 coffee notes, 11 s) and `dbt` (the 1,171 dbt docs, which
-the stopped run had already covered). That favours QMD slightly, since it searches a small,
-on-topic set, and it is what you would do too: embed the folders you ask questions about.
-The first `query` call also downloads the reranker and query-expansion models (1.9 GB) and
-loads them; once warm, a hybrid query takes about five seconds here.
+QMD's semantic modes (`vsearch`, `query`) only see files that have been embedded, and
+embedding is a separate background job: `qmd embed` runs a local model (embeddinggemma 300M)
+over every file once and stores one vector per chunk in its SQLite index. Nothing leaves the
+machine; it is the same kind of job Smart Connections ran for this vault. On this 24-core CPU
+without a GPU the whole vault took about an hour of wall time in two passes: the first pass
+stopped itself after 30 minutes with "LLM session expired before embedding chunk" on the
+remaining files, a second `qmd embed` picked those up (5,923 documents, 16,186 chunks, 27 min).
+Expect that on a CPU; the job is resumable and only touches changed files afterwards.
 
-On `chocolatey espresso` the vectors mostly return the notes with "espresso" in the title;
-Fast Find's Smart Connections tier picked the beans whose tasting notes mention chocolate.
-On the dbt question both land on *databricks-setup* first; the reranker puts it at 100 %.
+The first `query` call also downloads the reranker and query-expansion models (1.9 GB).
+Warm, a vector search takes 3–4 s and a hybrid query 3–7 s here; the cost is the models, not
+the vault size. Results below are from the fully embedded vault.
 
-| Query | QMD `vsearch` (vectors only) | QMD `query` (expansion + BM25 + vectors + reranker) | Time |
+| Query | QMD `vsearch` (vectors only) | QMD `query` (expansion + BM25 + vectors + reranker) | Fast Find 10K semantic tier (Smart Connections vectors) |
 |---|---|---|---|
-| `chocolatey espresso` (`-c coffee`) | *RÖSTMEISTERIN ESPRESSO* 51 %, *Adrianos Espresso* 46 %, *Espresso dark roast* 46 %, *Ristretto* 42 % | *RÖSTMEISTERIN ESPRESSO* 98 %, *Espresso dark roast* 43 %, *Colombia* 30 %, *Adrianos Espresso* 27 % | vsearch 176 s cold (model load), query 95 s cold (two more models downloaded, 1.9 GB), 4.6 s warm |
-| `how to connect dbt to databricks` (`-c dbt`) | *databricks-setup* 74 %, *productionize-your-dbt-databricks-project* 72 %, *sl-qs* 70 %, *databricks-workflows* 70 % | *databricks-setup* 100 %, *databricks-qs* 63 %, *python-model-configs* 63 %, *get-started-dbt* 62 %, *connect-databricks* 62 % | vsearch 14 s, query 38 s cold, 4.8 s warm |
+| `chocolatey espresso` | *RÖSTMEISTERIN ESPRESSO* 51 %, *Adrianos Espresso* 46 %, *Espresso dark roast* 46 %, *Chocolate* (Wikipedia) 43 % | *RÖSTMEISTERIN ESPRESSO* 98 %, *Espresso dark roast* 43 %, *Colombia* 30 %, *Adrianos Espresso* 27 % | *Ethiopia* 0.65, *Colombia* 0.65, *Adriano Decaf* 0.64 |
+| `which coffee has chocolate tasting notes` | *RÖSTMEISTERIN ESPRESSO* 48 %, *Chocolate* 47 %, *Coffee Beans (dataview)* 46 %, *Colombia* 46 % | *Colombia* 100 %, *RÖSTMEISTERIN ESPRESSO* 61 %, *Chocolate* 39 %, *Adriano Decaf* 36 % | *Colombia* 0.72, *Adrianos Alba* 0.69, *Coffee Beans (dataview)* 0.69, *Adriano Decaf* 0.69 |
+| `why does my kubernetes pod keep restarting` | *job* ("Running an example Job") 67 %, *init-containers* 66 %, *pod-lifecycle* 66 %, *self-healing* 65 % | *pod-lifecycle* 100 %, *debug-pods* 62 %, *troubleshooting-kubeadm* 58 %, *pod-condition* 51 % | *what-happens-on-restart* 0.78, *self-healing* 0.77, *pod-lifecycle* 0.77, *debug-pods* 0.77 |
+| `how to connect dbt to databricks` | *databricks-setup* 74 %, *productionize-your-dbt-databricks-project* 72 %, *sl-qs* 70 % | *databricks-setup* 100 %, *databricks-qs* 63 %, *python-model-configs* 63 %, *connect-databricks* 62 % | (lexical tiers already answer it: *databricks-setup*, *connect-databricks*, *databricks-qs*) |
+| `kubernets deploymnet` (two typos) | *setup/_index* 56 %, *deployment* 55 %, *production tools* 53 % | *deployment* ("Use Case") 100 %, *setup/_index* 62 %, *deploy-intro* 61 % | (lexical typo tolerance already answers it) |
+| `delta lake` | *glue-setup* 49 %, *migrate-from-spark-to-databricks* 49 %, *delta* (DuckDB) 49 % | *glue-setup* 86 %, *unity_catalog* 61 %, *Data lake* 60 %, *lakehouse_formats* 60 % | (lexical: *databricks-setup* `### Delta Lake`, *delta*, *lakehouse_formats*) |
+
+What this shows:
+
+- **Questions are QMD's strength, and the reranker is what does it.** Vectors alone put the
+  Wikipedia *Chocolate* article and an example-Job page near the top; after expansion and
+  reranking, *Colombia* (the bean whose notes say chocolate) and *pod-lifecycle* are at 100 %
+  with daylight to the rest. Fast Find's Smart Connections tier reaches similar notes for the
+  same questions (*Colombia*, *pod-lifecycle*, *debug-pods*) at a fraction of the latency, but
+  without the reranker's decisiveness: its top five sit within 0.04 of each other.
+- **Vectors also cover typos**, by meaning rather than by letters: `kubernets deploymnet`
+  lands on the Deployment page at 100 %.
+- **For a plain topic lookup vectors are worse than words.** `delta lake` by vector gives four
+  notes at 49 % and the hybrid query puts a Glue connection page first; the three in-Obsidian
+  tools agree on *databricks-setup* / *delta* / *lakehouse_formats* in milliseconds.
+- **It is a CLI with a model in the loop.** Three to seven seconds a query once warm, longer
+  cold, no preview, no opening the note. That is fine for an agent or for "what do I know
+  about X", not for a search box you type into.
 
 ## Indexing
 
@@ -155,7 +175,7 @@ On the dbt question both land on *databricks-setup* first; the reranker puts it 
 | Native | none needed (Obsidian's own metadata cache) | instant |
 | Omnisearch | minutes on a vault this size, then cached | from cache |
 | Fast Find 10K | about 2 s for a full rebuild on a desktop (`Rebuild index` reads every file again; the one run taken while native search was busy indexing reported 6–9 s engine time). The engine indexes in a worker, so a 100k-note vault is still seconds, not minutes | from the IndexedDB cache, only changed files re-read, about 2 s |
-| QMD | 37 s for the BM25 index. Embeddings are a separate, long job: `qmd embed` runs a local model (embeddinggemma 300M) over every file once, about 55 files a minute on this 24-core CPU without a GPU, so roughly five hours for the whole vault. It is resumable and incremental afterwards (`qmd update`, `qmd embed` only touch changed files) | incremental |
+| QMD | 37 s for the BM25 index. Embeddings are a separate background job: `qmd embed` ran a local model (embeddinggemma 300M) over every file, about an hour of wall time for the 17,780 files on this 24-core CPU without a GPU, in two passes because the first stopped with "LLM session expired" after 30 minutes. Resumable; afterwards only changed files are embedded | incremental |
 
 ## What each does that the others do not
 
@@ -187,7 +207,7 @@ On the dbt question both land on *databricks-setup* first; the reranker puts it 
 - Not an Obsidian plugin, so no preview, no opening a note, nothing on mobile. Seconds per
   query once models are warm, longer cold. Keyword mode (`qmd search`) is plain BM25 without
   tiers or typo tolerance; tags and properties are not search syntax. Embedding a large vault
-  without a GPU takes about an hour.
+  without a GPU takes about an hour and may need a second run.
 
 ## Which search for which vault
 
