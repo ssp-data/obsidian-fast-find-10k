@@ -196,15 +196,51 @@ export function imageEmbed(line: string): string | null {
 /** Resolves an image target of a note to a URL the webview can load (null: unknown file). */
 export type ImageResolver = (target: string, fromPath: string) => string | null;
 
+/** Renders a markdown snippet (a fenced diagram) into `el`; provided by the modal through Obsidian's renderer. */
+export type MarkdownRenderFn = (markdown: string, el: HTMLElement) => Promise<void>;
+
+/** Languages of fenced blocks the preview renders as diagrams instead of code. */
+const RICH_LANGS = ['mermaid'];
+/** Rendering waits this long after the last selection change, so moving through results stays instant. */
+export const RICH_DELAY_MS = 250;
+
+/** Fenced blocks of `lines` whose language the preview renders (`start`..`end` inclusive, fence lines included). */
+export function richBlocks(lines: readonly string[]): { start: number; end: number; lang: string }[] {
+	const out: { start: number; end: number; lang: string }[] = [];
+	let open: { start: number; lang: string; marker: string } | null = null;
+	for (let i = 0; i < lines.length; i++) {
+		const t = lines[i].trim();
+		const m = /^(`{3,}|~{3,})\s*([A-Za-z0-9_-]*)/.exec(t);
+		if (!m) continue;
+		if (!open) {
+			if (RICH_LANGS.includes(m[2].toLowerCase())) open = { start: i, lang: m[2].toLowerCase(), marker: m[1] };
+			else open = { start: i, lang: '', marker: m[1] };
+		} else if (t.startsWith(open.marker[0]) && t.length >= open.marker.length && /^[`~]+$/.test(t)) {
+			if (open.lang) out.push({ start: open.start, end: i, lang: open.lang });
+			open = null;
+		}
+	}
+	return out;
+}
+
+/** The drawing export an Excalidraw file may have next to it (`name.excalidraw.png` / `.svg`), to show above its text. */
+export function excalidrawExports(path: string): string[] {
+	const m = /^(.*\.excalidraw)(\.md)?$/i.exec(path);
+	return m ? [`${m[1]}.png`, `${m[1]}.svg`] : [];
+}
+
 export class Preview {
 	private readonly el: HTMLElement;
 	private readonly texts = new Map<string, string | null>();
 	private readonly resolveImage: ImageResolver | null;
+	private readonly renderMarkdown: MarkdownRenderFn | null;
+	private richTimer = 0;
 	private token = 0;
 
-	constructor(el: HTMLElement, resolveImage: ImageResolver | null = null) {
+	constructor(el: HTMLElement, resolveImage: ImageResolver | null = null, renderMarkdown: MarkdownRenderFn | null = null) {
 		this.el = el;
 		this.resolveImage = resolveImage;
+		this.renderMarkdown = renderMarkdown;
 	}
 
 	/** Renders `hit`'s note; a completion for an older call (selection moved on) is dropped. */
@@ -227,6 +263,7 @@ export class Preview {
 
 	clear(): void {
 		this.token++;
+		window.clearTimeout(this.richTimer);
 		this.el.empty();
 	}
 
@@ -254,7 +291,28 @@ export class Preview {
 		const lazyFrom = Math.max(anchor, 0) + LAZY_MARGIN;
 		const frag = createFragment();
 		let target = null as HTMLElement | null;
+		// an Excalidraw drawing's export, when the plugin wrote one next to the file
+		for (const exp of this.resolveImage ? excalidrawExports(hit.path) : []) {
+			const src = this.resolveImage!(exp, hit.path);
+			if (!src) continue;
+			const img = frag.createDiv({ cls: 'ff10k-line' }).createEl('img', { cls: 'ff10k-preview-img', attr: { src, loading: 'lazy', alt: exp } });
+			img.addEventListener('error', () => img.parentElement?.remove());
+			break;
+		}
+		// fenced diagrams (mermaid): one block each, rendered after RICH_DELAY_MS; code text until then
+		const rich = this.renderMarkdown ? richBlocks(all.slice(0, lines.length)) : [];
+		const pending: { el: HTMLElement; markdown: string }[] = [];
+		let skipTo = -1;
 		for (let i = 0; i < lines.length; i++) {
+			if (i <= skipTo) continue;
+			const block = rich.find((b) => b.start === i);
+			if (block) {
+				const div = frag.createDiv({ cls: 'ff10k-line ff10k-rich' });
+				div.setText(all.slice(block.start + 1, block.end).join('\n'));
+				pending.push({ el: div, markdown: all.slice(block.start, block.end + 1).join('\n') });
+				skipTo = block.end;
+				continue;
+			}
 			const line = lines[i];
 			const div = frag.createDiv({ cls: line.kind === 'text' ? 'ff10k-line' : `ff10k-line ff10k-${line.kind}` });
 			if (i >= lazyFrom) div.addClass('ff10k-lazy');
@@ -284,5 +342,17 @@ export class Preview {
 		this.el.appendChild(frag);
 		this.el.scrollTop = 0;
 		target?.scrollIntoView({ block: 'start' });
+		window.clearTimeout(this.richTimer);
+		if (pending.length && this.renderMarkdown) {
+			const token = this.token;
+			const render = this.renderMarkdown;
+			this.richTimer = window.setTimeout(() => {
+				if (token !== this.token) return;
+				for (const p of pending) {
+					p.el.empty();
+					void render(p.markdown, p.el).catch(() => p.el.setText(p.markdown));
+				}
+			}, RICH_DELAY_MS);
+		}
 	}
 }

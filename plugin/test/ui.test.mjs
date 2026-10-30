@@ -8,7 +8,7 @@ const obsidianStub = {
 	setup(build) {
 		build.onResolve({ filter: /^obsidian$/ }, () => ({ path: 'obsidian', namespace: 'stub' }));
 		build.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
-			contents: 'export class Modal {} export class Notice {} export class MarkdownView {} export class TFile {} export class Scope {} export const Platform = {}; export const normalizePath = (p) => p;',
+			contents: 'export class Modal {} export class Notice {} export class MarkdownView {} export class TFile {} export class Scope {} export class Component { load() {} unload() {} } export class MarkdownRenderer { static async render() {} } export const Platform = {}; export const normalizePath = (p) => p;',
 			loader: 'js',
 		}));
 	},
@@ -19,7 +19,15 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { mapTitleRanges, shortFolder, displayHeading } = await load('src/ui/results.ts');
+const { mapTitleRanges, shortFolder, displayHeading, fileKind } = await load('src/ui/results.ts');
+
+test('file kind labels for non-note results', () => {
+	assert.equal(fileKind('a/book.canvas'), 'canvas');
+	assert.equal(fileKind('Coffee Beans Base.base'), 'base');
+	assert.equal(fileKind('venn.excalidraw'), 'drawing');
+	assert.equal(fileKind('x/Diagram.excalidraw.md'), 'drawing');
+	assert.equal(fileKind('note.md'), '');
+});
 
 test('headings display their link text, or the host for an empty link text', () => {
 	assert.equal(displayHeading('[](https://gist.github.com/andersevenrud/015e61af2fd264371032763d4ed965b6#vim)vim'), 'gist.github.com vim');
@@ -188,6 +196,18 @@ test('open all: a failing open shows a Notice, restores focus and still closes',
 	});
 	await createOpenAll(deps)(['a.md', 'b.md', 'c.md']);
 	assert.deepEqual(log, [['note', 'a.md'], ['open', 'a.md'], ['note', 'b.md'], ['open', 'b.md'], ['notice', 'Fast Find 10K: open all failed (Error: boom)'], ['restore'], ['close']]);
+});
+
+const { isCloseSwipe } = await load('src/ui/modal.ts');
+
+test('a quick, mostly horizontal swipe left closes; taps, scrolls, right and slow swipes do not', () => {
+	assert.equal(isCloseSwipe(-120, 10, 200), true);
+	assert.equal(isCloseSwipe(-80, 40, 599), true);
+	assert.equal(isCloseSwipe(-5, 3, 100), false); // tap
+	assert.equal(isCloseSwipe(-60, 0, 200), false); // too short
+	assert.equal(isCloseSwipe(-100, 300, 200), false); // vertical scroll
+	assert.equal(isCloseSwipe(120, 0, 200), false); // swipe right
+	assert.equal(isCloseSwipe(-120, 0, 900), false); // slow drag
 });
 
 const { swallowKey } = await load('src/ui/modal.ts');

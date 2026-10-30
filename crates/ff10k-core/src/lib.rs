@@ -1,3 +1,4 @@
+pub mod canvas;
 pub mod normalize;
 pub mod tokenize;
 pub mod markdown;

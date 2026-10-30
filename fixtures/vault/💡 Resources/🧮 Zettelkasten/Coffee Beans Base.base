@@ -1,0 +1,15 @@
+description: |
+  Coffee Machine: Solis Grind & Infuse Pro
+
+  ## My Coffee Beans list
+  *Price is per 100g*
+filters:
+  and:
+    - file.ext.contains("md")
+views:
+  - type: table
+    name: Table
+    order:
+      - file.name
+      - Rösterei
+      - Price

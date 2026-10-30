@@ -24,6 +24,10 @@ export async function open(app: App, hit: Pick<Hit, 'path' | 'line' | 'heading'>
 		editor.setCursor(pos);
 		editor.scrollIntoView({ from: pos, to: pos }, true);
 	}
+	// The modal closes right after this and Obsidian then restores focus to the element that
+	// had it before the search opened: with a new tab or split next to it, that is the old
+	// note. Re-activate the opened leaf once that restore has happened.
+	window.setTimeout(() => app.workspace.setActiveLeaf(leaf, { focus: true }), 0);
 	return file;
 }
 

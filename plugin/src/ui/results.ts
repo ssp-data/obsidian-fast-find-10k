@@ -66,6 +66,15 @@ export function displayHeading(text: string): string {
 		.trim();
 }
 
+/** A short label for files that are not markdown notes (`canvas`, `base`, `drawing`), '' for notes. */
+export function fileKind(path: string): string {
+	const p = path.toLowerCase();
+	if (p.endsWith('.canvas')) return 'canvas';
+	if (p.endsWith('.base')) return 'base';
+	if (p.endsWith('.excalidraw') || p.endsWith('.excalidraw.md')) return 'drawing';
+	return '';
+}
+
 /** The folder for the row: deep paths keep their first and last two segments (`a/…/y/z`), so
  * the specific end stays readable when the row is narrow; the full path is in the row tooltip. */
 export function shortFolder(folder: string, keepEnd = 2): string {
@@ -84,11 +93,13 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 	const main = el.createDiv({ cls: 'ff10k-row-main' });
 
 	// semantic rows (tier 5) show their cosine as Smart Connections does
-	const badge = hit.isGhost ? 'link' : hit.tier === 5 ? hit.score.toFixed(2) : hit.badge.toLowerCase();
+	const badge = hit.isGhost ? 'link' : hit.tier === 5 ? hit.score.toFixed(2) : hit.badge === 'Property' ? 'prop' : hit.badge.toLowerCase();
 	main.createSpan({ cls: `ff10k-badge ff10k-badge-t${Math.min(hit.tier, 5)}`, text: badge });
 
 	const title = main.createSpan({ cls: 'ff10k-title' });
 	appendHighlighted(title, hit.title, mapTitleRanges(hit.title, hit.titleNorm, hit.titleRanges));
+	const kind = hit.isGhost ? '' : fileKind(hit.path);
+	if (kind) main.createSpan({ cls: 'ff10k-kind', text: kind });
 
 	if (hit.isGhost) {
 		main.createSpan({ cls: 'ff10k-context', text: `not created · linked from ${hit.ghostRefs} notes` });
@@ -96,7 +107,7 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 		if (hit.heading && (hit.badge === 'H1' || hit.badge === 'H2' || hit.badge === 'H3')) {
 			main.createSpan({ cls: 'ff10k-heading', text: `${'#'.repeat(hit.heading.level)} ${displayHeading(hit.heading.text)}` });
 		}
-		if (hit.excerpt && hit.badge === 'Body') {
+		if (hit.excerpt && (hit.badge === 'Body' || hit.badge === 'Property')) {
 			const ex = main.createSpan({ cls: 'ff10k-excerpt' });
 			appendHighlighted(ex, hit.excerpt.text, hit.excerpt.ranges);
 		}

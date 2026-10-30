@@ -1,6 +1,6 @@
 //! Markdown field extraction: a hand-written line scanner turning a raw note into a `Doc`.
 
-use crate::doc::{Doc, Heading, LinkRef};
+use crate::doc::{Doc, Heading, LinkRef, Property};
 use crate::tokenize::count_tokens;
 
 /// File stem (without `.md`) and parent directory segments of a vault-relative path.
@@ -9,7 +9,14 @@ pub(crate) fn title_and_segments(path: &str) -> (String, Vec<String>) {
         Some(i) => (&path[..i], &path[i + 1..]),
         None => ("", path),
     };
-    let title = file.strip_suffix(".md").unwrap_or(file).to_string();
+    // `.base` (Obsidian Bases, YAML), `.canvas` (converted to markdown by the engine) and
+    // `.excalidraw` (markdown with a drawing blob) files are indexed like notes: title from the
+    // file name, the text as body
+    let title = [".md", ".base", ".canvas", ".excalidraw"]
+        .iter()
+        .find_map(|ext| file.strip_suffix(ext))
+        .unwrap_or(file)
+        .to_string();
     let segments = dir
         .split('/')
         .filter(|s| !s.is_empty())
@@ -44,9 +51,10 @@ pub(crate) fn extract_note(path: &str, text: &str, mtime: f64) -> (Doc, Vec<u32>
 
     let mut aliases = Vec::new();
     let mut tags = Vec::new();
+    let mut properties = Vec::new();
     let mut first_body_line = 0;
     if let Some(end) = frontmatter_end(&lines) {
-        parse_frontmatter(&lines[1..end], &mut aliases, &mut tags);
+        parse_frontmatter(&lines[1..end], &mut aliases, &mut tags, &mut properties);
         // a frontmatter `title:` (docs sites, Hugo, Jekyll) is searched like an alias
         aliases.retain(|a| a != &title);
         first_body_line = end + 1;
@@ -58,22 +66,29 @@ pub(crate) fn extract_note(path: &str, text: &str, mtime: f64) -> (Doc, Vec<u32>
     let mut body_line_off: Vec<u32> = Vec::new();
     let mut headings: Vec<Heading> = Vec::new();
     let mut fence: Option<(char, usize)> = None;
+    // Excalidraw stores its drawing as a `compressed-json` fence (base64, tens of KB): not text
+    let mut blob_fence = false;
     for (idx, &(start, line)) in lines.iter().enumerate().skip(first_body_line) {
         let trimmed = line.trim_start();
         if let Some((fc, flen)) = fence_marker(trimmed) {
             match fence {
                 None => {
                     fence = Some((fc, flen));
+                    blob_fence = trimmed[flen..].trim().eq_ignore_ascii_case("compressed-json");
                     continue;
                 }
                 Some((c, n))
                     if c == fc && flen >= n && trimmed.trim_end().chars().all(|x| x == c) =>
                 {
                     fence = None;
+                    blob_fence = false;
                     continue;
                 }
                 _ => {}
             }
+        }
+        if blob_fence {
+            continue;
         }
         if fence.is_some() {
             body_lines.push(line.to_string());
@@ -133,6 +148,7 @@ pub(crate) fn extract_note(path: &str, text: &str, mtime: f64) -> (Doc, Vec<u32>
         path_segments,
         body,
         body_line_starts,
+        properties,
         body_line_src,
         mtime,
         size: text.len() as u32,
@@ -165,20 +181,31 @@ fn frontmatter_end(lines: &[(usize, &str)]) -> Option<usize> {
         .map(|p| p + 1)
 }
 
-fn parse_frontmatter(lines: &[(usize, &str)], aliases: &mut Vec<String>, tags: &mut Vec<String>) {
+/// Frontmatter keys Obsidian owns: aliases/tags/title feed their own fields, the rest are not
+/// indexed at all (they are not note content).
+fn reserved_key(key: &str) -> bool {
+    matches!(key.to_ascii_lowercase().as_str(), "aliases" | "alias" | "title" | "tags" | "tag" | "cssclasses" | "cssclass" | "created")
+}
+
+fn parse_frontmatter(lines: &[(usize, &str)], aliases: &mut Vec<String>, tags: &mut Vec<String>, props: &mut Vec<Property>) {
     let mut i = 0;
     while i < lines.len() {
         let line = lines[i].1;
         i += 1;
-        if line.starts_with(char::is_whitespace) {
+        if line.starts_with(char::is_whitespace) || line.trim_start().starts_with('#') {
             continue;
         }
         let Some((key, value)) = line.split_once(':') else {
             continue;
         };
-        let is_alias = matches!(key.trim(), "aliases" | "alias" | "title");
-        let is_tag = matches!(key.trim(), "tags" | "tag");
-        if !is_alias && !is_tag {
+        let key = key.trim();
+        if key.is_empty() || key.starts_with('-') {
+            continue;
+        }
+        let is_alias = matches!(key, "aliases" | "alias" | "title");
+        let is_tag = matches!(key, "tags" | "tag");
+        let is_prop = !reserved_key(key);
+        if !is_alias && !is_tag && !is_prop {
             continue;
         }
         let value = value.trim();
@@ -204,6 +231,13 @@ fn parse_frontmatter(lines: &[(usize, &str)], aliases: &mut Vec<String>, tags: &
             );
         } else {
             items.push(unquote(value).to_string());
+        }
+        if is_prop {
+            let values: Vec<String> = items.into_iter().map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect();
+            if !values.is_empty() {
+                props.push(Property { key: key.to_string(), values });
+            }
+            continue;
         }
         for it in items {
             if is_tag {
@@ -515,6 +549,47 @@ mod tests {
         );
         assert_eq!(d.title, "AI in Data Engineering");
         assert_eq!(d.path_segments, vec!["💡 Resources", "🧮 Zettelkasten"]);
+    }
+
+    #[test]
+    fn frontmatter_properties_are_extracted_except_reserved_keys() {
+        let fm = "---\nCreated: 2025-02-08\nRösterei: KAFOJ\nHerkunftsland:\n  - India\n  - \"Sri Lanka\"\nRating: ⭐️⭐️\nMühlstufe: \nPrice: 4\ntags: [coffee]\naliases: [kafoj]\ncssclasses: wide\ninline: [a, b]\nnested:\n  deep: 1\n---\n# KAFOJ Espresso\nbody";
+        let d = extract("KAFOJ Espresso.md", fm, 0.0);
+        let props: Vec<(String, Vec<String>)> = d.properties.iter().map(|p| (p.key.clone(), p.values.clone())).collect();
+        assert_eq!(
+            props,
+            vec![
+                ("Rösterei".to_string(), vec!["KAFOJ".to_string()]),
+                ("Herkunftsland".to_string(), vec!["India".to_string(), "Sri Lanka".to_string()]),
+                ("Rating".to_string(), vec!["⭐️⭐️".to_string()]),
+                ("Price".to_string(), vec!["4".to_string()]),
+                ("inline".to_string(), vec!["a".to_string(), "b".to_string()]),
+            ]
+        );
+        assert_eq!(d.tags, vec!["coffee"]);
+        assert_eq!(d.aliases, vec!["kafoj"]);
+        assert!(!d.body.contains("Herkunftsland"), "frontmatter stays out of the body");
+    }
+
+    #[test]
+    fn excalidraw_drawing_blob_is_not_body() {
+        let text = "---\nexcalidraw-plugin: parsed\ntags: [excalidraw]\n---\n# Excalidraw Data\n## Text Elements\nLearning ^IgaeFver\n\nstoic ^7KtKd0Em\n\n%%\n## Drawing\n```compressed-json\nN4IgLgngDgpiBcIYA8DGBDANgSwCYCd0B3EAGhAGcBXAW2wDMBDAcwCd0A\nQIIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n```\n%%";
+        let d = extract("venn.excalidraw", text, 0.0);
+        assert_eq!(d.title, "venn");
+        assert!(d.body.contains("Learning") && d.body.contains("stoic"));
+        assert!(!d.body.contains("N4IgLg"), "blob kept: {:?}", d.body);
+        assert!(d.headings.iter().any(|h| h.text == "Drawing"));
+        let d = extract("x.md", "```json\n{\"a\": 1}\n```", 0.0);
+        assert!(d.body.contains("{\"a\": 1}"), "other fences stay");
+    }
+
+    #[test]
+    fn base_files_take_their_title_from_the_file_name_and_index_the_yaml_as_body() {
+        let d = extract("Coffee/Coffee Beans Base.base", "publish: true\ndescription: |\n  Coffee Machine: Solis\n\n  ## My Coffee Beans list\nfilters:\n  and:\n    - file.ext.contains(\"md\")\nviews:\n  - type: table\n    name: Table\n", 0.0);
+        assert_eq!(d.title, "Coffee Beans Base");
+        assert!(d.body.contains("Coffee Machine: Solis"));
+        assert!(d.body.contains("views"));
+        assert!(d.properties.is_empty(), "a base is not frontmatter");
     }
 
     #[test]

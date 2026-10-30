@@ -175,3 +175,47 @@ query = "invoice"
 expect_top = "Sales Invoice Process and Cashflow Notes"
 expect_tier = 1
 must_not_appear = ["Brand Voice"]
+
+# ---- frontmatter properties (v1.1) ----
+
+# Property values are content-tier hits: `india` lives only in the frontmatter of KAFOJ Espresso.
+[[case]]
+query = "india espresso"
+expect_top = "KAFOJ Espresso"
+expect_tier = 3
+
+# `[key:value]` filters like `#tag`.
+[[case]]
+query = "[herkunftsland:india]"
+expect_top = "KAFOJ Espresso"
+must_not_appear = ["Adrianos Espresso"]
+
+[[case]]
+query = "[price] espresso"
+expect_in_top = ["KAFOJ Espresso", "Adrianos Espresso"]
+
+# Obsidian Bases are indexed: title from the file name, YAML text as body.
+[[case]]
+query = "coffee beans base"
+expect_top = "Coffee Beans Base"
+expect_tier = 1
+
+# Canvas files are indexed as markdown: group labels as headings, text nodes as content.
+[[case]]
+query = "book plan"
+expect_top = "Book Plan"
+expect_tier = 1
+
+[[case]]
+query = "zettelkasten workflows folders"
+expect_top = "Book Plan"
+
+# `type:` keeps one file kind.
+[[case]]
+query = "type:base coffee"
+expect_top = "Coffee Beans Base"
+must_not_appear = ["KAFOJ Espresso", "Adrianos Espresso"]
+
+[[case]]
+query = "type:canvas plan"
+expect_top = "Book Plan"

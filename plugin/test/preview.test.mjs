@@ -19,7 +19,22 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { classifyLines, segmentLine, queryTerms, imageEmbed, MAX_LINE_CHARS, MAX_LINE_STYLES } = await load('src/ui/preview.ts');
+const { classifyLines, segmentLine, queryTerms, imageEmbed, richBlocks, excalidrawExports, MAX_LINE_CHARS, MAX_LINE_STYLES } = await load('src/ui/preview.ts');
+
+test('rich blocks: mermaid fences are found with their bounds, other fences and nested markers are not', () => {
+	const lines = ['# T', '```mermaid', 'graph TD;', 'A-->B;', '```', 'text', '```js', 'x', '```', '~~~ mermaid', 'pie', '~~~', '```mermaid', 'unterminated'];
+	assert.deepEqual(richBlocks(lines), [
+		{ start: 1, end: 4, lang: 'mermaid' },
+		{ start: 9, end: 11, lang: 'mermaid' },
+	]);
+	assert.deepEqual(richBlocks(['no fences']), []);
+});
+
+test('excalidraw exports: png and svg next to the drawing, nothing for other files', () => {
+	assert.deepEqual(excalidrawExports('a/venn.excalidraw'), ['a/venn.excalidraw.png', 'a/venn.excalidraw.svg']);
+	assert.deepEqual(excalidrawExports('a/Venn.excalidraw.md'), ['a/Venn.excalidraw.png', 'a/Venn.excalidraw.svg']);
+	assert.deepEqual(excalidrawExports('a/note.md'), []);
+});
 
 test('image embeds: a whole-line wiki or markdown image yields its target, anything else null', () => {
 	assert.equal(imageEmbed('![[pic.png]]'), 'pic.png');

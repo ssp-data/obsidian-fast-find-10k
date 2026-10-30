@@ -25,7 +25,7 @@ test('excluded paths', () => {
 });
 
 test('kept paths', () => {
-	for (const p of ['💡 Resources/x.md', 'Showcase.md', 'a.b/c.md', 'my templates/x.md']) {
+	for (const p of ['💡 Resources/x.md', 'Showcase.md', 'a.b/c.md', 'my templates/x.md', 'Coffee/Coffee Beans Base.base', 'book.canvas', 'venn.excalidraw']) {
 		assert.equal(indexer.isExcluded(p), false, p);
 	}
 });
@@ -91,6 +91,7 @@ function harness(files, cachedRead) {
 		workspace: { onLayoutReady: (cb) => cb() },
 		vault: {
 			getMarkdownFiles: () => files,
+			getFiles: () => files.map((f) => ({ extension: f.path.split('.').pop(), ...f })),
 			getFileByPath: (p) => files.find((f) => f.path === p) ?? null,
 			cachedRead,
 		},

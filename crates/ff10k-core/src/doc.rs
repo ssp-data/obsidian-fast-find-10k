@@ -13,6 +13,8 @@ pub enum Field {
     Link,
     Path,
     Body,
+    /// Frontmatter properties other than aliases/tags/title/cssclasses/created: key and values.
+    Property,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -27,6 +29,12 @@ pub struct Weights {
     pub link: f32,
     pub path: f32,
     pub body: f32,
+    #[serde(default = "default_property_weight")]
+    pub property: f32,
+}
+
+fn default_property_weight() -> f32 {
+    25.0
 }
 
 impl Default for Weights {
@@ -43,6 +51,7 @@ impl Default for Weights {
             link: 20.0,
             path: 15.0,
             body: 10.0,
+            property: 25.0,
         }
     }
 }
@@ -59,6 +68,7 @@ impl Weights {
             Field::Link => self.link,
             Field::Path => self.path,
             Field::Body => self.body,
+            Field::Property => self.property,
         }
     }
 }
@@ -72,6 +82,14 @@ pub struct Heading {
     pub line: u32,
     pub byte_start: u32,
     pub byte_end: u32,
+}
+
+/// One frontmatter property: `key` as written, `values` as strings (a scalar is one value).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Property {
+    pub key: String,
+    pub values: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,6 +115,9 @@ pub struct Doc {
     pub body_line_starts: Vec<u32>,
     /// Source-text line index of each body line (frontmatter and fence markers are not in `body`).
     pub body_line_src: Vec<u32>,
+    /// Frontmatter properties (reserved keys left out), in file order; list values are split.
+    #[serde(default)]
+    pub properties: Vec<Property>,
     pub mtime: f64,
     pub size: u32,
     pub word_count: u32,
@@ -118,5 +139,6 @@ mod tests {
         assert_eq!(w.get(Field::Link), 20.0);
         assert_eq!(w.get(Field::Path), 15.0);
         assert_eq!(w.get(Field::Body), 10.0);
+        assert_eq!(w.get(Field::Property), 25.0);
     }
 }

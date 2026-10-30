@@ -204,6 +204,18 @@
 	color: var(--color-orange);
 }
 
+/* file type marker for non-note results (canvas, base, drawing) */
+.ff10k-kind {
+	flex: 0 0 auto;
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+	padding: 0 5px;
+	border-radius: var(--radius-s);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-faint);
+	letter-spacing: 0.02em;
+}
+
 .ff10k-expanded-badge {
 	flex: 0 0 auto;
 	font-size: var(--font-ui-smaller);
@@ -336,6 +348,18 @@
 	margin: var(--size-4-1) 0;
 	border-radius: var(--radius-s);
 	object-fit: contain;
+}
+
+.ff10k-rich {
+	white-space: pre-wrap;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+}
+
+.ff10k-rich .mermaid,
+.ff10k-rich svg {
+	max-width: 100%;
+	height: auto;
 }
 
 .ff10k-preview mark {
@@ -493,8 +517,27 @@ input.ff10k-invalid {
 }
 
 .ff10k-mobile .ff10k-bar .ff10k-input {
-	flex: 1 1 100%;
+	flex: 1 1 0;
+	min-width: 0;
 	font-size: var(--font-ui-medium);
+}
+
+/* close button on the search line (44 px tap target, no layout space beyond that) */
+.ff10k-mobile .ff10k-close {
+	flex: 0 0 44px;
+	height: 44px;
+	padding: 0;
+	margin: 0;
+	border: none;
+	box-shadow: none;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: var(--font-ui-large);
+	line-height: 1;
+}
+
+.ff10k-mobile .ff10k-close:active {
+	color: var(--text-normal);
 }
 
 .ff10k-mobile .ff10k-pills {

@@ -107,6 +107,7 @@ export const DEFAULT_WEIGHTS: Weights = {
 	link: 20,
 	path: 15,
 	body: 10,
+	property: 25,
 };
 
 export const DEFAULT_SETTINGS: FastFindSettings = {

@@ -5,6 +5,7 @@ use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
+use crate::canvas;
 use crate::index::{Index, UpsertProfile};
 use crate::query::Query;
 use crate::similar::{similar_count_for, similar_for, similar_ids_for, SimilarHit, SimilarReason};
@@ -93,6 +94,13 @@ impl Engine {
     }
 
     pub fn upsert(&mut self, path: &str, mtime: f64, text: &str) {
+        let md;
+        let text = if canvas::is_canvas(path) {
+            md = canvas::canvas_to_markdown(text);
+            md.as_str()
+        } else {
+            text
+        };
         self.index.upsert_note(path, mtime, text);
         self.similar_counts.get_mut().clear();
     }
@@ -257,6 +265,7 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
+    use crate::doc::Weights;
     use super::*;
     use crate::doc::Field;
 
@@ -1273,5 +1282,104 @@ mod tests {
         e.set_config(Config { similar_min_score: 0.99, ..Config::default() });
         let high = check(&e, 0.99);
         assert!(low > high, "{low} > {high}");
+    }
+
+    // ---- properties (frontmatter) ----
+
+    fn coffee_corpus() -> Engine {
+        let mut e = Engine::new();
+        e.upsert("Coffee/KAFOJ Espresso.md", 0.0, "---\nCreated: 2025-02-08\nRösterei: KAFOJ\nHerkunftsland:\n  - India\nRating: 5\nPrice: 4\n---\n# KAFOJ Espresso\nBiel coffee from the shop, with enough words to pass the short note rule, words words words words words");
+        e.upsert("Coffee/Adrianos Espresso.md", 0.0, "---\nRösterei: Adrianos\nHerkunftsland: [Brazil, Colombia]\nPrice: 6\n---\n# Adrianos Espresso\nBern coffee, with enough words to pass the short note rule, words words words words words words words words");
+        e.upsert("Tea Notes.md", 0.0, "Darjeeling from India, with enough words to pass the short note rule, words words words words words words words");
+        e.upsert("Espresso Machines.md", 0.0, "Machines overview, with enough words to pass the short note rule, words words words words words words words");
+        e
+    }
+
+    #[test]
+    fn property_values_match_in_the_content_tier_with_their_own_badge() {
+        let e = coffee_corpus();
+        let r = e.search("india espresso", &SearchOptions { debug: true, ..opts() });
+        let h = hit(&r, "KAFOJ Espresso").unwrap();
+        assert_eq!(h.tier, 3, "{:?}", titles(&r));
+        assert_eq!(h.badge, Field::Property);
+        let ex = h.excerpt.as_ref().unwrap();
+        assert_eq!(ex.text, "Herkunftsland: India");
+        assert_eq!(ex.ranges, vec![(15, 20)]);
+        assert!(hit(&r, "Tea Notes").is_none(), "{:?}", titles(&r));
+        // keys match too
+        assert_eq!(hit(&e.search("rösterei kafoj", &opts()), "KAFOJ Espresso").map(|h| h.tier), Some(3));
+        // weight 0 turns the field off
+        let mut off = coffee_corpus();
+        let mut w = Weights::default();
+        w.property = 0.0;
+        off.set_config(Config { weights: w, ..Config::default() });
+        // only the partial tier (espresso in the title) remains: india no longer matches anywhere
+        assert!(hit(&off.search("india espresso", &opts()), "KAFOJ Espresso").is_none_or(|h| h.tier == 4));
+    }
+
+    #[test]
+    fn property_filters_narrow_like_tags_and_fall_back_to_words() {
+        let e = coffee_corpus();
+        assert_eq!(titles(&e.search("[herkunftsland:india]", &opts())), ["KAFOJ Espresso"]);
+        assert_eq!(titles(&e.search("[Herkunftsland:Colombia] espresso", &opts())), ["Adrianos Espresso"]);
+        let r = e.search("[price]", &opts());
+        let both = titles(&r);
+        assert_eq!(both.len(), 2, "{both:?}");
+        assert!(both.contains(&"KAFOJ Espresso") && both.contains(&"Adrianos Espresso"));
+        assert!(e.search("[price:5]", &opts()).hits.is_empty());
+        // reserved keys are not properties: `[created:…]` has no key to filter on and becomes words
+        assert!(e.search("[created:2025-02-08]", &opts()).hits.is_empty());
+        // an unknown key is searched as words: `[machines]` → `machines` matches the title
+        assert_eq!(hit(&e.search("[machines]", &opts()), "Espresso Machines").map(|h| h.tier), Some(1));
+        // `[machines:overview]` → both words; `overview` is body-only, so the content tier
+        assert_eq!(hit(&e.search("[machines:overview]", &opts()), "Espresso Machines").map(|h| h.tier), Some(3));
+    }
+
+    #[test]
+    fn property_keys_follow_updates_and_removal() {
+        let mut e = coffee_corpus();
+        assert_eq!(e.search("[rating]", &opts()).hits.len(), 1);
+        e.upsert("Coffee/KAFOJ Espresso.md", 1.0, "---\nRösterei: KAFOJ\n---\n# KAFOJ Espresso\nno rating any more, with enough words to pass the short note rule, words words words words");
+        // the key is gone from every note: `[rating]` is now the word `rating`
+        assert_eq!(titles(&e.search("[rating]", &opts())), ["KAFOJ Espresso"]);
+        e.remove("Coffee/Adrianos Espresso.md");
+        assert!(e.search("[herkunftsland:colombia]", &opts()).hits.is_empty());
+    }
+
+    #[test]
+    fn canvas_files_are_indexed_as_markdown_and_preview_that_text() {
+        let mut e = Engine::new();
+        e.upsert("Writing/Book Plan.canvas", 0.0, r#"{"nodes":[{"id":"a","type":"group","label":"Brainstorming","x":0,"y":0,"width":1,"height":1},{"id":"b","type":"text","text":"Chapter about zettelkasten workflows and why folders fail, with enough words to pass the short note rule","x":0,"y":0,"width":1,"height":1},{"id":"c","type":"file","file":"Notes/Outline.md","x":0,"y":0,"width":1,"height":1}],"edges":[]}"#);
+        e.upsert("Notes/Outline.md", 0.0, "the outline, with enough words to pass the short note rule, words words words words words words words words");
+        let r = e.search("zettelkasten workflows", &opts());
+        assert_eq!(hit(&r, "Book Plan").map(|h| h.tier), Some(3), "{:?}", titles(&r));
+        assert_eq!(hit(&e.search("book plan", &opts()), "Book Plan").map(|h| h.tier), Some(1));
+        assert_eq!(hit(&e.search("brainstorming", &opts()), "Book Plan").map(|h| h.tier), Some(2));
+        let text = e.doc_text("Writing/Book Plan.canvas").unwrap();
+        assert!(text.starts_with("## Brainstorming\n\nChapter about"), "{text}");
+        assert!(text.contains("[[Notes/Outline.md]]"));
+        // the file node is a link: the outline gets a backlink from the canvas
+        assert_eq!(e.search("outline", &SearchOptions { debug: true, ..opts() }).hits[0].title, "Outline");
+    }
+
+    #[test]
+    fn type_filter_keeps_one_file_kind() {
+        let mut e = Engine::new();
+        e.upsert("Coffee/Coffee Beans Base.base", 0.0, "description: |\n  Coffee beans list\nviews:\n  - type: table\n");
+        e.upsert("Coffee/Coffee Beans.md", 0.0, "coffee beans notes, with enough words to pass the short note rule, words words words words words words");
+        e.upsert("Coffee/Coffee Map.canvas", 0.0, r#"{"nodes":[{"id":"a","type":"text","text":"coffee beans by region","x":0,"y":0,"width":1,"height":1}]}"#);
+        e.upsert("Coffee/Coffee Sketch.excalidraw", 0.0, "# Excalidraw Data\n## Text Elements\ncoffee beans ^ab12cd34\n");
+        let kinds = |q: &str| {
+            let mut t = titles(&e.search(q, &opts())).iter().map(|t| t.to_string()).collect::<Vec<_>>();
+            t.sort();
+            t
+        };
+        assert_eq!(kinds("type:base coffee"), ["Coffee Beans Base"]);
+        assert_eq!(kinds("type:canvas coffee"), ["Coffee Map"]);
+        assert_eq!(kinds("type:drawing coffee"), ["Coffee Sketch"]);
+        assert_eq!(kinds("type:note coffee"), ["Coffee Beans"]);
+        assert_eq!(kinds("type:base type:canvas coffee"), ["Coffee Beans Base", "Coffee Map"]);
+        assert_eq!(kinds("type:base"), ["Coffee Beans Base"]);
+        assert_eq!(kinds("coffee").len(), 4);
     }
 }

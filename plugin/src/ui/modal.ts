@@ -1,7 +1,7 @@
 // The search modal: query input, tiered results, data-driven keys, open/create actions,
 // help overlay.
 
-import { type App, Modal, Notice, Platform, Scope, TFile, type WorkspaceLeaf } from 'obsidian';
+import { type App, Component, MarkdownRenderer, Modal, Notice, Platform, Scope, TFile, type WorkspaceLeaf } from 'obsidian';
 import { createGhostNote, createNote, ghostNotePath, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
 import { debugLog } from '../debug';
@@ -46,6 +46,12 @@ export function openAllTargets(hits: Pick<Hit, 'path' | 'isGhost'>[]): { eligibl
 	const paths = [...new Set(hits.filter((h) => !h.isGhost).map((h) => h.path))];
 	const eligible = paths.length > 0 && paths.length <= OPEN_ALL_MAX;
 	return { eligible, count: paths.length, paths: eligible ? paths : [] };
+}
+
+/** A touch that closes the search: a quick, mostly horizontal swipe to the left
+ * (at least 80 px, twice as wide as tall, under 600 ms), like Android's back gesture. */
+export function isCloseSwipe(dx: number, dy: number, ms: number): boolean {
+	return dx <= -80 && Math.abs(dx) >= 2 * Math.abs(dy) && ms < 600;
 }
 
 /** Initial query and preview state: a non-empty `resume` prefills and forces the preview open;
@@ -171,6 +177,8 @@ export class FastFindModal extends Modal {
 	private readonly plugin: FastFindPlugin;
 	private readonly state: State;
 	private inputEl!: HTMLInputElement;
+	/** Owns what Obsidian's renderer mounts in the preview (diagrams); unloaded with the modal. */
+	private readonly renderComponent = new Component();
 	private statusEl!: HTMLElement;
 	private pillAll!: HTMLElement;
 	private pillFiles!: HTMLElement;
@@ -237,6 +245,23 @@ export class FastFindModal extends Modal {
 
 		const bar = contentEl.createDiv({ cls: 'ff10k-bar' });
 		this.inputEl = bar.createEl('input', { cls: 'ff10k-input', type: 'text', attr: { placeholder: 'Find a note…', spellcheck: 'false' } });
+		if (Platform.isMobile) {
+			// no Esc on a phone: a close button at the end of the search line
+			const close = bar.createEl('button', { cls: 'ff10k-close', text: '✕', attr: { 'aria-label': 'Close search', type: 'button' } });
+			close.addEventListener('click', () => this.close());
+			// swipe left closes too, also where the OS has no back gesture (iOS); not from the
+			// input, where a horizontal drag moves the text cursor
+			let start: { x: number; y: number; t: number } | null = null;
+			this.modalEl.addEventListener('touchstart', (e) => {
+				const t = e.touches[0];
+				start = e.touches.length === 1 && t && e.target !== this.inputEl ? { x: t.clientX, y: t.clientY, t: e.timeStamp } : null;
+			}, { passive: true });
+			this.modalEl.addEventListener('touchend', (e) => {
+				const t = e.changedTouches[0];
+				if (start && t && isCloseSwipe(t.clientX - start.x, t.clientY - start.y, e.timeStamp - start.t)) this.close();
+				start = null;
+			}, { passive: true });
+		}
 		// pills: tap targets; their key labels are omitted on mobile (no keyboard shortcuts there)
 		const key = (spec: string) => (Platform.isMobile ? '' : ` ${keyLabel(spec)}`);
 		const pills = Platform.isMobile ? bar.createDiv({ cls: 'ff10k-pills' }) : bar;
@@ -264,11 +289,16 @@ export class FastFindModal extends Modal {
 		this.resultsEl = body.createDiv({ cls: 'ff10k-results' });
 		const right = body.createDiv({ cls: 'ff10k-right' });
 		this.previewEl = right.createDiv({ cls: 'ff10k-preview' });
-		this.preview = new Preview(this.previewEl, (target, from) => {
-			if (/^https?:\/\//i.test(target)) return target;
-			const file = this.app.metadataCache.getFirstLinkpathDest(decodeURIComponent(target), from);
-			return file ? this.app.vault.getResourcePath(file) : null;
-		});
+		this.renderComponent.load();
+		this.preview = new Preview(
+			this.previewEl,
+			(target, from) => {
+				if (/^https?:\/\//i.test(target)) return target;
+				const file = this.app.metadataCache.getFirstLinkpathDest(decodeURIComponent(target), from);
+				return file ? this.app.vault.getResourcePath(file) : null;
+			},
+			(markdown, el) => MarkdownRenderer.render(this.app, markdown, el, this.state.hits[this.state.selected]?.path ?? '', this.renderComponent),
+		);
 		this.similar = new SimilarPanel(right.createDiv({ cls: 'ff10k-similar' }));
 		this.similar.onOpen((path) => void this.openPath(path));
 		this.resultsEl.addEventListener('scroll', () => {
@@ -301,6 +331,7 @@ export class FastFindModal extends Modal {
 	}
 
 	onClose(): void {
+		this.renderComponent.unload();
 		this.closed = true;
 		this.plugin.rememberQuery(this.inputEl.value);
 		window.cancelAnimationFrame(this.paintFrame);
