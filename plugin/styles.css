@@ -182,6 +182,7 @@
 }
 
 .ff10k-badge-t5 {
+	border-color: color-mix(in srgb, var(--text-title-h3, var(--color-yellow)) 55%, transparent);
 	color: var(--text-faint);
 }
 
@@ -238,7 +239,6 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: var(--font-ui-small);
-	font-weight: var(--font-semibold);
 	color: var(--text-title-h2, var(--color-orange));
 }
 
