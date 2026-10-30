@@ -158,6 +158,7 @@ Unresolved links are not cached; they come from `app.metadataCache.unresolvedLin
 - `"exact phrase"` → terms must be adjacent in one field.
 - `-term` → exclude notes where term matches anywhere. When the query has other words and the exclusion leaves no tier 1–3 hit, the query is retried with `term` as a word (`KW13 -Marktleistung`; v1.1, recall fix 1). `-term` alone stays an exclusion.
 - `#tag` → filter to notes with that tag (nested tags match parents).
+- `type:note|base|canvas|drawing` → filter to one file kind by extension (`.excalidraw.md` is a drawing); several `type:` words OR together; an unknown value stays a word (v1.1).
 - `[key]` / `[key:value]` → filter to notes that have the property / whose property equals the value (one of the list's values; normalized comparison). A key no note has is searched as words (v1.1). When no note carries the tag, `tag` is searched as a word instead (`Newsletter #115`; v1.1, recall fix 1).
 - `path:foo` → filter to paths containing `foo` (case-insensitive substring over normalized path). Applied **before** scoring, not after a top-N cut.
 - Everything else is literal. No regex in v1.

@@ -21,7 +21,7 @@ use crate::markdown::extract;
 use crate::index::{DocId, Index};
 use crate::matcher::{body_docs, match_term, match_term_scoped, DocSet, FuzzyLevel, MatchKind, Scope, TermHit};
 use crate::normalize::{is_whitespace_like, normalize, strip_symbols};
-use crate::query::{Query, Term};
+use crate::query::{FileKind, Query, Term};
 use crate::tokenize::tokenize_query_term;
 
 /// Proximity: bonus when all units share a heading section, larger when within this many body tokens.
@@ -594,6 +594,9 @@ fn apply_filters(index: &Index, query: &Query, cands: &mut HashMap<DocId, Slots>
         cands.retain(|d, _| {
             index.path_norm(*d).is_some_and(|p| query.paths.iter().all(|f| p.contains(f.as_str())))
         });
+    }
+    if !query.types.is_empty() {
+        cands.retain(|d, _| index.get(*d).is_some_and(|doc| query.types.contains(&FileKind::of_path(&doc.path))));
     }
     for (key, value) in &query.props {
         cands.retain(|d, _| {

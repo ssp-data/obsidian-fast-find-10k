@@ -209,3 +209,13 @@ expect_tier = 1
 [[case]]
 query = "zettelkasten workflows folders"
 expect_top = "Book Plan"
+
+# `type:` keeps one file kind.
+[[case]]
+query = "type:base coffee"
+expect_top = "Coffee Beans Base"
+must_not_appear = ["KAFOJ Espresso", "Adrianos Espresso"]
+
+[[case]]
+query = "type:canvas plan"
+expect_top = "Book Plan"

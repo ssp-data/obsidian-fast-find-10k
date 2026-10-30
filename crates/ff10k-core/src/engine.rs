@@ -1361,4 +1361,25 @@ mod tests {
         // the file node is a link: the outline gets a backlink from the canvas
         assert_eq!(e.search("outline", &SearchOptions { debug: true, ..opts() }).hits[0].title, "Outline");
     }
+
+    #[test]
+    fn type_filter_keeps_one_file_kind() {
+        let mut e = Engine::new();
+        e.upsert("Coffee/Coffee Beans Base.base", 0.0, "description: |\n  Coffee beans list\nviews:\n  - type: table\n");
+        e.upsert("Coffee/Coffee Beans.md", 0.0, "coffee beans notes, with enough words to pass the short note rule, words words words words words words");
+        e.upsert("Coffee/Coffee Map.canvas", 0.0, r#"{"nodes":[{"id":"a","type":"text","text":"coffee beans by region","x":0,"y":0,"width":1,"height":1}]}"#);
+        e.upsert("Coffee/Coffee Sketch.excalidraw", 0.0, "# Excalidraw Data\n## Text Elements\ncoffee beans ^ab12cd34\n");
+        let kinds = |q: &str| {
+            let mut t = titles(&e.search(q, &opts())).iter().map(|t| t.to_string()).collect::<Vec<_>>();
+            t.sort();
+            t
+        };
+        assert_eq!(kinds("type:base coffee"), ["Coffee Beans Base"]);
+        assert_eq!(kinds("type:canvas coffee"), ["Coffee Map"]);
+        assert_eq!(kinds("type:drawing coffee"), ["Coffee Sketch"]);
+        assert_eq!(kinds("type:note coffee"), ["Coffee Beans"]);
+        assert_eq!(kinds("type:base type:canvas coffee"), ["Coffee Beans Base", "Coffee Map"]);
+        assert_eq!(kinds("type:base"), ["Coffee Beans Base"]);
+        assert_eq!(kinds("coffee").len(), 4);
+    }
 }

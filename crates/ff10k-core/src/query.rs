@@ -22,7 +22,47 @@ pub struct Query {
     pub paths: Vec<String>,
     /// `[key]` / `[key:value]` property filters, normalized (Obsidian's search syntax).
     pub props: Vec<(String, Option<String>)>,
+    /// `type:note|base|canvas|drawing` file-kind filters (any listed kind passes).
+    pub types: Vec<FileKind>,
     pub normalized: String,
+}
+
+/// What kind of file a result is, by extension: the `type:` filter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FileKind {
+    Note,
+    Base,
+    Canvas,
+    Drawing,
+}
+
+impl FileKind {
+    /// `type:` values: `note`/`notes`/`md`, `base`/`bases`, `canvas`/`canvases`,
+    /// `drawing`/`drawings`/`excalidraw`; case-insensitive. None for anything else.
+    pub fn parse(s: &str) -> Option<FileKind> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "note" | "notes" | "md" | "markdown" => Some(FileKind::Note),
+            "base" | "bases" => Some(FileKind::Base),
+            "canvas" | "canvases" => Some(FileKind::Canvas),
+            "drawing" | "drawings" | "excalidraw" => Some(FileKind::Drawing),
+            _ => None,
+        }
+    }
+
+    /// The kind of a vault path (`.excalidraw.md` counts as a drawing, not a note).
+    pub fn of_path(path: &str) -> FileKind {
+        let p = path.to_ascii_lowercase();
+        if p.ends_with(".base") {
+            FileKind::Base
+        } else if p.ends_with(".canvas") {
+            FileKind::Canvas
+        } else if p.ends_with(".excalidraw") || p.ends_with(".excalidraw.md") {
+            FileKind::Drawing
+        } else {
+            FileKind::Note
+        }
+    }
 }
 
 /// Full normalized compound of a word, or None when it has no letter/digit.
@@ -39,6 +79,7 @@ impl Query {
             tags: Vec::new(),
             paths: Vec::new(),
             props: Vec::new(),
+            types: Vec::new(),
             normalized: String::new(),
         };
         let mut rest = input;
@@ -81,6 +122,8 @@ impl Query {
             if !n.is_empty() {
                 self.tags.push(n);
             }
+        } else if word.len() > 5 && word.is_char_boundary(5) && word[..5].eq_ignore_ascii_case("type:") && FileKind::parse(&word[5..]).is_some() {
+            self.types.push(FileKind::parse(&word[5..]).unwrap());
         } else if word.len() > 2 && word.starts_with('[') && word.ends_with(']') {
             let inner = &word[1..word.len() - 1];
             let (k, v) = match inner.split_once(':') {
@@ -155,7 +198,7 @@ impl Query {
     }
 
     pub fn has_filters(&self) -> bool {
-        !(self.excludes.is_empty() && self.tags.is_empty() && self.paths.is_empty() && self.props.is_empty())
+        !(self.excludes.is_empty() && self.tags.is_empty() && self.paths.is_empty() && self.props.is_empty() && self.types.is_empty())
     }
 
     /// A copy with every property filter whose key `is_key` rejects searched as words instead
@@ -213,6 +256,19 @@ mod tests {
         let q = Query::parse("data-engineering");
         assert_eq!(q.terms.len(), 1);
         assert_eq!(q.terms[0].parts, ["data-engineering", "data", "engineering"]);
+    }
+
+    #[test]
+    fn type_filters() {
+        let q = Query::parse("type:base coffee Type:Drawings type:unknown");
+        assert_eq!(q.types, vec![FileKind::Base, FileKind::Drawing]);
+        let norms: Vec<_> = q.terms.iter().map(|t| t.norm.as_str()).collect();
+        assert_eq!(norms, ["coffee", "type:unknown"]);
+        assert!(q.has_filters());
+        assert_eq!(FileKind::of_path("a/B.Canvas"), FileKind::Canvas);
+        assert_eq!(FileKind::of_path("a/venn.excalidraw.md"), FileKind::Drawing);
+        assert_eq!(FileKind::of_path("a/note.md"), FileKind::Note);
+        assert!(Query::parse("type:").terms.len() == 1);
     }
 
     #[test]
