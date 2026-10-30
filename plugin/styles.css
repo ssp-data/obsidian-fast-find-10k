@@ -108,7 +108,7 @@
 	display: flex;
 	flex-direction: column;
 	padding: var(--size-4-2) var(--size-4-3);
-	background: rgba(var(--color-red-rgb), 0.05);
+	background: var(--background-secondary);
 }
 
 .ff10k-no-similar .ff10k-similar {
@@ -164,14 +164,16 @@
 	color: var(--text-muted);
 }
 
+/* Colours come from the theme (--text-accent, --text-title-h*), with Obsidian's defaults as
+   fallback: title and heading hits carry colour, every other badge stays quiet. */
 .ff10k-badge-t1 {
-	border-color: var(--color-green);
-	color: var(--color-green);
+	border-color: var(--text-accent);
+	color: var(--text-accent);
 }
 
 .ff10k-badge-t2 {
-	border-color: var(--color-orange);
-	color: var(--color-orange);
+	border-color: var(--text-title-h2, var(--color-orange));
+	color: var(--text-title-h2, var(--color-orange));
 }
 
 .ff10k-badge-t3,
@@ -180,13 +182,13 @@
 }
 
 .ff10k-badge-t5 {
-	border-color: var(--color-purple);
-	color: var(--color-purple);
+	color: var(--text-faint);
 }
 
+/* the similar panel shows the details; the pill only hints, in the theme's red, dimmed */
 .ff10k-similar-badge {
-	border-color: var(--color-red);
-	color: var(--color-red);
+	border-color: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 30%, transparent);
+	color: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 45%, var(--text-faint));
 }
 
 .ff10k-title {
@@ -236,7 +238,8 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: var(--font-ui-small);
-	color: var(--color-orange);
+	font-weight: var(--font-semibold);
+	color: var(--text-title-h2, var(--color-orange));
 }
 
 .ff10k-excerpt,
@@ -275,7 +278,7 @@
 	content: "+ ";
 	font-style: normal;
 	font-weight: var(--font-bold);
-	color: var(--color-green);
+	color: var(--text-accent);
 }
 
 .ff10k-debug {
@@ -322,15 +325,15 @@
 }
 
 .ff10k-h1 {
-	color: var(--color-red);
+	color: var(--text-title-h1, var(--color-red));
 }
 
 .ff10k-h2 {
-	color: var(--color-orange);
+	color: var(--text-title-h2, var(--color-orange));
 }
 
 .ff10k-h3 {
-	color: var(--color-yellow);
+	color: var(--text-title-h3, var(--color-yellow));
 }
 
 .ff10k-code {
@@ -382,8 +385,9 @@
 }
 
 .ff10k-preview mark.is-current {
-	outline: 2px solid var(--text-accent);
-	outline-offset: 1px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 35%, transparent);
 }
 
 .ff10k-ln {
@@ -414,9 +418,21 @@
 	height: auto;
 }
 
+/* matched words bold and underlined; their lines get a faint band and a rule on the left */
 .ff10k-preview mark {
-	background: var(--text-highlight-bg);
+	background: color-mix(in srgb, var(--text-accent) 32%, transparent);
 	color: inherit;
+	font-weight: var(--font-bold);
+	border-radius: 3px;
+	padding: 0 1px;
+	box-shadow: inset 0 -2px 0 var(--text-accent);
+}
+
+.ff10k-preview .ff10k-line:has(mark) {
+	margin-left: calc(-1 * var(--size-4-3));
+	padding-left: calc(var(--size-4-3) - 2px);
+	background: color-mix(in srgb, var(--text-accent) 6%, transparent);
+	box-shadow: inset 2px 0 0 color-mix(in srgb, var(--text-accent) 60%, transparent);
 }
 
 .ff10k-truncated,
@@ -430,7 +446,7 @@
 	font-size: var(--font-ui-smaller);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--color-red);
+	color: var(--text-muted);
 	margin-bottom: 2px;
 }
 
