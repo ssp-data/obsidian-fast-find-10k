@@ -1,7 +1,7 @@
 {
 	"id": "fast-find",
 	"name": "Fast Find 10K",
-	"version": "0.2.3",
+	"version": "0.2.4",
 	"minAppVersion": "1.5.7",
 	"description": "Fast fuzzy search built for large vaults. Titles first, then headings, then content. Finds duplicates, creates missing notes, uses Smart Connections if present.",
 	"author": "Simon Späti",
