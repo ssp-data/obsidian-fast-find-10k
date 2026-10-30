@@ -90,6 +90,8 @@ export interface FastFindSettings {
 	previewOpenMobile: boolean;
 	/** Footer key hints: shown on desktop only (default), always, or never. */
 	keyHints: KeyHintsSetting;
+	/** A ribbon icon (left bar on desktop, the drawer on mobile) that opens the search. */
+	ribbonIcon: boolean;
 	debugByDefault: boolean;
 	logTimings: boolean;
 	keymap: Keymap;
@@ -130,6 +132,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	previewOpen: true,
 	previewOpenMobile: false,
 	keyHints: 'desktop',
+	ribbonIcon: true,
 	debugByDefault: false,
 	logTimings: false,
 	keymap: { ...DEFAULT_KEYMAP },

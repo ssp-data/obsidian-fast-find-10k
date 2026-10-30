@@ -8,6 +8,7 @@ Search now reaches everything in the vault that carries text: frontmatter proper
 - **Bases, canvases and drawings.** `.base`, `.canvas` and `.excalidraw` files are indexed with the file name as title: a canvas becomes a small markdown note (group labels as headings, cards as text, file cards as links), a drawing contributes its text elements. Results carry a small `canvas` / `base` / `drawing` marker; `type:base`, `type:canvas`, `type:drawing`, `type:note` keep one kind.
 - **Preview.** Fenced `mermaid` blocks render as diagrams a quarter second after the selection settles; an Excalidraw PNG/SVG export shows above the drawing's text when the plugin wrote one.
 - **Mobile.** A ✕ at the end of the search line and a swipe to the left close the search.
+- **Ribbon icon.** A search icon in the left ribbon (the drawer on mobile) opens the search with one click, for vaults with no hotkey to spare; Settings → Behaviour turns it off.
 
 **Fixes**
 

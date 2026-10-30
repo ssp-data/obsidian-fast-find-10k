@@ -78,7 +78,7 @@ Then enable "Fast Find 10K" under Settings → Community plugins. Requires Obsid
 
 ## Usage
 
-Commands (bind them to hotkeys in Settings → Hotkeys):
+A ribbon icon (the lines-and-magnifier `text-search` icon, left bar on desktop, the drawer on mobile) opens the search with one click; turn it off under Settings → Behaviour. Commands (bind them to hotkeys in Settings → Hotkeys):
 
 | Command | What it does |
 |---|---|
@@ -122,7 +122,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 - **Indexing**: ignored folders/globs (never indexed; Obsidian "Excluded files" are always honoured), downranked folders (still searchable, score × 0.3), rebuild index.
 - **Ranking**: field weights (title 100, alias 90, h1 105, h2 65, h3 55, tag 30, property 25, link 20, path 15, body 10; a weight of 0 turns the field off; H1 is usually the note's own title and gets a hair more than the file name, but a note matched only in its H1 still sits in the headings tier below every title match), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never), optional words that a query never requires (default `a an the of to in on i`; they still add to the score where they match), abbreviations and synonyms (one group per line, `oss: open source, open-source software`; typing a single-word member also finds the other members, see [Examples](#examples)), German words on at startup (language expansion adds about 400 built-in English ↔ German word pairs and the dictionary note to the abbreviations: `school` finds "Schule Madretsch", `Kinder` finds "children"; off by default, Ctrl+L switches it per session), dictionary note (the path of a note in the vault whose `english: german, german` lines join the abbreviations, reloaded when you edit it).
 - **Semantic**: use Smart Connections embeddings, minimum similarity shown (similar-notes panel, note to note, default 0.70), minimum similarity for semantic results (the semantic tier and the create guard, query to note, default 0.60: a short query embeds further from a note, typical top hits score 0.65–0.8), semantic tier (always, the default: appended after every query, a few milliseconds / only when fewer than five full matches / on demand with Ctrl+S / never).
-- **Behaviour**: create guard, preview open by default (desktop), preview open by default on mobile (off: a "preview" pill toggles it there), key hints in the footer (desktop only / always / never).
+- **Behaviour**: create guard, preview open by default (desktop), preview open by default on mobile (off: a "preview" pill toggles it there), ribbon icon (on), key hints in the footer (desktop only / always / never).
 - **Keys**: every modal binding.
 - **Debug**: "why ranked" by default, log engine timings to the console, clear frecency.
 

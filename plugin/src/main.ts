@@ -28,6 +28,7 @@ export default class FastFindPlugin extends Plugin {
 	private dictionaryLines: string[] = [];
 	/** Language expansion (German list + dictionary note) for this session; Ctrl+L flips it. */
 	languagesActive = false;
+	private ribbonEl: HTMLElement | null = null;
 
 	async onload(): Promise<void> {
 		// one object for the plugin's lifetime: the bridge and the indexer keep a reference
@@ -46,6 +47,7 @@ export default class FastFindPlugin extends Plugin {
 		this.addCommand({ id: 'search-files', name: 'Search file names', callback: () => this.openModal('filesOnly') });
 		this.addCommand({ id: 'search-resume', name: 'Search (resume last)', callback: () => this.openModal('all', this.settings.lastQuery || null) });
 		this.addSettingTab(new FastFindSettingTab(this.app, this));
+		this.applyRibbon();
 
 		this.addCommand({
 			id: 'rebuild-index',
@@ -59,6 +61,16 @@ export default class FastFindPlugin extends Plugin {
 		this.saveTimer = 0;
 		setDebugLogging(this.settings.logTimings);
 		await this.saveData(this.settings);
+	}
+
+	/** Adds or removes the ribbon icon to match the setting (Lucide `text-search`, the plugin's store icon). */
+	applyRibbon(): void {
+		if (this.settings.ribbonIcon && !this.ribbonEl) {
+			this.ribbonEl = this.addRibbonIcon('text-search', 'Fast Find 10K: search', () => void this.openModal('all'));
+		} else if (!this.settings.ribbonIcon && this.ribbonEl) {
+			this.ribbonEl.remove();
+			this.ribbonEl = null;
+		}
 	}
 
 	/** Pushes the ranking settings to the engine (no reindex). */

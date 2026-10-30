@@ -182,6 +182,11 @@ export class FastFindSettingTab extends PluginSettingTab {
 						control: { type: 'toggle', key: 'previewOpenMobile' },
 					},
 					{
+						name: 'Ribbon icon',
+						desc: 'A search icon in the left ribbon (the drawer on mobile) that opens the search, for vaults with no hotkey to spare.',
+						control: { type: 'toggle', key: 'ribbonIcon' },
+					},
+					{
 						name: 'Key hints in the footer',
 						desc: 'The shortcut line under the results. "Desktop only" hides it on phones and tablets, which have no keyboard shortcuts.',
 						control: { type: 'dropdown', key: 'keyHints', options: { desktop: 'Desktop only', always: 'Always', never: 'Never' } },
@@ -260,6 +265,7 @@ export class FastFindSettingTab extends PluginSettingTab {
 		(this.s as unknown as Record<string, unknown>)[key] = value;
 		if (RANKING_KEYS.has(key)) this.saveRanking();
 		else this.save();
+		if (key === 'ribbonIcon') this.plugin.applyRibbon();
 	}
 
 	private async clearFrecency(): Promise<void> {
@@ -485,6 +491,16 @@ export class FastFindSettingTab extends PluginSettingTab {
 				t.setValue(this.s.previewOpenMobile).onChange((v) => {
 					this.s.previewOpenMobile = v;
 					this.save();
+				}),
+			);
+		new Setting(el)
+			.setName('Ribbon icon')
+			.setDesc('A search icon in the left ribbon (the drawer on mobile) that opens the search.')
+			.addToggle((t) =>
+				t.setValue(this.s.ribbonIcon).onChange((v) => {
+					this.s.ribbonIcon = v;
+					this.save();
+					this.plugin.applyRibbon();
 				}),
 			);
 		new Setting(el)
