@@ -123,9 +123,9 @@ Stop words carry the native search away; the three ranked tools agree. This is Q
 ground once embeddings exist: it rewrites the question, searches words and vectors, and has a
 model re-read the top hits.
 
-| Omnisearch | Fast Find 10K |
-|---|---|
-| ![](images/compare/nl-omni.webp) | ![](images/compare/nl-ff10k.webp) |
+| Native | Omnisearch | Fast Find 10K |
+|---|---|---|
+| ![](images/compare/nl-native.webp) | ![](images/compare/nl-omni.webp) | ![](images/compare/nl-ff10k.webp) |
 
 ## Indexing
 
