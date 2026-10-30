@@ -9,32 +9,28 @@
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
-	--ff10k-accent: var(--text-accent);
-	--ff10k-h2: var(--text-title-h2, var(--color-orange));
+	/* Readability: theme colours are blended toward the theme's own text colour, a little in dark
+	   themes (Kanagawa dark H2 4.2:1, faint text 3.3–3.6:1) and more in light ones, whose accents
+	   are often pale (Osaka Jade light: accent 2.0:1, faint 1.8:1). Hue and hierarchy stay. */
+	--ff10k-keep: 80%;
+	--ff10k-faint-keep: 75%;
+	--ff10k-accent: color-mix(in srgb, var(--text-accent) var(--ff10k-keep), var(--text-normal));
+	--ff10k-h1: color-mix(in srgb, var(--text-title-h1, var(--color-red)) var(--ff10k-keep), var(--text-normal));
+	--ff10k-h2: color-mix(in srgb, var(--text-title-h2, var(--color-orange)) var(--ff10k-keep), var(--text-normal));
+	--ff10k-h3: color-mix(in srgb, var(--text-title-h3, var(--color-yellow)) var(--ff10k-keep), var(--text-normal));
+	--ff10k-faint: color-mix(in srgb, var(--text-faint) var(--ff10k-faint-keep), var(--text-normal));
+	/* similar notes (row pill and panel label): the theme's red, toned down by the muted text colour */
+	--ff10k-similar: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 60%, var(--text-muted));
 }
 
-/* Light themes often pick pale accents (Osaka Jade light: 2:1 on its background); blending in the
-   theme's text colour roughly doubles the contrast of hits and headings. Dark themes stay as is. */
 .theme-light .modal.ff10k-modal {
-	--ff10k-accent: color-mix(in srgb, var(--text-accent) 55%, var(--text-normal));
-	--ff10k-h2: color-mix(in srgb, var(--text-title-h2, var(--color-orange)) 55%, var(--text-normal));
+	--ff10k-keep: 55%;
+	--ff10k-faint-keep: 55%;
 }
 
 .theme-light .ff10k-pill.is-active {
 	background: color-mix(in srgb, var(--interactive-accent) 35%, transparent);
 	color: var(--text-normal);
-}
-
-.theme-light .ff10k-h1 {
-	color: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 55%, var(--text-normal));
-}
-
-.theme-light .ff10k-h2 {
-	color: color-mix(in srgb, var(--text-title-h2, var(--color-orange)) 55%, var(--text-normal));
-}
-
-.theme-light .ff10k-h3 {
-	color: color-mix(in srgb, var(--text-title-h3, var(--color-yellow)) 55%, var(--text-normal));
 }
 
 /* Esc closes (footer hint); the close button would sit on top of the status text. */
@@ -85,7 +81,7 @@
 
 .ff10k-status {
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	white-space: nowrap;
 	font-variant-numeric: tabular-nums;
 }
@@ -156,7 +152,7 @@
 	font-size: var(--font-ui-smaller);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 .ff10k-row {
@@ -204,18 +200,18 @@
 
 .ff10k-badge-t3,
 .ff10k-badge-t4 {
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 .ff10k-badge-t5 {
 	border-color: color-mix(in srgb, var(--text-title-h3, var(--color-yellow)) 55%, transparent);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 /* the similar panel shows the details; the pill only hints, in the theme's red, dimmed */
 .ff10k-similar-badge {
 	border-color: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 30%, transparent);
-	color: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 45%, var(--text-faint));
+	color: var(--ff10k-similar);
 }
 
 .ff10k-title {
@@ -245,7 +241,7 @@
 	padding: 0 5px;
 	border-radius: var(--radius-s);
 	border: 1px solid var(--background-modifier-border);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	letter-spacing: 0.02em;
 }
 
@@ -284,7 +280,7 @@
 .ff10k-folder {
 	flex: 0 1000 auto;
 	min-width: 8ch;
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 .ff10k-heading,
@@ -311,13 +307,13 @@
 	padding-left: var(--size-4-8);
 	font-family: var(--font-monospace);
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	overflow-wrap: anywhere; /* one line, wrapping when long */
 }
 
 .ff10k-empty {
 	padding: var(--size-4-3);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 /* Footer key hints */
@@ -351,15 +347,15 @@
 }
 
 .ff10k-h1 {
-	color: var(--text-title-h1, var(--color-red));
+	color: var(--ff10k-h1);
 }
 
 .ff10k-h2 {
-	color: var(--text-title-h2, var(--color-orange));
+	color: var(--ff10k-h2);
 }
 
 .ff10k-h3 {
-	color: var(--text-title-h3, var(--color-yellow));
+	color: var(--ff10k-h3);
 }
 
 .ff10k-code {
@@ -401,7 +397,7 @@
 	pointer-events: auto;
 	padding: 1px var(--size-4-2);
 	border-radius: var(--radius-s);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	background: color-mix(in srgb, var(--background-primary) 70%, transparent);
 	cursor: pointer;
 }
@@ -421,13 +417,13 @@
 	min-width: 3.5ch;
 	margin-right: 1ch;
 	text-align: right;
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	font-variant-numeric: tabular-nums;
 	user-select: none;
 }
 
 .ff10k-gap {
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	text-align: center;
 	user-select: none;
 }
@@ -464,7 +460,7 @@
 
 .ff10k-truncated,
 .ff10k-preview-empty {
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	font-style: italic;
 }
 
@@ -473,7 +469,7 @@
 	font-size: var(--font-ui-smaller);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--text-muted);
+	color: var(--ff10k-similar);
 	margin-bottom: 2px;
 }
 
@@ -512,7 +508,7 @@
 	grid-column: 1 / -1;
 	grid-row: 2;
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 .ff10k-similar-reason {
@@ -521,13 +517,13 @@
 }
 
 .ff10k-similar-none {
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 .ff10k-similar-hint {
 	margin-top: 2px;
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 /* Shortcut cheat-sheet overlay */
@@ -563,7 +559,7 @@
 	font-size: var(--font-ui-smaller);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	margin-bottom: var(--size-4-1);
 }
 
