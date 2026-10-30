@@ -1,6 +1,6 @@
 {
 	"name": "fast-find-10k",
-	"version": "0.2.2",
+	"version": "0.2.3",
 	"description": "Fast fuzzy search built for large vaults.",
 	"main": "dist/main.js",
 	"type": "module",
