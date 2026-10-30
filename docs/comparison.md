@@ -130,15 +130,23 @@ model re-read the top hits.
 ### QMD with embeddings
 
 QMD's semantic modes (`vsearch`, `query`) only work for files that have been embedded, and
-embedding the whole 17,780-file vault on this CPU takes hours (see [Indexing](#indexing)). So
-the semantic runs below use two sub-collections embedded separately: `coffee` (the 49 coffee
-notes) and `dbt` (the 1,171 dbt docs). That favours QMD slightly, since it searches a small,
+embedding is a long background job: `qmd embed` runs a local model over every file once. On
+this machine it had done about 2,800 of the 17,687 files after 50 minutes, so the full-vault
+run was stopped (see [Indexing](#indexing)) and the semantic runs below use two sub-collections
+embedded separately: `coffee` (the 49 coffee notes, 11 s) and `dbt` (the 1,171 dbt docs, which
+the stopped run had already covered). That favours QMD slightly, since it searches a small,
 on-topic set, and it is what you would do too: embed the folders you ask questions about.
+The first `query` call also downloads the reranker and query-expansion models (1.9 GB) and
+loads them; once warm, a hybrid query takes about five seconds here.
+
+On `chocolatey espresso` the vectors mostly return the notes with "espresso" in the title;
+Fast Find's Smart Connections tier picked the beans whose tasting notes mention chocolate.
+On the dbt question both land on *databricks-setup* first; the reranker puts it at 100 %.
 
 | Query | QMD `vsearch` (vectors only) | QMD `query` (expansion + BM25 + vectors + reranker) | Time |
 |---|---|---|---|
-| `chocolatey espresso` (`-c coffee`) | QMD_VSEARCH_COFFEE | QMD_QUERY_COFFEE | QMD_TIME_COFFEE |
-| `how to connect dbt to databricks` (`-c dbt`) | QMD_VSEARCH_DBT | QMD_QUERY_DBT | QMD_TIME_DBT |
+| `chocolatey espresso` (`-c coffee`) | *RÖSTMEISTERIN ESPRESSO* 51 %, *Adrianos Espresso* 46 %, *Espresso dark roast* 46 %, *Ristretto* 42 % | *RÖSTMEISTERIN ESPRESSO* 98 %, *Espresso dark roast* 43 %, *Colombia* 30 %, *Adrianos Espresso* 27 % | vsearch 176 s cold (model load), query 95 s cold (two more models downloaded, 1.9 GB), 4.6 s warm |
+| `how to connect dbt to databricks` (`-c dbt`) | *databricks-setup* 74 %, *productionize-your-dbt-databricks-project* 72 %, *sl-qs* 70 %, *databricks-workflows* 70 % | *databricks-setup* 100 %, *databricks-qs* 63 %, *python-model-configs* 63 %, *get-started-dbt* 62 %, *connect-databricks* 62 % | vsearch 14 s, query 38 s cold, 4.8 s warm |
 
 ## Indexing
 
