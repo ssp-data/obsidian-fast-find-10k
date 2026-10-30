@@ -103,7 +103,7 @@ Nothing in the vault contains "chocolatey".
 | Omnisearch | 0 results | 10 ms |
 | Fast Find 10K | **partial**: every espresso note; then **semantic** (Smart Connections vectors): *Ethiopia* 0.65, *Colombia* 0.65, *Adriano Decaf* 0.64, the coffee notes whose tasting notes say chocolate | 75 ms |
 | QMD (BM25) | no results | 190 ms |
-| QMD (`vsearch`, embeddings) | *pending: embeddings still being generated when this page was written* | |
+| QMD (`vsearch`, embeddings) | see below | |
 
 | Native | Omnisearch | Fast Find 10K (scrolled to the semantic group) |
 |---|---|---|
@@ -117,7 +117,7 @@ Nothing in the vault contains "chocolatey".
 | Omnisearch | *databricks-setup*, *set-up-your-databricks-dbt-project*, *connect-databricks*, *databricks-qs*, *set-up-databricks-oauth* | 127 ms |
 | Fast Find 10K | *databricks-setup*, *connect-databricks*, *databricks-qs*, *get-started-dbt*, *prompt-cookbook* | 70 ms |
 | QMD (BM25) | *Connect Databricks* 96 %, *migrate-from-spark-to-databricks* 96 % | 145 ms |
-| QMD (`query`, hybrid + rerank) | *pending: embeddings still being generated when this page was written* | |
+| QMD (`query`, hybrid + rerank) | see below | |
 
 Stop words carry the native search away; the three ranked tools agree. This is QMD's home
 ground once embeddings exist: it rewrites the question, searches words and vectors, and has a
@@ -127,14 +127,27 @@ model re-read the top hits.
 |---|---|---|
 | ![](images/compare/nl-native.webp) | ![](images/compare/nl-omni.webp) | ![](images/compare/nl-ff10k.webp) |
 
+### QMD with embeddings
+
+QMD's semantic modes (`vsearch`, `query`) only work for files that have been embedded, and
+embedding the whole 17,780-file vault on this CPU takes hours (see [Indexing](#indexing)). So
+the semantic runs below use two sub-collections embedded separately: `coffee` (the 49 coffee
+notes) and `dbt` (the 1,171 dbt docs). That favours QMD slightly, since it searches a small,
+on-topic set, and it is what you would do too: embed the folders you ask questions about.
+
+| Query | QMD `vsearch` (vectors only) | QMD `query` (expansion + BM25 + vectors + reranker) | Time |
+|---|---|---|---|
+| `chocolatey espresso` (`-c coffee`) | QMD_VSEARCH_COFFEE | QMD_QUERY_COFFEE | QMD_TIME_COFFEE |
+| `how to connect dbt to databricks` (`-c dbt`) | QMD_VSEARCH_DBT | QMD_QUERY_DBT | QMD_TIME_DBT |
+
 ## Indexing
 
 | Tool | First index of the 17,780 files | Later starts |
 |---|---|---|
 | Native | none needed (Obsidian's own metadata cache) | instant |
 | Omnisearch | minutes on a vault this size, then cached | from cache |
-| Fast Find 10K | 6–9 s engine time for a full rebuild (`Rebuild index` command) | from the IndexedDB cache, only changed files re-read, about 2 s |
-| QMD | 37 s for the BM25 index; embeddings for all files about an hour on this CPU (roughly 300 files per minute, no GPU) | incremental (`qmd update`) |
+| Fast Find 10K | about 2 s for a full rebuild on a desktop (`Rebuild index` reads every file again; the one run taken while native search was busy indexing reported 6–9 s engine time). The engine indexes in a worker, so a 100k-note vault is still seconds, not minutes | from the IndexedDB cache, only changed files re-read, about 2 s |
+| QMD | 37 s for the BM25 index. Embeddings are a separate, long job: `qmd embed` runs a local model (embeddinggemma 300M) over every file once, about 55 files a minute on this 24-core CPU without a GPU, so roughly five hours for the whole vault. It is resumable and incremental afterwards (`qmd update`, `qmd embed` only touch changed files) | incremental |
 
 ## What each does that the others do not
 
