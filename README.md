@@ -255,7 +255,7 @@ On a 9,385-note / 27 MB vault: warm start about 1.2–1.4 s to fully indexed (se
 
 ## Development
 
-- `make build` (wasm + plugin), `make test` (Rust, golden, typo recall, plugin), `make install VAULT=…`, `make recall VAULT=…`, `make release VERSION=x.y.z` (bumps the version files, builds, commits, tags and creates the GitHub release with `gh`)
+- `make build` (wasm + plugin), `make test` (Rust, golden, typo recall, plugin), `make install VAULT=…`, `make recall VAULT=…`, `make release-notes VERSION=x.y.z` (drafts `RELEASE_NOTES.md` from the commits since the last tag; review and commit), `make release VERSION=x.y.z` (bumps the version files, builds, commits, tags and pushes; the Release workflow publishes with those notes)
 - Build: `cargo build --release` (CLI binary: `target/release/ff10k`)
 - Test: `cargo test --workspace`; plugin: `cd plugin && npm test`
 - Golden: `cargo test -p ff10k-core --features golden --test golden`, or `ff10k golden <vault> <golden.toml>` (exit 1 on failures)
