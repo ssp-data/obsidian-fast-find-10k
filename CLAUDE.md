@@ -7,7 +7,8 @@ name "Fast Find 10K", repo `ssp-data/obsidian-fast-find-10k`, MIT.
 The binding design and every ruling made since are in
 `docs/superpowers/specs/2026-10-26-fast-find-10k-design.md` (§16 lists the rulings in order).
 Read §6 (query, tiers, score) before touching ranking. This file is the short map; the spec is
-the source of truth.
+the source of truth. `docs/architecture.md` is the reader-facing overview (keep it in step when
+the indexer, worker, cache or bridge change).
 
 ## Owner rules (do not drift)
 

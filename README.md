@@ -262,6 +262,9 @@ Everything runs locally and there is no language model involved. Search is a pla
 
 ## Development
 
+How the plugin works (worker, Rust engine, IndexedDB cache, incremental updates, Smart Connections vectors), with diagrams: [docs/architecture.md](docs/architecture.md).
+
+
 - `make build` (wasm + plugin), `make test` (Rust, golden, typo recall, plugin), `make install VAULT=…`, `make recall VAULT=…`, `make release-notes VERSION=x.y.z` (drafts `RELEASE_NOTES.md` from the commits since the last tag; review and commit), `make release VERSION=x.y.z` (bumps the version files, builds, commits, tags and pushes; the Release workflow publishes with those notes)
 - Build: `cargo build --release` (CLI binary: `target/release/ff10k`)
 - Test: `cargo test --workspace`; plugin: `cd plugin && npm test`
