@@ -101,7 +101,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 | ↑ / Ctrl+K | previous result |
 | Alt+J / Alt+K | scroll the preview down / up (Alt rather than Shift so every capital letter stays typable, for note names created with Shift+Enter) |
 | Alt+N / Alt+P (or Alt+Shift+N) | next / previous highlighted match in the preview (the preview header shows `3 / 12 matches`) |
-| Ctrl+M | preview shows only the lines around each match, or the whole note again (clicking the preview header does the same) |
+| Ctrl+M | preview shows only the lines around each match, with line numbers, or the whole note again (clicking the preview header does the same; a `matches` pill on mobile) |
 | Tab | focus the similar-notes panel (Tab again or Esc returns) |
 | Alt+L / Alt+H | vim-style: move into the similar-notes panel on the right / back to the results on the left |
 | Enter | open |

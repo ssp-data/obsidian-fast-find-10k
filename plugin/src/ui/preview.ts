@@ -247,6 +247,8 @@ export class Preview {
 	private token = 0;
 	/** "Matches only": the lines around each match instead of the whole note (session state). */
 	matchesOnly = false;
+	/** Called after `matchesOnly` flips (the mobile pill mirrors it). */
+	onMatchesOnlyChange: ((on: boolean) => void) | null = null;
 	private marks: HTMLElement[] = [];
 	private current = -1;
 	private headEl: HTMLElement | null = null;
@@ -308,6 +310,7 @@ export class Preview {
 	toggleMatchesOnly(): void {
 		this.matchesOnly = !this.matchesOnly;
 		if (this.last) this.render(this.last.text, this.last.hit, this.last.terms);
+		this.onMatchesOnlyChange?.(this.matchesOnly);
 	}
 
 	private renderHead(): void {
@@ -389,6 +392,8 @@ export class Preview {
 			const line = lines[i];
 			const div = frag.createDiv({ cls: line.kind === 'text' ? 'ff10k-line' : `ff10k-line ff10k-${line.kind}` });
 			if (i >= lazyFrom) div.addClass('ff10k-lazy');
+			// matches only: a line-number gutter says where in the note each excerpt sits
+			if (show) div.createSpan({ cls: 'ff10k-ln', text: String(i + 1) });
 			if (line.text === '') div.appendText('\u200b'); // keep empty lines one line tall
 			const image = line.kind === 'text' && this.resolveImage ? imageEmbed(line.text) : null;
 			const src = image ? this.resolveImage!(image, hit.path) : null;

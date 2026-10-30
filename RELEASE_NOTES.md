@@ -6,7 +6,7 @@ Search now reaches everything in the vault that carries text: frontmatter proper
 
 - **Properties are searchable.** Every frontmatter key and value except Obsidian's own (`aliases`, `tags`, `title`, `cssclasses`, `created`) matches in the content tier, shown with a `prop` badge and `Key: value` as context. Filter with Obsidian's syntax: `[Herkunftsland:India]` keeps notes with that value, `[price]` notes that have the key; the `Property (frontmatter)` weight slider tunes it, and 0 turns it off.
 - **Bases, canvases and drawings.** `.base`, `.canvas`, `.excalidraw` and `.excalidraw.md` files are indexed with the file name as title: a canvas becomes a small markdown note (group labels as headings, text cards as paragraphs, file cards as links), a drawing contributes its text elements. Results carry a `canvas`, `base` or `drawing` marker after the title, and `type:note`, `type:base`, `type:canvas` or `type:drawing` keeps one kind.
-- **Matches in the preview.** The preview header counts the highlighted matches in the note (`3 / 12 matches`); `Alt+N` / `Alt+P` jump to the next and previous one, `Ctrl+M` (or a click on the header) shows only the lines around the matches.
+- **Matches in the preview.** The preview header counts the highlighted matches in the note (`3 / 12 matches`); `Alt+N` / `Alt+P` jump to the next and previous one, `Ctrl+M` (or a click on the header, the `matches` pill on mobile) shows only the lines around the matches, each with its line number.
 - **Alt for navigation.** Preview scrolling is `Alt+J` / `Alt+K` and the similar-notes panel `Alt+L` / `Alt+H` (was Shift), so capital letters can be typed again, for example for a note name created with `Shift+Enter`. Saved bindings on the old keys move over automatically; a binding can now list alternatives (`Alt+Shift+N | Alt+P`).
 - **Preview.** Fenced `mermaid` blocks render as diagrams a quarter second after the selection settles; an Excalidraw drawing shows its PNG/SVG export when the plugin wrote one next to it. Everything else stays plain text.
 - **Ribbon icon.** A search icon in the left ribbon (the drawer on mobile) opens the search with one click; turn it off under Settings → Behaviour.
@@ -14,6 +14,7 @@ Search now reaches everything in the vault that carries text: frontmatter proper
 
 **Fixes**
 
+- On mobile the preview stayed empty until a result was tapped; it now shows the first result as on desktop (the same bug hid the preview on desktop with key hints set to never).
 - Opening a result in a new tab or split (`Mod+Enter`, `Mod+Alt+Enter`) now keeps focus on the opened note instead of returning it to the note you came from.
 
 Fast Find 10K is available in Obsidian's Community plugins list; see the README's install section for BRAT pre-releases or building from source.

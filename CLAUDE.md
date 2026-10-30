@@ -71,9 +71,10 @@ the source of truth.
   binding may list alternatives (`Alt+Shift+N | Alt+P`); changed defaults go into
   `KEYMAP_MIGRATIONS` so saved configs follow. The modal swallows
   Ctrl+R / Ctrl+L / Ctrl+C while open; Ctrl+C copies when text is selected, else clears.
-- Mobile (`Platform.isMobile` → `.ff10k-mobile`): one column, input line + pill row (+preview
-  pill, ✕ close, swipe-left closes), preview off and key hints hidden by default, two-tap open
-  when the preview is on, safe-area insets.
+- Mobile (`Platform.isMobile` → `.ff10k-mobile`): one column, input line + pill row (preview and
+  matches pills, ✕ close, swipe-left closes), preview off and key hints hidden by default, two-tap
+  open when the preview is on, safe-area insets. Footer elements are null there: never touch one
+  without `?.` (a throw in the results path silently left the preview empty on mobile).
 - Preview is plain text (speed): image embeds as `<img>`, mermaid fences rendered 250 ms after the
   selection settles, Excalidraw PNG/SVG export shown if present. Nothing else is rendered.
 - Diagnostics only through `debug.ts` (`console.debug`, "Log engine timings"); timers via

@@ -183,6 +183,7 @@ export class FastFindModal extends Modal {
 	private pillAll!: HTMLElement;
 	private pillFiles!: HTMLElement;
 	private pillLang!: HTMLElement;
+	private pillMatches: HTMLElement | null = null;
 	private resultsEl!: HTMLElement;
 	private rowEls: HTMLElement[] = [];
 	private lastTier = -1;
@@ -213,7 +214,8 @@ export class FastFindModal extends Modal {
 	private helpEl!: HTMLElement;
 	/** Pushed while the help overlay is shown (Esc and the help key close it). */
 	private helpScope: Scope | null = null;
-	private openAllHint!: HTMLElement;
+	/** The footer's "open all" hint; null when the footer is hidden (mobile, key hints off). */
+	private openAllHint: HTMLElement | null = null;
 	/** Query to prefill instead of the editor selection ("Search (resume last)"); null or '' = none. */
 	private readonly resume: string | null;
 
@@ -279,6 +281,14 @@ export class FastFindModal extends Modal {
 				this.togglePreview();
 				pillPreview.toggleClass('is-active', this.state.previewOpen);
 			});
+			// "matches": only the lines around each match in the preview (Ctrl+M on desktop);
+			// wired to the preview once it exists (below)
+			const pillMatches = pills.createSpan({ cls: 'ff10k-pill', text: 'matches', attr: { title: 'Preview: matches only / whole note' } });
+			pillMatches.addEventListener('click', () => {
+				this.toggleMatchesOnly(true);
+				pillPreview.toggleClass('is-active', this.state.previewOpen);
+			});
+			this.pillMatches = pillMatches;
 		}
 		this.statusEl = pills.createSpan({ cls: 'ff10k-status' });
 		this.pillAll.addEventListener('click', () => this.setMode('all'));
@@ -299,6 +309,11 @@ export class FastFindModal extends Modal {
 			},
 			(markdown, el) => MarkdownRenderer.render(this.app, markdown, el, this.state.hits[this.state.selected]?.path ?? '', this.renderComponent),
 		);
+		if (this.pillMatches) {
+			const pill = this.pillMatches;
+			pill.toggleClass('is-active', this.preview.matchesOnly);
+			this.preview.onMatchesOnlyChange = (on) => pill.toggleClass('is-active', on);
+		}
 		this.similar = new SimilarPanel(right.createDiv({ cls: 'ff10k-similar' }));
 		this.similar.onOpen((path) => void this.openPath(path));
 		this.resultsEl.addEventListener('scroll', () => {
@@ -572,12 +587,12 @@ export class FastFindModal extends Modal {
 			span.appendText(` ${label}`);
 			if (label === 'open all') this.openAllHint = span;
 		}
-		this.openAllHint.hide();
+		this.openAllHint?.hide();
 	}
 
 	/** The "open all" hint shows only while the shown notes are few enough. */
 	private updateOpenAllHint(): void {
-		this.openAllHint.toggle(openAllTargets(this.state.hits).eligible);
+		this.openAllHint?.toggle(openAllTargets(this.state.hits).eligible);
 	}
 
 	private select(i: number): void {
@@ -790,9 +805,14 @@ export class FastFindModal extends Modal {
 		this.preview.nextMatch(dir);
 	}
 
-	/** Ctrl+M: only the lines around each match, or the whole note. */
-	private toggleMatchesOnly(): void {
-		if (!this.state.previewOpen) return;
+	/** Ctrl+M (or the mobile "matches" pill): only the lines around each match, or the whole
+	 * note. The pill opens a hidden preview first so the tap shows something. */
+	private toggleMatchesOnly(fromPill = false): void {
+		if (!this.state.previewOpen) {
+			if (!fromPill) return;
+			this.togglePreview();
+			if (this.preview.matchesOnly) return;
+		}
 		this.preview.toggleMatchesOnly();
 	}
 

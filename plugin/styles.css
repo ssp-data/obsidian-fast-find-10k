@@ -373,6 +373,16 @@
 	outline-offset: 1px;
 }
 
+.ff10k-ln {
+	display: inline-block;
+	min-width: 3.5ch;
+	margin-right: 1ch;
+	text-align: right;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+	user-select: none;
+}
+
 .ff10k-gap {
 	color: var(--text-faint);
 	text-align: center;
