@@ -49,6 +49,22 @@ One column, pills instead of key hints, a ✕ to close (swipe left works too), t
 
 ![Mobile preview](images/ff10k-mobile-preview.png)
 
+## Theme colours (0.2.4)
+
+The modal takes its colours from the theme and, when it opens, blends each one toward the theme's text colour only as far as it needs to read at 4.5:1. The selected row gets a bar and a tint, the `N similar` pills go quiet, matches in the preview are bold and underlined with a band across their line. Each image shows 0.2.3 above and 0.2.4 below, on the test vault with `pipeline` typed.
+
+![Kanagawa dark, before and after](images/themes/kanagawa-dark.webp)
+
+![Asia Neon dark, before and after](images/themes/asia-neon-dark.webp)
+
+![Asia Neon light, before and after](images/themes/asia-neon-light.webp)
+
+![Fireplace dark, before and after](images/themes/fireplace-dark.webp)
+
+![Fireplace light, before and after](images/themes/fireplace-light.webp)
+
+![Osaka Jade light, before and after: the pale accent is darkened until it reads](images/themes/osaka-jade-light.webp)
+
 ## Why ranked
 
 `Ctrl+R` shows the tier, the matched fields and every score part of each row.

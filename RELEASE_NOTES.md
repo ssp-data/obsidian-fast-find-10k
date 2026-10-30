@@ -14,3 +14,11 @@ A visual release: search and ranking are unchanged from 0.2.3. The modal now tak
 
 - Pale light themes such as Osaka Jade light showed title hits and badges in colours that barely stood out from the background; they are now darkened enough to read.
 - In some dark themes (Kanagawa among them) the selected row was almost indistinguishable from its neighbours, and the active pill's text could vanish against its background; both are visible now.
+
+**Before and after** (0.2.3 above, 0.2.4 below; more themes in [docs/showcase.md](https://github.com/ssp-data/obsidian-fast-find-10k/blob/main/docs/showcase.md#theme-colours-024))
+
+![Kanagawa dark, before and after](https://raw.githubusercontent.com/ssp-data/obsidian-fast-find-10k/main/docs/images/themes/kanagawa-dark.webp)
+
+![Asia Neon light, before and after](https://raw.githubusercontent.com/ssp-data/obsidian-fast-find-10k/main/docs/images/themes/asia-neon-light.webp)
+
+![Osaka Jade light, before and after: the pale accent is darkened until it reads](https://raw.githubusercontent.com/ssp-data/obsidian-fast-find-10k/main/docs/images/themes/osaka-jade-light.webp)
