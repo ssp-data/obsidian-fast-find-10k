@@ -16,6 +16,9 @@ Also see longer Form [YT video](https://youtu.be/jyqBh0pn2Eo) (13 min).
 
 *More screenshots, one per feature: [docs/showcase.md](docs/showcase.md)*
 
+> [!TIP]
+> **Do I need this?** Below about 1,000 notes, native search, the Quick Switcher or Omnisearch serve you well. Fast Find 10K earns its place from a few thousand notes up, when an unranked list of 900 hits stops being useful, and from day one if you want the preview, title-first ranking and typo tolerance. See [the comparison](docs/comparison.md#which-search-for-which-vault).
+
 ## Origin Story
 
 I used Omnisearch for 5+ yearso, plus, and I ran into the 10k limitation of Obsidian. luckly Kepano, the CEO Obsidian [quickly solved](https://bsky.app/profile/stephango.com/post/3mvljvuhwks2p). The problem was that wikilinks starting with `[[` didn't show notes that existed in the vault. I knew it, sometimes they showed, sometimes they didn't, see the video [here]().
@@ -230,36 +233,27 @@ Without Smart Connections the panel uses title overlap only: "👉🏻 Data Engi
 On a 9,385-note / 27 MB vault: warm start about 1.2–1.4 s to fully indexed (searchable after the first 500 notes), engine time per query 4–18 ms in Obsidian, 1–8 ms native. Numbers and method in [docs/perf.md](docs/perf.md).
 
 ## Comparisons to other Searches
-Comparing to OmniSearch and QMD, a CLI outside of Obsidian, and native Obsidian search.
-### Compared with Omnisearch
 
-Same vault, same queries, Omnisearch 1.31.0 with its default fuzziness. First three results each:
+Full write-up with screenshots, one query at a time (a two-word topic, two typos, an abbreviation, a tag, a property, a query that needs meaning, a question), timings and what each tool can do that the others cannot: **[docs/comparison.md](docs/comparison.md)**. The short version, measured on the 17,780-file test vault:
 
-| Query | Fast Find 10K | Omnisearch |
-|---|---|---|
-| `obsidian trouble` | Obsidian Troubleshoot · Obsidian Trouble Tags Plugin · Obsidian (### Troubleshooting) | Obsidian Trouble Tags Plugin · Obsidian Troubleshoot · Vimrc for Obsidian |
-| `obsidian troubelshoot` | Obsidian Troubleshoot · Obsidian (### Troubleshooting) · Vimrc for Obsidian | no results |
-| `oss` | Open Source (alias OSS) · dbt (alias) · OSS git Analytics and insights | OSS git Analytics and insights · Open Source · Podcast Bedag - OSS Data Engineering |
+| | Native search | Omnisearch | Fast Find 10K | QMD |
+|---|---|---|---|---|
+| Ranking | none (by name or date) | one score | tiers: title → headings → content → partial → semantic | BM25 + embeddings + reranker |
+| `kubernets deploymnet` (two typos) | 0 | 0 | the Kubernetes deployment notes | 0 (keyword mode) |
+| `oss` | 10,646 matches, alphabetical | substring hits | *Open source* via the abbreviation group, then `oss` titles | `oss` titles |
+| Tags / properties | `tag:` / `["key":value]` | as words | `#tag` / `[key:value]` | no |
+| Preview / similar notes | snippets / no | snippets / no | full note with match jumps / yes | no (CLI) |
+| Meaning without shared words | no | no | with Smart Connections vectors | yes, its purpose |
+| Query time here | 0.2–2.5 s, streaming | 7–127 ms | 8–75 ms | 0.1–0.3 s keyword, seconds hybrid |
+| Mobile | yes | yes | yes | no |
 
-Recall over the vault's own titles (every note queried by its full title, its first two words, and its title with one letter deleted; the note must be the first hit), a 939-note sample (every 10th note) for both tools. No language expansion or abbreviations were active in any run:
+### When to use which
 
-| Query              | Fast Find 10K (after the recall fixes) | Omnisearch                    |
-| ------------------ | -------------------------------------- | ----------------------------- |
-| full title         | 99.2 % first, 99.9 % in top 5          | 97.8 % first, 100 % in top 5  |
-| first two words    | 61.3 % first, 83.0 % in top 5          | 71.5 % first, 87.4 % in top 5 |
-| one letter deleted | 98.6 % first, 100 % in top 5           | 78.2 % first, 83.8 % in top 5 |
-
-
-The "first two words" row is expected, not a gap: a query such as `RW Data` matches about a hundred notes titled "RW Data …" equally (every word matched, same number of unmatched title words), so which equal note comes first is a tie-break. Fast Find 10K breaks ties by backlinks, then by modification date; Omnisearch's BM25 prefers the shorter document, which happens to agree with the test more often. The note you want is in the top 10 in 88 % of these ambiguous queries, and typing one more word resolves it. Run `ff10k recall <vault>` to get the numbers for your own vault.
-
-
-### How it Compares to QMD
-[QMD](https://github.com/tobi/qmd) by Tobi Lütke is a great command-line search that does "semantic search for your vault", and [this article](https://www.mandalivia.com/obsidian/semantic-search-for-your-obsidian-vault-what-i-tried-and-what-worked/#how-qmds-pipeline-works) compares it against OmniSearch. QMD is a CLI, not an Obsidian plugin, and it's built for a different question: "what do I know about motivation decay?" rather than "where is that note about troubleshooting?". 
-
-For every query it runs a small local LLM to generate two alternative phrasings, searches BM25 and embeddings for all three, merges the six result lists with reciprocal rank fusion, and finally hands the top 30 to a reranker model that reads each note and judges relevance. That's why it finds notes that share no words with your query, and also why a cold query takes around 20 seconds and a warm one a couple of seconds, which is fine for an AI agent but not for typing in a search box. 
-
-Fast Find 10K is the other end of that trade-off: no model in the loop, so it answers on every keystroke in milliseconds, with an inverted index per field (title, aliases, h1-h3, tags, links, path, body), fuzzy matching with typo tolerance, hard tiers so a title hit always beats a body hit, and frecency so the notes I open often float up. The one place we overlap is embeddings: if *Smart Connections* is installed, FF10K uses its local vectors for the similar-notes panel and, when the lexical search comes up nearly empty, as a semantic fallback tier, roughly QMD's vector-only mode on whole notes without the expansion, fusion, or reranking.
-
+> [!TIP]
+> **Under ~1,000 notes:** native search or the [Quick Switcher](https://help.obsidian.md/plugins/quick-switcher) are enough; [Omnisearch](https://github.com/scambier/obsidian-omnisearch) adds fuzzy matching. Fast Find 10K is a day-one choice only if you want the preview, title-first ranking, typo tolerance or the Smart Connections tie-in.
+> **1,000–5,000:** Omnisearch or Fast Find 10K.
+> **Above 5,000:** Fast Find 10K; this is what it was built for.
+> **Questions rather than notes, or feeding an AI agent:** [QMD](https://github.com/tobi/qmd) next to whichever in-Obsidian search you use.
 
 ## LLMs or AI
 Everything here shown is based locally, no AI model used, no local and also no frontier or online model. Smart Connection creates local embeddings in `.smart-env` (small local embedding model), and these we use for showing similar notes. Everything else is just local index based on your notes.
