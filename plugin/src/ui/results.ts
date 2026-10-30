@@ -66,6 +66,15 @@ export function displayHeading(text: string): string {
 		.trim();
 }
 
+/** A short label for files that are not markdown notes (`canvas`, `base`, `drawing`), '' for notes. */
+export function fileKind(path: string): string {
+	const p = path.toLowerCase();
+	if (p.endsWith('.canvas')) return 'canvas';
+	if (p.endsWith('.base')) return 'base';
+	if (p.endsWith('.excalidraw') || p.endsWith('.excalidraw.md')) return 'drawing';
+	return '';
+}
+
 /** The folder for the row: deep paths keep their first and last two segments (`a/…/y/z`), so
  * the specific end stays readable when the row is narrow; the full path is in the row tooltip. */
 export function shortFolder(folder: string, keepEnd = 2): string {
@@ -89,6 +98,8 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 
 	const title = main.createSpan({ cls: 'ff10k-title' });
 	appendHighlighted(title, hit.title, mapTitleRanges(hit.title, hit.titleNorm, hit.titleRanges));
+	const kind = hit.isGhost ? '' : fileKind(hit.path);
+	if (kind) main.createSpan({ cls: 'ff10k-kind', text: kind });
 
 	if (hit.isGhost) {
 		main.createSpan({ cls: 'ff10k-context', text: `not created · linked from ${hit.ghostRefs} notes` });

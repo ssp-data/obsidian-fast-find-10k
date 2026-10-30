@@ -19,7 +19,15 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { mapTitleRanges, shortFolder, displayHeading } = await load('src/ui/results.ts');
+const { mapTitleRanges, shortFolder, displayHeading, fileKind } = await load('src/ui/results.ts');
+
+test('file kind labels for non-note results', () => {
+	assert.equal(fileKind('a/book.canvas'), 'canvas');
+	assert.equal(fileKind('Coffee Beans Base.base'), 'base');
+	assert.equal(fileKind('venn.excalidraw'), 'drawing');
+	assert.equal(fileKind('x/Diagram.excalidraw.md'), 'drawing');
+	assert.equal(fileKind('note.md'), '');
+});
 
 test('headings display their link text, or the host for an empty link text', () => {
 	assert.equal(displayHeading('[](https://gist.github.com/andersevenrud/015e61af2fd264371032763d4ed965b6#vim)vim'), 'gist.github.com vim');

@@ -204,6 +204,18 @@
 	color: var(--color-orange);
 }
 
+/* file type marker for non-note results (canvas, base, drawing) */
+.ff10k-kind {
+	flex: 0 0 auto;
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+	padding: 0 5px;
+	border-radius: var(--radius-s);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-faint);
+	letter-spacing: 0.02em;
+}
+
 .ff10k-expanded-badge {
 	flex: 0 0 auto;
 	font-size: var(--font-ui-smaller);
