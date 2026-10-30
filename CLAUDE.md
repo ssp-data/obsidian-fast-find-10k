@@ -36,6 +36,14 @@ the indexer, worker, cache or bridge change).
 - `manifest.json`, `versions.json` live in the repo root (Obsidian review requirement).
 - `docs/showcase.md`: one screenshot per feature, hot-linked from the GitHub issue that asked
   for it (`scripts/release-images.sh PREV` lists those URLs); the README keeps only three images.
+- `docs/architecture.md`: reader-facing overview (worker, cache, updates, Smart Connections).
+- `docs/comparison.md`: native search vs Omnisearch vs Fast Find vs QMD on the test vault, with
+  screenshots in `docs/images/compare/*.webp` (1600 px, ~100 KB each). Method: Obsidian CLI
+  evals drive each tool (`openGlobalSearch(q)` + `view.resultCountEl`, `omnisearch.api.search`,
+  `plugins['fast-find'].engine.search(q,'all',30,false)`), `dev:screenshot`, `magick -resize
+  1600x -quality 80`. QMD (`npm i -g @tobilu/qmd`, index in `~/.cache/qmd`, collections
+  `testvault`/`coffee`/`dbt`) is a CLI; its embed takes ~1 h on this CPU and may stop with
+  "LLM session expired", just run `qmd embed` again.
 
 ## Engine behaviour that tests guard (see spec §6 for the rules themselves)
 
@@ -87,6 +95,15 @@ the indexer, worker, cache or bridge change).
   old configs still parse. New `Field`s need `FIELDS` in both index.rs and matcher.rs, the
   `dicts` array size, `Weights`, plugin `Weights`/`Field` types and `WEIGHT_NAMES`.
 
+## Settings and keys added since 0.2 (defaults)
+
+- `ribbonIcon` on; `previewOpenMobile` on; `similarPanel` always | desktop | never (title
+  similarity needs no Smart Connections, so the panel is not empty with that plugin off; the
+  create guard shows it regardless); `keyHints` desktop.
+- Keys: Alt+J/K preview scroll, Alt+H/L panels, Alt+N next match, `Alt+Shift+N | Alt+P`
+  previous, Ctrl+M matches-only (line numbers, `matches` pill on mobile). `startState` takes
+  the preview from the platform setting for resume too.
+
 ## Verify before claiming done
 
 ```sh
@@ -103,6 +120,23 @@ golden for each ranking change, and re-run `ff10k recall` for anything touching 
 Live checks against Obsidian go through `obsidian eval` on the plugin's engine API
 (`app.plugins.plugins['fast-find'].engine.search(...)`), never by driving the owner's UI while
 they work. Mobile emulation and `plugin:reload` reload Obsidian; wait for the plugin to come up.
+The owner often uses the test vault while a session runs: an eval can come back empty or a
+search box can be found empty or with extra letters. Verify the state you need (input value,
+result count) right before a screenshot and again after, and retry rather than trust one run.
+`dev:mobile on` when already on does not reload, so a new build needs `plugin:reload`. Promises
+returned from `eval` are not awaited: write to `window.__x` and read it in a second eval.
+Modal internals are reachable as `plugins['fast-find'].modal` (private fields are plain JS).
+
+Shell: `pkill -f "qmd embed"` kills the calling shell too (the pattern matches its own command
+line); use `pgrep -f "bin/qmd [e]mbed"`. Parallel Bash calls share cwd; use absolute paths.
+
+## Releasing
+
+`make release-notes VERSION=x.y.z` drafts `RELEASE_NOTES.md` from commits since the last tag
+(Claude CLI prose, images from closed issues via `scripts/release-images.sh`); review, commit,
+then `make release VERSION=x.y.z` (refuses while the notes are unchanged since the last tag).
+The committed `RELEASE_NOTES.md` always describes the *last* release; do not edit it for
+unreleased work, the owner drafts at release time. Last released: 0.2.2.
 
 ## Open items
 
@@ -111,3 +145,5 @@ they work. Mobile emulation and `plugin:reload` reload Obsidian; wait for the pl
   `docs/recall.md`.
 - Canvas/Excalidraw are previewed as text, not rendered.
 - Worker memory ~164 MB on the 9k-note vault (budget 150), `docs/perf.md`.
+- Unreleased on main after 0.2.2: comparison + architecture docs, retaken screenshots,
+  `similarPanel` setting. Reddit/GitHub asks still open: none known.
