@@ -2,8 +2,10 @@ name: CI
 
 on:
   push:
-    branches: ['**']   # not on tags: the Release workflow builds and tests those
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'   # releases only; branch pushes are tested locally with `make test`
   pull_request:
+  workflow_dispatch:           # run by hand from the Actions tab or `gh workflow run CI`
 
 jobs:
   test:
