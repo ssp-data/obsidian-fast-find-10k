@@ -103,7 +103,7 @@ Nothing in the vault contains "chocolatey".
 | Omnisearch | 0 results | 10 ms |
 | Fast Find 10K | **partial**: every espresso note; then **semantic** (Smart Connections vectors): *Ethiopia* 0.65, *Colombia* 0.65, *Adriano Decaf* 0.64, the coffee notes whose tasting notes say chocolate | 75 ms |
 | QMD (BM25) | no results | 190 ms |
-| QMD (`vsearch`, embeddings) | see below | |
+| QMD (`vsearch`, embeddings) | *RÖSTMEISTERIN ESPRESSO* 51 %, *Adrianos Espresso* 46 %, *Espresso dark roast* 46 %, *Chocolate* (Wikipedia) 43 %; hybrid `query`: *RÖSTMEISTERIN ESPRESSO* 98 %, *Espresso dark roast* 43 %, *Colombia* 30 % | 3.9 s / 3.0 s warm |
 
 | Native | Omnisearch | Fast Find 10K (scrolled to the semantic group) |
 |---|---|---|
@@ -117,7 +117,7 @@ Nothing in the vault contains "chocolatey".
 | Omnisearch | *databricks-setup*, *set-up-your-databricks-dbt-project*, *connect-databricks*, *databricks-qs*, *set-up-databricks-oauth* | 127 ms |
 | Fast Find 10K | *databricks-setup*, *connect-databricks*, *databricks-qs*, *get-started-dbt*, *prompt-cookbook* | 70 ms |
 | QMD (BM25) | *Connect Databricks* 96 %, *migrate-from-spark-to-databricks* 96 % | 145 ms |
-| QMD (`query`, hybrid + rerank) | see below | |
+| QMD (`query`, hybrid + rerank) | *databricks-setup* 100 %, *databricks-qs* 63 %, *python-model-configs* 63 %, *get-started-dbt* 62 %, *connect-databricks* 62 % | 3.3 s warm |
 
 Stop words carry the native search away; the three ranked tools agree. This is QMD's home
 ground once embeddings exist: it rewrites the question, searches words and vectors, and has a
