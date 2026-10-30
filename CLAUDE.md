@@ -33,6 +33,8 @@ the source of truth.
 - `fixtures/vault` + `tests/golden/core.toml`: golden queries (`expect_top`, `expect_in_top`,
   `expect_tier`, `must_not_top3`, `must_not_appear`, `expect_similar_count`).
 - `manifest.json`, `versions.json` live in the repo root (Obsidian review requirement).
+- `docs/showcase.md`: one screenshot per feature, hot-linked from the GitHub issue that asked
+  for it (`scripts/release-images.sh PREV` lists those URLs); the README keeps only three images.
 
 ## Engine behaviour that tests guard (see spec §6 for the rules themselves)
 
