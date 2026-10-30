@@ -225,6 +225,12 @@ The same for `de: data engineering`: alone, `de` is an exact two-letter word and
 
 Without Smart Connections the panel uses title overlap only: "👉🏻 Data Engineering" lists "AI in Data Engineering", "Airflow for Data Engineering", "Data Engineering Glossary" and so on.
 
+## Performance
+
+On a 9,385-note / 27 MB vault: warm start about 1.2–1.4 s to fully indexed (searchable after the first 500 notes), engine time per query 4–18 ms in Obsidian, 1–8 ms native. Numbers and method in [docs/perf.md](docs/perf.md).
+
+## Comparisons to other Searches
+Comparing to OmniSearch and QMD, a CLI outside of Obsidian, and native Obsidian search.
 ### Compared with Omnisearch
 
 Same vault, same queries, Omnisearch 1.31.0 with its default fuzziness. First three results each:
@@ -247,14 +253,18 @@ Recall over the vault's own titles (every note queried by its full title, its fi
 The "first two words" row is expected, not a gap: a query such as `RW Data` matches about a hundred notes titled "RW Data …" equally (every word matched, same number of unmatched title words), so which equal note comes first is a tie-break. Fast Find 10K breaks ties by backlinks, then by modification date; Omnisearch's BM25 prefers the shorter document, which happens to agree with the test more often. The note you want is in the top 10 in 88 % of these ambiguous queries, and typing one more word resolves it. Run `ff10k recall <vault>` to get the numbers for your own vault.
 
 
-### LLMs or AI
+### How it Compares to QMD
+[QMD](https://github.com/tobi/qmd) by Tobi Lütke is a great command-line search that does "semantic search for your vault", and [this article](https://www.mandalivia.com/obsidian/semantic-search-for-your-obsidian-vault-what-i-tried-and-what-worked/#how-qmds-pipeline-works) compares it against OmniSearch. QMD is a CLI, not an Obsidian plugin, and it's built for a different question: "what do I know about motivation decay?" rather than "where is that note about troubleshooting?". 
+
+For every query it runs a small local LLM to generate two alternative phrasings, searches BM25 and embeddings for all three, merges the six result lists with reciprocal rank fusion, and finally hands the top 30 to a reranker model that reads each note and judges relevance. That's why it finds notes that share no words with your query, and also why a cold query takes around 20 seconds and a warm one a couple of seconds, which is fine for an AI agent but not for typing in a search box. 
+
+Fast Find 10K is the other end of that trade-off: no model in the loop, so it answers on every keystroke in milliseconds, with an inverted index per field (title, aliases, h1-h3, tags, links, path, body), fuzzy matching with typo tolerance, hard tiers so a title hit always beats a body hit, and frecency so the notes I open often float up. The one place we overlap is embeddings: if *Smart Connections* is installed, FF10K uses its local vectors for the similar-notes panel and, when the lexical search comes up nearly empty, as a semantic fallback tier, roughly QMD's vector-only mode on whole notes without the expansion, fusion, or reranking.
+
+
+## LLMs or AI
 Everything here shown is based locally, no AI model used, no local and also no frontier or online model. Smart Connection creates local embeddings in `.smart-env` (small local embedding model), and these we use for showing similar notes. Everything else is just local index based on your notes.
  
 Everything runs locally and there is no language model involved. Search is a plain index over your notes: tokens, fields, positions, frecency. No model runs when you type. The one exception is similar notes: if you have Smart Connections installed, FF10K reuses the embeddings it already stored in `.smart-env`. Those come from a small local embedding model (a few hundred MB, not an LLM), and FF10K does not compute them, but instead read and compresses them from Smart Connctions. If Smart Connections isn't installed, nothing changes except the similar-notes panel falls back to title overlap only.
-
-## Performance
-
-On a 9,385-note / 27 MB vault: warm start about 1.2–1.4 s to fully indexed (searchable after the first 500 notes), engine time per query 4–18 ms in Obsidian, 1–8 ms native. Numbers and method in [docs/perf.md](docs/perf.md).
 
 ## Development
 
