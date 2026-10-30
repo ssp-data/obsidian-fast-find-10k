@@ -128,7 +128,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 - **Indexing**: ignored folders/globs (never indexed; Obsidian "Excluded files" are always honoured), downranked folders (still searchable, score × 0.3), rebuild index.
 - **Ranking**: field weights (title 100, alias 90, h1 105, h2 65, h3 55, tag 30, property 25, link 20, path 15, body 10; a weight of 0 turns the field off; H1 is usually the note's own title and gets a hair more than the file name, but a note matched only in its H1 still sits in the headings tier below every title match), fuzzy typo tolerance (off / normal / loose), partial-match tier (when few / always / never), optional words that a query never requires (default `a an the of to in on i`; they still add to the score where they match), abbreviations and synonyms (one group per line, `oss: open source, open-source software`; typing a single-word member also finds the other members, see [Examples](#examples)), German words on at startup (language expansion adds about 400 built-in English ↔ German word pairs and the dictionary note to the abbreviations: `school` finds "Schule Madretsch", `Kinder` finds "children"; off by default, Ctrl+L switches it per session), dictionary note (the path of a note in the vault whose `english: german, german` lines join the abbreviations, reloaded when you edit it).
 - **Semantic**: use Smart Connections embeddings, minimum similarity shown (similar-notes panel, note to note, default 0.70), minimum similarity for semantic results (the semantic tier and the create guard, query to note, default 0.60: a short query embeds further from a note, typical top hits score 0.65–0.8), semantic tier (always, the default: appended after every query, a few milliseconds / only when fewer than five full matches / on demand with Ctrl+S / never).
-- **Behaviour**: create guard, preview open by default (desktop), preview open by default on mobile (on; a "preview" pill toggles it there; both apply to "resume last" too), ribbon icon (on), key hints in the footer (desktop only / always / never).
+- **Behaviour**: create guard, preview open by default (desktop), preview open by default on mobile (on; a "preview" pill toggles it there; both apply to "resume last" too), ribbon icon (on), similar notes panel (always / desktop only / never; title similarity works without Smart Connections, so the panel is not empty when that plugin is off), key hints in the footer (desktop only / always / never).
 - **Keys**: every modal binding.
 - **Debug**: "why ranked" by default, log engine timings to the console, clear frecency.
 
@@ -244,7 +244,7 @@ Full write-up with screenshots, one query at a time (a two-word topic, two typos
 | Tags / properties | `tag:` / `["key":value]` | as words | `#tag` / `[key:value]` | no |
 | Preview / similar notes | snippets / no | snippets / no | full note with match jumps / yes | no (CLI) |
 | Meaning without shared words | no | no | with Smart Connections vectors | yes, its purpose |
-| Query time here | 0.2–2.5 s, streaming | 7–127 ms | 8–75 ms | 0.1–0.3 s keyword, seconds hybrid |
+| Query time here | 0.2–2.5 s, streaming | 7–127 ms | 8–75 ms | 0.1–0.3 s keyword, 3–7 s hybrid once warm |
 | Mobile | yes | yes | yes | no |
 
 ### When to use which
@@ -261,6 +261,9 @@ Everything here shown is based locally, no AI model used, no local and also no f
 Everything runs locally and there is no language model involved. Search is a plain index over your notes: tokens, fields, positions, frecency. No model runs when you type. The one exception is similar notes: if you have Smart Connections installed, FF10K reuses the embeddings it already stored in `.smart-env`. Those come from a small local embedding model (a few hundred MB, not an LLM), and FF10K does not compute them, but instead read and compresses them from Smart Connctions. If Smart Connections isn't installed, nothing changes except the similar-notes panel falls back to title overlap only.
 
 ## Development
+
+How the plugin works (worker, Rust engine, IndexedDB cache, incremental updates, Smart Connections vectors), with diagrams: [docs/architecture.md](docs/architecture.md).
+
 
 - `make build` (wasm + plugin), `make test` (Rust, golden, typo recall, plugin), `make install VAULT=…`, `make recall VAULT=…`, `make release-notes VERSION=x.y.z` (drafts `RELEASE_NOTES.md` from the commits since the last tag; review and commit), `make release VERSION=x.y.z` (bumps the version files, builds, commits, tags and pushes; the Release workflow publishes with those notes)
 - Build: `cargo build --release` (CLI binary: `target/release/ff10k`)

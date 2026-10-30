@@ -111,6 +111,10 @@
 	background: rgba(var(--color-red-rgb), 0.05);
 }
 
+.ff10k-no-similar .ff10k-similar {
+	display: none;
+}
+
 .ff10k-preview-hidden .ff10k-right {
 	display: none;
 }

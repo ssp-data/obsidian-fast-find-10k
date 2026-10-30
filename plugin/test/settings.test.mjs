@@ -175,6 +175,9 @@ test('languages: empty by default, saved list kept, only sent while language exp
 	assert.equal(DEFAULT_SETTINGS.languages.length, 0);
 	assert.equal(DEFAULT_KEYMAP.toggleLanguages, 'Ctrl+L');
 	assert.equal(DEFAULT_SETTINGS.previewOpenMobile, true);
+	assert.equal(DEFAULT_SETTINGS.similarPanel, 'always');
+	assert.equal(mergeSettings({ similarPanel: 'desktop' }).similarPanel, 'desktop');
+	assert.equal(mergeSettings({ similarPanel: 'bogus' }).similarPanel, 'always');
 	assert.equal(DEFAULT_SETTINGS.keyHints, 'desktop');
 	assert.equal(DEFAULT_SETTINGS.ribbonIcon, true);
 	assert.equal(mergeSettings({ ribbonIcon: false }).ribbonIcon, false);
