@@ -7,7 +7,7 @@ import { type App, Notice, Platform, PluginSettingTab, requireApiVersion, Settin
 import { validateBinding } from './keys';
 import type FastFindPlugin from './main';
 import type { PartialMode, Weights } from './protocol';
-import { DEFAULT_KEYMAP, DEFAULT_WEIGHTS, type FuzzySetting, type KeyHintsSetting, type Keymap, type SemanticSetting } from './settings';
+import { DEFAULT_KEYMAP, DEFAULT_WEIGHTS, type FuzzySetting, type KeyHintsSetting, type Keymap, type SemanticSetting, type SimilarPanelSetting } from './settings';
 import { helpGroups } from './ui/help';
 
 const WEIGHT_NAMES: Record<keyof Weights, string> = {
@@ -185,6 +185,11 @@ export class FastFindSettingTab extends PluginSettingTab {
 						name: 'Ribbon icon',
 						desc: 'A search icon in the left ribbon (the drawer on mobile) that opens the search, for vaults with no hotkey to spare.',
 						control: { type: 'toggle', key: 'ribbonIcon' },
+					},
+					{
+						name: 'Similar notes panel',
+						desc: 'The "similar notes · possible duplicates" panel under the preview and the "N similar" pill on results. Title similarity always; Smart Connections adds vector neighbours. "Desktop only" hides it on phones and tablets.',
+						control: { type: 'dropdown', key: 'similarPanel', options: { always: 'Always', desktop: 'Desktop only', never: 'Never' } },
 					},
 					{
 						name: 'Key hints in the footer',
@@ -502,6 +507,18 @@ export class FastFindSettingTab extends PluginSettingTab {
 					this.save();
 					this.plugin.applyRibbon();
 				}),
+			);
+		new Setting(el)
+			.setName('Similar notes panel')
+			.setDesc('The "similar notes · possible duplicates" panel and the "N similar" pill. "Desktop only" hides them on phones and tablets.')
+			.addDropdown((d) =>
+				d
+					.addOptions({ always: 'Always', desktop: 'Desktop only', never: 'Never' })
+					.setValue(this.s.similarPanel)
+					.onChange((v) => {
+						this.s.similarPanel = v as SimilarPanelSetting;
+						this.save();
+					}),
 			);
 		new Setting(el)
 			.setName('Key hints in the footer')

@@ -84,7 +84,7 @@ export function shortFolder(folder: string, keepEnd = 2): string {
 }
 
 /** Fills `el` (an empty row div) with the hit's badge, title, context and pills. */
-export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
+export function renderRow(el: HTMLElement, hit: Hit, selected: boolean, showSimilar = true): void {
 	el.addClass('ff10k-row');
 	el.toggleClass('is-selected', selected);
 	el.toggleClass('ff10k-ghost', hit.isGhost);
@@ -115,7 +115,7 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean): void {
 		if (folder) main.createSpan({ cls: 'ff10k-folder', text: shortFolder(folder) });
 	}
 	if (hit.expanded) main.createSpan({ cls: 'ff10k-expanded-badge', text: 'via word list' });
-	if (hit.similarCount > 0) main.createSpan({ cls: 'ff10k-similar-badge', text: `${hit.similarCount} similar` });
+	if (showSimilar && hit.similarCount > 0) main.createSpan({ cls: 'ff10k-similar-badge', text: `${hit.similarCount} similar` });
 
 	const why = formatWhy(hit);
 	if (why) el.createDiv({ cls: 'ff10k-debug', text: why });

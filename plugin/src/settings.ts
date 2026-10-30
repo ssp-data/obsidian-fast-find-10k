@@ -8,6 +8,8 @@ export type FuzzySetting = 'off' | 'normal' | 'loose';
 /** Semantic tier: automatically when few lexical hits (and on Ctrl+S), only on Ctrl+S, or never. */
 export type SemanticSetting = 'always' | 'auto' | 'onDemand' | 'never';
 export type KeyHintsSetting = 'desktop' | 'always' | 'never';
+/** Where the similar-notes panel (and the `N similar` pill) is shown. */
+export type SimilarPanelSetting = 'always' | 'desktop' | 'never';
 
 /** Modal key bindings as `Mod+Alt+Enter` style strings (`Mod` = Cmd on macOS, Ctrl elsewhere). */
 export interface Keymap {
@@ -98,6 +100,8 @@ export interface FastFindSettings {
 	previewOpenMobile: boolean;
 	/** Footer key hints: shown on desktop only (default), always, or never. */
 	keyHints: KeyHintsSetting;
+	/** Similar-notes panel: everywhere (default), desktop only (saves space on a phone), or never. */
+	similarPanel: SimilarPanelSetting;
 	/** A ribbon icon (left bar on desktop, the drawer on mobile) that opens the search. */
 	ribbonIcon: boolean;
 	debugByDefault: boolean;
@@ -140,6 +144,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	previewOpen: true,
 	previewOpenMobile: true,
 	keyHints: 'desktop',
+	similarPanel: 'always',
 	ribbonIcon: true,
 	debugByDefault: false,
 	logTimings: false,
@@ -165,6 +170,7 @@ const FUZZY_VALUES: readonly FuzzySetting[] = ['off', 'normal', 'loose'];
 const PARTIAL_VALUES: readonly PartialMode[] = ['whenFew', 'always', 'never'];
 const SEMANTIC_VALUES: readonly SemanticSetting[] = ['always', 'auto', 'onDemand', 'never'];
 const KEY_HINTS_VALUES: readonly KeyHintsSetting[] = ['desktop', 'always', 'never'];
+const SIMILAR_PANEL_VALUES: readonly SimilarPanelSetting[] = ['always', 'desktop', 'never'];
 
 /** `v` when it is one of `allowed`, else `fallback`. */
 function oneOf<T extends string>(v: T, allowed: readonly T[], fallback: T): T {
@@ -194,6 +200,7 @@ export function mergeSettings(saved: unknown): FastFindSettings {
 	s.partial = oneOf(s.partial, PARTIAL_VALUES, d.partial);
 	s.semantic = oneOf(s.semantic, SEMANTIC_VALUES, d.semantic);
 	s.keyHints = oneOf(s.keyHints, KEY_HINTS_VALUES, d.keyHints);
+	s.similarPanel = oneOf(s.similarPanel, SIMILAR_PANEL_VALUES, d.similarPanel);
 	s.fewThreshold = clamp(s.fewThreshold, 1, 50, d.fewThreshold, true);
 	s.minSimilarity = clamp(s.minSimilarity, 0.5, 0.95, d.minSimilarity);
 	s.semanticMinSimilarity = clamp(s.semanticMinSimilarity, 0.3, 0.95, d.semanticMinSimilarity);

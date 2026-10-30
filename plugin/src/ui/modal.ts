@@ -316,6 +316,7 @@ export class FastFindModal extends Modal {
 			this.preview.onMatchesOnlyChange = (on) => pill.toggleClass('is-active', on);
 		}
 		this.similar = new SimilarPanel(right.createDiv({ cls: 'ff10k-similar' }));
+		this.modalEl.toggleClass('ff10k-no-similar', !this.similarOn());
 		this.similar.onOpen((path) => void this.openPath(path));
 		this.resultsEl.addEventListener('scroll', () => {
 			const r = this.resultsEl;
@@ -535,7 +536,7 @@ export class FastFindModal extends Modal {
 				this.lastTier = hit.tier;
 			}
 			const row = this.resultsEl.createDiv();
-			renderRow(row, hit, i === this.state.selected);
+			renderRow(row, hit, i === this.state.selected, this.similarOn());
 			row.addEventListener('click', () => {
 				// Mobile with the preview on: the first tap selects (and previews) the row, a tap on
 				// the selected row opens it. Everywhere else a click opens at once.
@@ -629,13 +630,21 @@ export class FastFindModal extends Modal {
 			return;
 		}
 		void this.preview.show(engine, hit, queryTerms(this.state.query));
-		void this.similar.show(engine, hit, this.plugin.settings.minSimilarity, this.plugin.bridge?.hasVectors() ?? false);
+		if (this.similarOn()) void this.similar.show(engine, hit, this.plugin.settings.minSimilarity, this.plugin.bridge?.hasVectors() ?? false);
+		else this.similar.clear();
+	}
+
+	/** The similar-notes panel and pill, per the setting and platform. The create guard shows the
+	 * panel regardless, since its candidates are the whole point of the guard. */
+	private similarOn(): boolean {
+		const s = this.plugin.settings.similarPanel;
+		return s === 'always' || (s === 'desktop' && !Platform.isMobile);
 	}
 
 	/** Tab: keyboard focus into the similar panel; its own scope handles move/open/leave.
 	 * In the create guard the same scope also confirms creation. */
 	private enterSimilar(km: Keymap, guard = false): void {
-		if (this.similarScope || (!guard && !this.state.previewOpen) || !this.similar.focus()) return;
+		if (this.similarScope || (!guard && (!this.state.previewOpen || !this.similarOn())) || !this.similar.focus()) return;
 		const scope = new Scope(this.scope);
 		const bind = (spec: string, fn: () => void) => {
 			for (const part of splitSpecs(spec)) {
@@ -675,6 +684,7 @@ export class FastFindModal extends Modal {
 		this.inputEl.focus();
 		if (this.guard) {
 			this.guard = null;
+			this.modalEl.toggleClass('ff10k-no-similar', !this.similarOn());
 			this.modalEl.toggleClass('ff10k-preview-hidden', !this.state.previewOpen);
 			this.schedulePaint();
 		}
@@ -726,6 +736,7 @@ export class FastFindModal extends Modal {
 				window.cancelAnimationFrame(this.paintFrame);
 				this.guard = { name, ghost };
 				this.modalEl.removeClass('ff10k-preview-hidden');
+				this.modalEl.removeClass('ff10k-no-similar');
 				this.similar.showGuard(items);
 				this.enterSimilar(this.plugin.settings.keymap, true);
 			},
