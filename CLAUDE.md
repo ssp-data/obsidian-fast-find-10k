@@ -66,7 +66,10 @@ the source of truth.
 ## Plugin behaviour worth knowing
 
 - Keys are a keymap (`settings.ts` `DEFAULT_KEYMAP`); every action appears once in `ui/help.ts`
-  groups (test enforces it), in the footer hints and in the Keys settings. The modal swallows
+  groups (test enforces it), in the footer hints and in the Keys settings. Navigation defaults use
+  Alt (J/K preview, H/L panels, N/P matches), never Shift+letter: capitals must stay typable. A
+  binding may list alternatives (`Alt+Shift+N | Alt+P`); changed defaults go into
+  `KEYMAP_MIGRATIONS` so saved configs follow. The modal swallows
   Ctrl+R / Ctrl+L / Ctrl+C while open; Ctrl+C copies when text is selected, else clears.
 - Mobile (`Platform.isMobile` → `.ff10k-mobile`): one column, input line + pill row (+preview
   pill, ✕ close, swipe-left closes), preview off and key hints hidden by default, two-tap open

@@ -7,7 +7,7 @@ import type FastFindPlugin from '../main';
 import { debugLog } from '../debug';
 import type { Hit, Mode, SearchResponse, SemanticHit } from '../protocol';
 import type { EngineClient } from '../engine-client';
-import { keyLabel as keyLabelFor, parseKeySpec } from '../keys';
+import { keyLabel as keyLabelFor, parseKeySpec, splitSpecs } from '../keys';
 import type { FastFindSettings, Keymap } from '../settings';
 import type { SmartConnectionsBridge } from '../smart-connections-bridge';
 import { Preview, queryTerms } from './preview';
@@ -369,17 +369,23 @@ export class FastFindModal extends Modal {
 			clearQuery: () => this.clearQuery(),
 		};
 		const bind = (spec: string, fn: () => void) => {
-			const k = parseKeySpec(spec);
-			if (!k) return console.warn('Fast Find 10K: invalid key binding', spec);
-			this.scope.register(k.modifiers, k.key, swallowKey(fn));
+			for (const part of splitSpecs(spec)) {
+				const k = parseKeySpec(part);
+				if (!k) {
+					console.warn('Fast Find 10K: invalid key binding', part);
+					continue;
+				}
+				this.scope.register(k.modifiers, k.key, swallowKey(fn));
+			}
 		};
 		for (const name of Object.keys(actions) as (keyof Keymap)[]) {
 			if (name === 'clearQuery') continue;
 			bind(km[name], actions[name]);
 		}
 		// clearQuery passes through (copy) while text is selected in the field
-		const clear = parseKeySpec(km.clearQuery);
-		if (clear) {
+		for (const part of splitSpecs(km.clearQuery)) {
+			const clear = parseKeySpec(part);
+			if (!clear) continue;
 			this.scope.register(clear.modifiers, clear.key, (evt) => {
 				const i = this.inputEl;
 				if (document.activeElement === i && i.selectionStart !== i.selectionEnd) return true;
@@ -616,12 +622,14 @@ export class FastFindModal extends Modal {
 		if (this.similarScope || (!guard && !this.state.previewOpen) || !this.similar.focus()) return;
 		const scope = new Scope(this.scope);
 		const bind = (spec: string, fn: () => void) => {
-			const k = parseKeySpec(spec);
-			if (k)
-				scope.register(k.modifiers, k.key, () => {
-					fn();
-					return false;
-				});
+			for (const part of splitSpecs(spec)) {
+				const k = parseKeySpec(part);
+				if (k)
+					scope.register(k.modifiers, k.key, () => {
+						fn();
+						return false;
+					});
+			}
 		};
 		const leave = () => this.leaveSimilar();
 		if (guard) {
@@ -770,7 +778,7 @@ export class FastFindModal extends Modal {
 		this.search();
 	}
 
-	/** Shift+J / Shift+K: the preview by half its visible height; nothing while it is hidden. */
+	/** Alt+J / Alt+K: the preview by half its visible height; nothing while it is hidden. */
 	private scrollPreview(dir: 1 | -1): void {
 		if (!this.state.previewOpen) return;
 		this.previewEl.scrollBy({ top: (dir * this.previewEl.clientHeight) / 2 });
@@ -836,8 +844,10 @@ export class FastFindModal extends Modal {
 			return false;
 		};
 		scope.register([], 'Escape', hide);
-		const k = parseKeySpec(this.plugin.settings.keymap.showHelp);
-		if (k) scope.register(k.modifiers, k.key, hide);
+		for (const part of splitSpecs(this.plugin.settings.keymap.showHelp)) {
+			const k = parseKeySpec(part);
+			if (k) scope.register(k.modifiers, k.key, hide);
+		}
 		this.helpScope = scope;
 		this.app.keymap.pushScope(scope);
 	}

@@ -9,7 +9,7 @@ async function load(entry) {
 }
 
 const { mergeSettings, settingsToEngineConfig, migrateKeymap, parseDictionaryLines, DEFAULT_SETTINGS, DEFAULT_KEYMAP } = await load('src/settings.ts');
-const { parseKeySpec, validateBinding, keyLabel, conflicts } = await load('src/keys.ts');
+const { parseKeySpec, validateBinding, keyLabel, conflicts, splitSpecs } = await load('src/keys.ts');
 const { helpGroups, helpNotes } = await load('src/ui/help.ts');
 
 test('merge: nothing saved gives the defaults (fresh copies)', () => {
@@ -83,7 +83,7 @@ test('merge: a missing weight or key keeps its default, saved ones win', () => {
 	assert.equal(s.weights.alias, 90);
 	assert.equal(s.keymap.open, 'Ctrl+O');
 	assert.equal(s.keymap.openTab, 'Mod+Enter');
-	assert.equal(s.keymap.previewDown, 'Shift+J');
+	assert.equal(s.keymap.previewDown, 'Alt+J');
 	assert.equal(s.fuzzy, 'loose');
 	assert.equal(s.lastQuery, 'abc');
 });
@@ -180,11 +180,11 @@ test('languages: empty by default, saved list kept, only sent while language exp
 	assert.equal(mergeSettings({ ribbonIcon: false }).ribbonIcon, false);
 	assert.equal(mergeSettings({ keyHints: 'sometimes' }).keyHints, 'desktop');
 	assert.equal(mergeSettings({ keyHints: 'never' }).keyHints, 'never');
-	assert.equal(DEFAULT_KEYMAP.panelRight, 'Shift+L');
-	assert.equal(DEFAULT_KEYMAP.panelLeft, 'Shift+H');
+	assert.equal(DEFAULT_KEYMAP.panelRight, 'Alt+L');
+	assert.equal(DEFAULT_KEYMAP.panelLeft, 'Alt+H');
 	assert.equal(DEFAULT_KEYMAP.clearQuery, 'Ctrl+C');
 	assert.equal(DEFAULT_KEYMAP.nextMatch, 'Alt+N');
-	assert.equal(DEFAULT_KEYMAP.prevMatch, 'Alt+Shift+N');
+	assert.equal(DEFAULT_KEYMAP.prevMatch, 'Alt+Shift+N | Alt+P');
 	assert.equal(DEFAULT_KEYMAP.toggleMatchesOnly, 'Ctrl+M');
 });
 
@@ -221,6 +221,33 @@ test('why ranked defaults to Ctrl+R; a saved binding keeps its value', () => {
 	assert.equal(mergeSettings({ keymap: { toggleDebug: 'Ctrl+/' } }).keymap.toggleDebug, 'Ctrl+/');
 });
 
+test('bindings with alternatives: split, labelled, validated and bound without clashes', () => {
+	assert.deepEqual(splitSpecs('Alt+Shift+N | Alt+P'), ['Alt+Shift+N', 'Alt+P']);
+	assert.deepEqual(splitSpecs(' Alt+P '), ['Alt+P']);
+	assert.equal(keyLabel('Alt+Shift+N | Alt+P', false), 'Alt+Shift+N / Alt+P');
+	const km = { ...DEFAULT_KEYMAP };
+	assert.equal(validateBinding(km, 'prevMatch', 'Alt+Shift+N | Alt+P', false), null);
+	assert.match(validateBinding(km, 'prevMatch', 'Alt+P | Alt+N', false), /already used by nextMatch/);
+	assert.match(validateBinding(km, 'prevMatch', 'Alt+P | Alt+P', false), /listed twice/);
+	assert.match(validateBinding(km, 'prevMatch', 'Alt+P | Bogus+X', false), /invalid key/);
+	assert.deepEqual(conflicts(km, false), []);
+	assert.deepEqual(conflicts({ ...km, openAll: 'Alt+P' }, false), [['openAll', 'prevMatch']]);
+});
+
+test('keymap migration: old defaults move to the new ones (Shift+J/K/L/H → Alt, Ctrl+/ → Ctrl+R, prevMatch gains Alt+P)', () => {
+	const old = { ...DEFAULT_KEYMAP, previewDown: 'Shift+J', previewUp: 'Shift+K', panelRight: 'Shift+L', panelLeft: 'Shift+H', prevMatch: 'Alt+Shift+N' };
+	assert.equal(migrateKeymap(old, false), true);
+	assert.deepEqual([old.previewDown, old.previewUp, old.panelRight, old.panelLeft, old.prevMatch], ['Alt+J', 'Alt+K', 'Alt+L', 'Alt+H', 'Alt+Shift+N | Alt+P']);
+	assert.equal(migrateKeymap(old, false), false, 'idempotent');
+	// a user binding on the new key keeps the old one in place
+	const taken = { ...DEFAULT_KEYMAP, previewDown: 'Shift+J', openAll: 'Alt+J' };
+	migrateKeymap(taken, false);
+	assert.equal(taken.previewDown, 'Shift+J');
+	// a user's own choice is never touched
+	const custom = { ...DEFAULT_KEYMAP, previewDown: 'Ctrl+Shift+J' };
+	assert.equal(migrateKeymap(custom, false), false);
+});
+
 test('keymap migration: the old why-ranked default Ctrl+/ becomes Ctrl+R once, unless Ctrl+R is taken', () => {
 	const old = mergeSettings({ keymap: { toggleDebug: 'Ctrl+/' } }).keymap;
 	assert.equal(migrateKeymap(old, false), true);
@@ -255,17 +282,18 @@ test('help overlay: every action once, in its group, with its current binding', 
 	const row = (a) => groups.flatMap((g) => g.rows).find((r) => r.action === a);
 	assert.deepEqual(row('openTab').keys, ['Ctrl+T']);
 	assert.deepEqual(row('moveDown').keys, ['Ctrl+J', 'ArrowDown']);
-	assert.deepEqual(row('previewDown').keys, ['Shift+J']);
+	assert.deepEqual(row('previewDown').keys, ['Alt+J']);
+	assert.deepEqual(row('prevMatch').keys, ['Alt+Shift+N', 'Alt+P']);
 	assert.equal(groups.find((g) => g.title === 'Open').rows.some((r) => r.action === 'openAll'), true);
 	assert.equal(groups.find((g) => g.title === 'Help').rows.some((r) => r.action === 'showHelp'), true);
 	assert.deepEqual(row('close').keys, ['Escape']);
 });
 
 test('help overlay: a Shift+letter binding notes that the capital letter cannot be typed', () => {
-	const notes = helpNotes(DEFAULT_KEYMAP, false);
+	assert.deepEqual(helpNotes(DEFAULT_KEYMAP, false), [], 'the defaults take no capital letter');
+	const notes = helpNotes({ ...DEFAULT_KEYMAP, previewDown: 'Shift+J', previewUp: 'Shift+K' }, false);
 	assert.equal(notes.length, 1);
-	assert.match(notes[0], /Shift\+J, Shift\+K, Shift\+L, Shift\+H/);
-	assert.match(notes[0], /capital J, K, L, H/);
+	assert.match(notes[0], /Shift\+J, Shift\+K/);
+	assert.match(notes[0], /capital J, K/);
 	assert.match(notes[0], /Alt\+J/);
-	assert.deepEqual(helpNotes({ ...DEFAULT_KEYMAP, previewDown: 'Alt+J', previewUp: 'Alt+K', panelRight: 'Alt+L', panelLeft: 'Alt+H' }, false), []);
 });

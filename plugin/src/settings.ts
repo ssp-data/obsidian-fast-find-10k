@@ -50,22 +50,23 @@ export const DEFAULT_KEYMAP: Keymap = {
 	// Ctrl+R is Obsidian's "Reload app"; the modal swallows it while open
 	toggleDebug: 'Ctrl+R',
 	focusSimilar: 'Tab',
-	previewDown: 'Shift+J',
-	previewUp: 'Shift+K',
+	// Alt for preview/panel navigation keeps every capital letter typable in the query
+	previewDown: 'Alt+J',
+	previewUp: 'Alt+K',
 	showHelp: 'Ctrl+Shift+/',
 	// Ctrl+Shift+Enter is createTab (Mod+Shift+Enter) off macOS
 	openAll: 'Alt+Shift+Enter',
 	// Ctrl+L is Obsidian's editor "toggle checkbox"; the modal swallows it while open
 	toggleLanguages: 'Ctrl+L',
 	// vim h/l: similar panel on the right, results on the left (Tab still toggles)
-	panelRight: 'Shift+L',
-	panelLeft: 'Shift+H',
+	panelRight: 'Alt+L',
+	panelLeft: 'Alt+H',
 	// clears the query (the last query is still there for "Search (resume last)"); with text
 	// selected in the field it stays the copy shortcut
 	clearQuery: 'Ctrl+C',
 	// preview: jump between highlighted matches (vim n / N), and "matches only"
 	nextMatch: 'Alt+N',
-	prevMatch: 'Alt+Shift+N',
+	prevMatch: 'Alt+Shift+N | Alt+P',
 	toggleMatchesOnly: 'Ctrl+M',
 };
 
@@ -206,12 +207,26 @@ export function mergeSettings(saved: unknown): FastFindSettings {
 	return s;
 }
 
-/** Moves a saved why-ranked binding still on the old default `Ctrl+/` to the new `Ctrl+R`,
- * unless another saved binding already uses Ctrl+R. True when it changed `km` (then save). */
+/** Old defaults and what they became; a saved binding still on the old default moves to the
+ * new one unless another saved binding already uses it. */
+const KEYMAP_MIGRATIONS: [keyof Keymap, string, string][] = [
+	['toggleDebug', 'Ctrl+/', 'Ctrl+R'],
+	['previewDown', 'Shift+J', 'Alt+J'],
+	['previewUp', 'Shift+K', 'Alt+K'],
+	['panelRight', 'Shift+L', 'Alt+L'],
+	['panelLeft', 'Shift+H', 'Alt+H'],
+	['prevMatch', 'Alt+Shift+N', 'Alt+Shift+N | Alt+P'],
+];
+
+/** Applies `KEYMAP_MIGRATIONS`; true when it changed `km` (then save). */
 export function migrateKeymap(km: Keymap, isMac: boolean): boolean {
-	if (km.toggleDebug !== 'Ctrl+/' || validateBinding(km, 'toggleDebug', 'Ctrl+R', isMac) !== null) return false;
-	km.toggleDebug = 'Ctrl+R';
-	return true;
+	let changed = false;
+	for (const [action, old, now] of KEYMAP_MIGRATIONS) {
+		if (km[action] !== old || validateBinding(km, action, now, isMac) !== null) continue;
+		km[action] = now;
+		changed = true;
+	}
+	return changed;
 }
 
 /** The abbreviation lines of a dictionary note: lines with a `:` (list markers and surrounding

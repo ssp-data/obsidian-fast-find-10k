@@ -1,6 +1,6 @@
 // Shortcut cheat-sheet overlay of the modal: every action with its current binding, grouped.
 
-import { keyLabel } from '../keys';
+import { keyLabel, splitSpecs } from '../keys';
 import type { Keymap } from '../settings';
 
 export interface HelpRow {
@@ -31,16 +31,16 @@ export function helpGroups(km: Keymap): HelpGroup[] {
 		title,
 		rows: rows.map(([action, label]) => {
 			const fixed = FIXED[action];
-			const keys = action === 'close' ? [] : [km[action]];
+			const keys = action === 'close' ? [] : splitSpecs(km[action]);
 			return { action, label, keys: fixed ? [...keys, fixed] : keys };
 		}),
 	}));
 }
 
 /** Notes under the shortcut grid: a `Shift+<letter>` binding takes that capital letter away from
- * the query (the defaults Shift+J / Shift+K scroll the preview). */
+ * the query (the defaults use Alt for navigation so none does). */
 export function helpNotes(km: Keymap, isMac: boolean): string[] {
-	const shifted = [...new Set(Object.values(km).filter((k) => /^Shift\+[A-Za-z]$/.test(k)))];
+	const shifted = [...new Set(Object.values(km).flatMap(splitSpecs).filter((k) => /^Shift\+[A-Za-z]$/.test(k)))];
 	if (!shifted.length) return [];
 	const letters = shifted.map((k) => k.slice(-1).toUpperCase());
 	const labels = shifted.map((k) => keyLabel(k, isMac)).join(', ');

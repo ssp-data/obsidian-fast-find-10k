@@ -6,6 +6,14 @@ import type { Keymap } from './settings';
 
 const MODIFIERS: readonly Modifier[] = ['Mod', 'Ctrl', 'Meta', 'Shift', 'Alt'];
 
+/** A binding may list alternatives: `Alt+Shift+N | Alt+P`. */
+export function splitSpecs(spec: string): string[] {
+	return spec
+		.split('|')
+		.map((s) => s.trim())
+		.filter((s) => s.length > 0);
+}
+
 /** `Mod+Alt+Enter` → `{ modifiers: ['Mod','Alt'], key: 'Enter' }`; single letters lower-cased.
  * Returns null for an empty spec or an unknown modifier. */
 export function parseKeySpec(spec: string): { modifiers: Modifier[]; key: string } | null {
@@ -18,6 +26,7 @@ export function parseKeySpec(spec: string): { modifiers: Modifier[]; key: string
 
 /** Hint text: `Mod+Enter` → `⌘⏎` on macOS, `Ctrl+⏎` elsewhere; `Shift+/` → `?`. */
 export function keyLabel(spec: string, isMac: boolean): string {
+	if (spec.includes('|')) return splitSpecs(spec).map((s) => keyLabel(s, isMac)).join(' / ');
 	const sym: Record<string, string> = isMac
 		? { Mod: '⌘', Ctrl: '⌃', Meta: '⌘', Alt: '⌥', Shift: '⇧', Enter: '⏎' }
 		: { Mod: 'Ctrl+', Ctrl: 'Ctrl+', Meta: 'Win+', Alt: 'Alt+', Shift: 'Shift+', Enter: '⏎' };
@@ -40,10 +49,17 @@ function canonical(spec: string, isMac: boolean): string | null {
 /** Why `spec` cannot be the binding of `action` (unparseable, or the same keys as another
  * action on this platform); null when it can. */
 export function validateBinding(km: Keymap, action: keyof Keymap, spec: string, isMac: boolean): string | null {
-	const c = canonical(spec.trim(), isMac);
-	if (!c) return `invalid key "${spec}" (use e.g. Mod+Shift+Enter; modifiers Mod, Ctrl, Meta, Shift, Alt)`;
-	for (const other of Object.keys(km) as (keyof Keymap)[]) {
-		if (other !== action && canonical(km[other], isMac) === c) return `already used by ${other}`;
+	const parts = splitSpecs(spec);
+	if (parts.length === 0) return `invalid key "${spec}" (use e.g. Mod+Shift+Enter; modifiers Mod, Ctrl, Meta, Shift, Alt)`;
+	const own = new Set<string>();
+	for (const part of parts) {
+		const c = canonical(part, isMac);
+		if (!c) return `invalid key "${part}" (use e.g. Mod+Shift+Enter; modifiers Mod, Ctrl, Meta, Shift, Alt; alternatives with |)`;
+		if (own.has(c)) return `"${part}" is listed twice`;
+		own.add(c);
+		for (const other of Object.keys(km) as (keyof Keymap)[]) {
+			if (other !== action && splitSpecs(km[other]).some((o) => canonical(o, isMac) === c)) return `already used by ${other}`;
+		}
 	}
 	return null;
 }
@@ -53,11 +69,13 @@ export function conflicts(km: Keymap, isMac: boolean): [keyof Keymap, keyof Keym
 	const seen = new Map<string, keyof Keymap>();
 	const out: [keyof Keymap, keyof Keymap][] = [];
 	for (const a of Object.keys(km) as (keyof Keymap)[]) {
-		const c = canonical(km[a], isMac);
-		if (c === null) continue;
-		const prev = seen.get(c);
-		if (prev) out.push([prev, a]);
-		else seen.set(c, a);
+		for (const part of splitSpecs(km[a])) {
+			const c = canonical(part, isMac);
+			if (c === null) continue;
+			const prev = seen.get(c);
+			if (prev && prev !== a) out.push([prev, a]);
+			else seen.set(c, a);
+		}
 	}
 	return out;
 }
