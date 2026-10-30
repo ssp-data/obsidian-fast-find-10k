@@ -350,7 +350,9 @@ export class Preview {
 		const frag = createFragment();
 		let target = null as HTMLElement | null;
 		// match count, current match and the "matches only" mode; a click flips the mode
-		const head = frag.createDiv({ cls: 'ff10k-preview-head', attr: { title: 'Click: matches only / whole note' } });
+		// a zero-height sticky row: the label floats top-right over the text and takes no space
+		const row = frag.createDiv({ cls: 'ff10k-preview-head' });
+		const head = row.createSpan({ cls: 'ff10k-preview-head-label', attr: { title: 'Click: matches only / whole note' } });
 		head.addEventListener('click', () => this.toggleMatchesOnly());
 		this.headEl = head;
 		const matchLines: number[] = [];
