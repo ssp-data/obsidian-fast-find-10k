@@ -1,11 +1,12 @@
 ## What has changed?
 
-A small layout release: search and ranking are unchanged from 0.2.1. The preview's match counter now floats over the text instead of taking a line of its own, so the first lines of a note stay visible. The difference is most noticeable on mobile.
+A small settings release: search and ranking are unchanged from 0.2.2. A new setting lets you hide the similar-notes panel, either everywhere or only on mobile, which leaves more room for results and the preview on small screens.
 
 **Highlights**
 
-- **Match counter as a floating chip.** The `3 / 12 matches` count and the matches-only label (`Ctrl+M`) now sit in a translucent chip in the preview's top-right corner. They no longer push the note text down, and clicking the chip still switches between matches only and the whole note.
+- **Similar notes panel setting.** Under Behaviour, `Similar notes panel` can be set to always (the default), desktop only, or never. When hidden, both the panel and the `N similar` pill on each result go away; the create guard (Shift+Enter) still shows the closest existing notes before creating a new one.
+- **Comparison with other searches.** A new write-up compares native search, Omnisearch, Fast Find 10K and QMD on a 17,780-file vault, one query at a time with screenshots and timings, and says which tool fits which vault size. See [the comparison](docs/comparison.md) and the summary table in the README.
 
 **Fixes**
 
-- On mobile, the preview header with the match count hid the first lines of the selected note. The label now takes no space, so the note starts at its first line.
+- No bug fixes in this release.
