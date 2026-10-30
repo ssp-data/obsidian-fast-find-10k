@@ -237,6 +237,11 @@ export class FastFindModal extends Modal {
 
 		const bar = contentEl.createDiv({ cls: 'ff10k-bar' });
 		this.inputEl = bar.createEl('input', { cls: 'ff10k-input', type: 'text', attr: { placeholder: 'Find a note…', spellcheck: 'false' } });
+		if (Platform.isMobile) {
+			// no Esc on a phone: a close button at the end of the search line
+			const close = bar.createEl('button', { cls: 'ff10k-close', text: '✕', attr: { 'aria-label': 'Close search', type: 'button' } });
+			close.addEventListener('click', () => this.close());
+		}
 		// pills: tap targets; their key labels are omitted on mobile (no keyboard shortcuts there)
 		const key = (spec: string) => (Platform.isMobile ? '' : ` ${keyLabel(spec)}`);
 		const pills = Platform.isMobile ? bar.createDiv({ cls: 'ff10k-pills' }) : bar;

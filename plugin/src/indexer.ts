@@ -41,9 +41,14 @@ export function globToRegExp(glob: string): RegExp {
 	return new RegExp(glob.includes('/') ? `^${re}$` : `(?:^|/)${re}$`);
 }
 
-/** Pure exclusion rule: dot-folders/files anywhere, non-markdown, Obsidian "Excluded files", plugin globs. */
+/** Files the index covers: markdown notes and Obsidian Bases (`.base`, YAML: title from the name, text as body). */
+export function isIndexedExtension(ext: string): boolean {
+	return ext === 'md' || ext === 'base';
+}
+
+/** Pure exclusion rule: dot-folders/files anywhere, other extensions, Obsidian "Excluded files", plugin globs. */
 export function isExcludedPath(path: string, isUserIgnored: (p: string) => boolean, globs: RegExp[]): boolean {
-	if (!path.endsWith('.md')) return true;
+	if (!path.endsWith('.md') && !path.endsWith('.base')) return true;
 	if (path.startsWith('.') || path.includes('/.')) return true;
 	if (isUserIgnored(path)) return true;
 	return globs.some((g) => g.test(path));
@@ -118,7 +123,7 @@ export class Indexer {
 	/** Vault event handlers; the caller registers the returned refs (plugin.registerEvent). */
 	handleEvents(): EventRef[] {
 		const vault = this.app.vault;
-		const isNote = (f: TAbstractFile): f is TFile => f instanceof TFile && f.extension === 'md';
+		const isNote = (f: TAbstractFile): f is TFile => f instanceof TFile && isIndexedExtension(f.extension);
 		return [
 			vault.on('create', (f) => isNote(f) && this.schedule(f.path, 'upsert')),
 			vault.on('modify', (f) => isNote(f) && this.schedule(f.path, 'upsert')),
@@ -174,7 +179,7 @@ export class Indexer {
 		// 2. Diff against the vault (the file list is complete once the layout is ready).
 		await new Promise<void>((resolve) => this.app.workspace.onLayoutReady(resolve));
 		if (this.disposed) return;
-		const files = this.app.vault.getMarkdownFiles().filter((f) => !this.isExcluded(f.path));
+		const files = this.app.vault.getFiles().filter((f) => isIndexedExtension(f.extension) && !this.isExcluded(f.path));
 		this.setStatus({ ...this.status, total: files.length });
 		const present = new Set(files.map((f) => f.path));
 		const gone = [...meta.keys()].filter((p) => !present.has(p) || this.isExcluded(p));

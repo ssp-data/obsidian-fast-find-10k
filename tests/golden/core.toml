@@ -193,3 +193,9 @@ must_not_appear = ["Adrianos Espresso"]
 [[case]]
 query = "[price] espresso"
 expect_in_top = ["KAFOJ Espresso", "Adrianos Espresso"]
+
+# Obsidian Bases are indexed: title from the file name, YAML text as body.
+[[case]]
+query = "coffee beans base"
+expect_top = "Coffee Beans Base"
+expect_tier = 1

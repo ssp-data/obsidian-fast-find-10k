@@ -493,8 +493,27 @@ input.ff10k-invalid {
 }
 
 .ff10k-mobile .ff10k-bar .ff10k-input {
-	flex: 1 1 100%;
+	flex: 1 1 0;
+	min-width: 0;
 	font-size: var(--font-ui-medium);
+}
+
+/* close button on the search line (44 px tap target, no layout space beyond that) */
+.ff10k-mobile .ff10k-close {
+	flex: 0 0 44px;
+	height: 44px;
+	padding: 0;
+	margin: 0;
+	border: none;
+	box-shadow: none;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: var(--font-ui-large);
+	line-height: 1;
+}
+
+.ff10k-mobile .ff10k-close:active {
+	color: var(--text-normal);
 }
 
 .ff10k-mobile .ff10k-pills {

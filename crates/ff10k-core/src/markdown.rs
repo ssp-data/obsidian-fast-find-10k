@@ -9,7 +9,9 @@ pub(crate) fn title_and_segments(path: &str) -> (String, Vec<String>) {
         Some(i) => (&path[..i], &path[i + 1..]),
         None => ("", path),
     };
-    let title = file.strip_suffix(".md").unwrap_or(file).to_string();
+    // `.base` files (Obsidian Bases, YAML) are indexed like notes: title from the file name,
+    // the whole text as body (their description block, filters and view names become searchable)
+    let title = file.strip_suffix(".md").or_else(|| file.strip_suffix(".base")).unwrap_or(file).to_string();
     let segments = dir
         .split('/')
         .filter(|s| !s.is_empty())
@@ -555,6 +557,15 @@ mod tests {
         assert_eq!(d.tags, vec!["coffee"]);
         assert_eq!(d.aliases, vec!["kafoj"]);
         assert!(!d.body.contains("Herkunftsland"), "frontmatter stays out of the body");
+    }
+
+    #[test]
+    fn base_files_take_their_title_from_the_file_name_and_index_the_yaml_as_body() {
+        let d = extract("Coffee/Coffee Beans Base.base", "publish: true\ndescription: |\n  Coffee Machine: Solis\n\n  ## My Coffee Beans list\nfilters:\n  and:\n    - file.ext.contains(\"md\")\nviews:\n  - type: table\n    name: Table\n", 0.0);
+        assert_eq!(d.title, "Coffee Beans Base");
+        assert!(d.body.contains("Coffee Machine: Solis"));
+        assert!(d.body.contains("views"));
+        assert!(d.properties.is_empty(), "a base is not frontmatter");
     }
 
     #[test]

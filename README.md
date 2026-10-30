@@ -10,6 +10,8 @@ I've built my dream search for Obsidian based on fzf/Telescope from Neovim for p
 
 https://github.com/user-attachments/assets/2a36f06a-0cf9-4156-a0aa-6bbc0249ea34
 
+Also see longer Form [YT video](https://youtu.be/jyqBh0pn2Eo) (13 min).
+
 **Mobile View:**:
 ![image](docs/images/ff10k-mobile-preview.png)
 
@@ -48,7 +50,7 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 - **Properties (frontmatter) are searchable.** Every frontmatter key and value except Obsidian's own (`aliases`, `tags`, `title`, `cssclasses`, `created`) is indexed as a property: `india espresso` finds a coffee note whose `Herkunftsland` is India, shown with a `prop` badge and `Herkunftsland: India` as context. Filters use Obsidian's syntax: `[Herkunftsland:India]` keeps notes with that value, `[price]` notes that have the key.
 - **Query syntax** for narrowing: `"exact phrase"`, `#tag`, `path:folder`, `-exclude`, `[key]`, `[key:value]`. Optional words (`a an the of to in on i` by default) never exclude a note
   - Set abbreviations that expand (`oss` → "open source"). Both editable in the settings.
-- **Respects your vault setup.** Obsidian's "Excluded files" are never indexed, you can add ignored globs, and folders such as an archive can be downranked instead of hidden.
+- **Respects your vault setup.** Obsidian's "Excluded files" are never indexed, you can add ignored globs, and folders such as an archive can be downranked instead of hidden. Obsidian Bases (`.base` files) are indexed too: title from the file name, their description, filters and view names as content, so `coffee beans base` opens the base.
 - **Semantic results** through Smart Connections embeddings, as a separate tier below the text matches: on by default for every query (a query embedding takes a few milliseconds), or on demand with Ctrl+S.
 - **Resume and recall.** "Search (resume last)" reopens the finder with the previous query; notes you keep opening from the same query get a sticky bonus.
 - **Local only.** No language model, no network. See [LLMs or AI](#llms-or-ai).
@@ -126,7 +128,7 @@ Defaults (`Mod` is Cmd on macOS, Ctrl elsewhere); every binding can be changed i
 
 ### Mobile
 
-The plugin runs on phones and tablets (the engine is WebAssembly in a worker, the cache is IndexedDB; the first start reads every note, which takes longer than on a desktop, and the header shows `indexing N / total` until it is done). The search opens in one column: the input on its own line, the pills (all / files only / +languages / preview) below it as tap targets, the results list scrolling, the preview stacked underneath when the pill turns it on, and no key-hint footer. With the preview on, a tap selects a row and shows it below; a second tap on the selected row opens it (with the preview off, one tap opens). Testing a build without a release: `obsidian dev:mobile on` in the desktop app emulates the mobile layout; on a real device, sync the vault's `.obsidian/plugins/fast-find/` folder (Obsidian Sync with community plugins enabled, or any file sync) after `make install`, or publish a pre-release and install it through BRAT.
+The plugin runs on phones and tablets (the engine is WebAssembly in a worker, the cache is IndexedDB; the first start reads every note, which takes longer than on a desktop, and the header shows `indexing N / total` until it is done). The search opens in one column: the input on its own line, the pills (all / files only / +languages / preview) below it as tap targets, the results list scrolling, the preview stacked underneath when the pill turns it on, a ✕ at the end of the search line to close, and no key-hint footer. With the preview on, a tap selects a row and shows it below; a second tap on the selected row opens it (with the preview off, one tap opens). Testing a build without a release: `obsidian dev:mobile on` in the desktop app emulates the mobile layout; on a real device, sync the vault's `.obsidian/plugins/fast-find/` folder (Obsidian Sync with community plugins enabled, or any file sync) after `make install`, or publish a pre-release and install it through BRAT.
 
 ## How ranking works
 
