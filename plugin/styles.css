@@ -9,6 +9,32 @@
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
+	--ff10k-accent: var(--text-accent);
+	--ff10k-h2: var(--text-title-h2, var(--color-orange));
+}
+
+/* Light themes often pick pale accents (Osaka Jade light: 2:1 on its background); blending in the
+   theme's text colour roughly doubles the contrast of hits and headings. Dark themes stay as is. */
+.theme-light .modal.ff10k-modal {
+	--ff10k-accent: color-mix(in srgb, var(--text-accent) 55%, var(--text-normal));
+	--ff10k-h2: color-mix(in srgb, var(--text-title-h2, var(--color-orange)) 55%, var(--text-normal));
+}
+
+.theme-light .ff10k-pill.is-active {
+	background: color-mix(in srgb, var(--interactive-accent) 35%, transparent);
+	color: var(--text-normal);
+}
+
+.theme-light .ff10k-h1 {
+	color: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 55%, var(--text-normal));
+}
+
+.theme-light .ff10k-h2 {
+	color: color-mix(in srgb, var(--text-title-h2, var(--color-orange)) 55%, var(--text-normal));
+}
+
+.theme-light .ff10k-h3 {
+	color: color-mix(in srgb, var(--text-title-h3, var(--color-yellow)) 55%, var(--text-normal));
 }
 
 /* Esc closes (footer hint); the close button would sit on top of the status text. */
@@ -167,13 +193,13 @@
 /* Colours come from the theme (--text-accent, --text-title-h*), with Obsidian's defaults as
    fallback: title and heading hits carry colour, every other badge stays quiet. */
 .ff10k-badge-t1 {
-	border-color: var(--text-accent);
-	color: var(--text-accent);
+	border-color: var(--ff10k-accent);
+	color: var(--ff10k-accent);
 }
 
 .ff10k-badge-t2 {
-	border-color: var(--text-title-h2, var(--color-orange));
-	color: var(--text-title-h2, var(--color-orange));
+	border-color: var(--ff10k-h2);
+	color: var(--ff10k-h2);
 }
 
 .ff10k-badge-t3,
@@ -202,7 +228,7 @@
 }
 
 .ff10k-hl {
-	color: var(--text-accent);
+	color: var(--ff10k-accent);
 	font-weight: var(--font-bold);
 }
 
@@ -239,7 +265,7 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: var(--font-ui-small);
-	color: var(--text-title-h2, var(--color-orange));
+	color: var(--ff10k-h2);
 }
 
 .ff10k-excerpt,
@@ -278,7 +304,7 @@
 	content: "+ ";
 	font-style: normal;
 	font-weight: var(--font-bold);
-	color: var(--text-accent);
+	color: var(--ff10k-accent);
 }
 
 .ff10k-debug {
@@ -381,7 +407,7 @@
 }
 
 .ff10k-preview-head-label.is-active {
-	color: var(--text-accent);
+	color: var(--ff10k-accent);
 }
 
 .ff10k-preview mark.is-current {
@@ -425,7 +451,7 @@
 	font-weight: var(--font-bold);
 	border-radius: 3px;
 	padding: 0 1px;
-	box-shadow: inset 0 -2px 0 var(--text-accent);
+	box-shadow: inset 0 -2px 0 var(--ff10k-accent);
 }
 
 .ff10k-preview .ff10k-line:has(mark) {
