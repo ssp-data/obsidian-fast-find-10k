@@ -418,7 +418,7 @@
 	height: auto;
 }
 
-/* matched words bold and underlined; their lines get a faint band and a rule on the left */
+/* matched words bold and underlined; their lines get a faint band and a rule on the right */
 .ff10k-preview mark {
 	background: color-mix(in srgb, var(--text-accent) 32%, transparent);
 	color: inherit;
@@ -429,10 +429,11 @@
 }
 
 .ff10k-preview .ff10k-line:has(mark) {
-	margin-left: calc(-1 * var(--size-4-3));
-	padding-left: calc(var(--size-4-3) - 2px);
+	margin-inline: calc(-1 * var(--size-4-3));
+	padding-left: var(--size-4-3);
+	padding-right: calc(var(--size-4-3) - 2px);
 	background: color-mix(in srgb, var(--text-accent) 6%, transparent);
-	box-shadow: inset 2px 0 0 color-mix(in srgb, var(--text-accent) 60%, transparent);
+	box-shadow: inset -2px 0 0 color-mix(in srgb, var(--text-accent) 60%, transparent);
 }
 
 .ff10k-truncated,
