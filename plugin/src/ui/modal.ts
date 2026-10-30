@@ -48,6 +48,12 @@ export function openAllTargets(hits: Pick<Hit, 'path' | 'isGhost'>[]): { eligibl
 	return { eligible, count: paths.length, paths: eligible ? paths : [] };
 }
 
+/** A touch that closes the search: a quick, mostly horizontal swipe to the left
+ * (at least 80 px, twice as wide as tall, under 600 ms), like Android's back gesture. */
+export function isCloseSwipe(dx: number, dy: number, ms: number): boolean {
+	return dx <= -80 && Math.abs(dx) >= 2 * Math.abs(dy) && ms < 600;
+}
+
 /** Initial query and preview state: a non-empty `resume` prefills and forces the preview open;
  * otherwise (null or '') the editor selection and the setting apply, as in a plain search. */
 export function startState(resume: string | null, previewSetting: boolean, selection: string): { query: string; previewOpen: boolean } {
@@ -237,6 +243,23 @@ export class FastFindModal extends Modal {
 
 		const bar = contentEl.createDiv({ cls: 'ff10k-bar' });
 		this.inputEl = bar.createEl('input', { cls: 'ff10k-input', type: 'text', attr: { placeholder: 'Find a note…', spellcheck: 'false' } });
+		if (Platform.isMobile) {
+			// no Esc on a phone: a close button at the end of the search line
+			const close = bar.createEl('button', { cls: 'ff10k-close', text: '✕', attr: { 'aria-label': 'Close search', type: 'button' } });
+			close.addEventListener('click', () => this.close());
+			// swipe left closes too, also where the OS has no back gesture (iOS); not from the
+			// input, where a horizontal drag moves the text cursor
+			let start: { x: number; y: number; t: number } | null = null;
+			this.modalEl.addEventListener('touchstart', (e) => {
+				const t = e.touches[0];
+				start = e.touches.length === 1 && t && e.target !== this.inputEl ? { x: t.clientX, y: t.clientY, t: e.timeStamp } : null;
+			}, { passive: true });
+			this.modalEl.addEventListener('touchend', (e) => {
+				const t = e.changedTouches[0];
+				if (start && t && isCloseSwipe(t.clientX - start.x, t.clientY - start.y, e.timeStamp - start.t)) this.close();
+				start = null;
+			}, { passive: true });
+		}
 		// pills: tap targets; their key labels are omitted on mobile (no keyboard shortcuts there)
 		const key = (spec: string) => (Platform.isMobile ? '' : ` ${keyLabel(spec)}`);
 		const pills = Platform.isMobile ? bar.createDiv({ cls: 'ff10k-pills' }) : bar;

@@ -190,6 +190,18 @@ test('open all: a failing open shows a Notice, restores focus and still closes',
 	assert.deepEqual(log, [['note', 'a.md'], ['open', 'a.md'], ['note', 'b.md'], ['open', 'b.md'], ['notice', 'Fast Find 10K: open all failed (Error: boom)'], ['restore'], ['close']]);
 });
 
+const { isCloseSwipe } = await load('src/ui/modal.ts');
+
+test('a quick, mostly horizontal swipe left closes; taps, scrolls, right and slow swipes do not', () => {
+	assert.equal(isCloseSwipe(-120, 10, 200), true);
+	assert.equal(isCloseSwipe(-80, 40, 599), true);
+	assert.equal(isCloseSwipe(-5, 3, 100), false); // tap
+	assert.equal(isCloseSwipe(-60, 0, 200), false); // too short
+	assert.equal(isCloseSwipe(-100, 300, 200), false); // vertical scroll
+	assert.equal(isCloseSwipe(120, 0, 200), false); // swipe right
+	assert.equal(isCloseSwipe(-120, 0, 900), false); // slow drag
+});
+
 const { swallowKey } = await load('src/ui/modal.ts');
 
 test('a modal key handler runs its action and swallows the event (Ctrl+R never reaches Obsidian reload)', () => {
