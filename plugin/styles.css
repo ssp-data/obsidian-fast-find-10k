@@ -9,6 +9,26 @@
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
+	/* Palette: the theme's own colours (accent, H1–H3, faint, muted), each blended toward the
+	   theme's text colour only as far as small text needs to read (4.5:1). contrast.ts measures
+	   that at open and writes the result inline; these color-mix values are the fallback until
+	   then. Hue and hierarchy stay: title hits in the accent, headings in the H2 colour, the rest
+	   quiet. */
+	--ff10k-accent: color-mix(in srgb, var(--text-accent) 70%, var(--text-normal));
+	--ff10k-h1: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 70%, var(--text-normal));
+	--ff10k-h2: color-mix(in srgb, var(--text-title-h2, var(--color-orange)) 70%, var(--text-normal));
+	--ff10k-h3: color-mix(in srgb, var(--text-title-h3, var(--color-yellow)) 70%, var(--text-normal));
+	--ff10k-faint: color-mix(in srgb, var(--text-faint) 60%, var(--text-normal));
+	--ff10k-muted: var(--text-muted);
+	--ff10k-orange: color-mix(in srgb, var(--color-orange) 70%, var(--text-normal));
+	--ff10k-on-accent: var(--background-primary);
+	/* the selected row and the active pills: the theme's UI accent (pushed to 3:1 where it is
+	   pale) as a bar, a ring and a tint, never a solid block, so the text on them stays the
+	   theme's own text colour */
+	--ff10k-selection: color-mix(in srgb, var(--interactive-accent) 80%, var(--text-normal));
+	--ff10k-selected-bg: color-mix(in srgb, var(--ff10k-selection) 16%, var(--background-primary));
+	--ff10k-pill-bg: color-mix(in srgb, var(--ff10k-selection) 22%, transparent);
+	--ff10k-pill-ring: color-mix(in srgb, var(--ff10k-selection) 70%, transparent);
 }
 
 /* Esc closes (footer hint); the close button would sit on top of the status text. */
@@ -42,24 +62,27 @@
 	min-width: 0;
 }
 
+/* inactive pills are outlined, the active one is tinted and ringed with the selection colour */
 .ff10k-pill {
 	font-size: var(--font-ui-smaller);
 	padding: 2px var(--size-4-2);
 	border-radius: var(--radius-l);
-	background: var(--background-modifier-hover);
-	color: var(--text-muted);
+	background: transparent;
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
+	color: var(--ff10k-muted);
 	cursor: pointer;
 	white-space: nowrap;
 }
 
 .ff10k-pill.is-active {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
+	background: var(--ff10k-pill-bg);
+	color: var(--text-normal);
+	box-shadow: inset 0 0 0 1px var(--ff10k-pill-ring);
 }
 
 .ff10k-status {
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	white-space: nowrap;
 	font-variant-numeric: tabular-nums;
 }
@@ -108,7 +131,7 @@
 	display: flex;
 	flex-direction: column;
 	padding: var(--size-4-2) var(--size-4-3);
-	background: rgba(var(--color-red-rgb), 0.05);
+	background: var(--background-secondary);
 }
 
 .ff10k-no-similar .ff10k-similar {
@@ -130,7 +153,7 @@
 	font-size: var(--font-ui-smaller);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 .ff10k-row {
@@ -142,8 +165,10 @@
 	background: var(--background-modifier-hover);
 }
 
+/* the selection must be found at a glance: a tinted row with a bar on the left (Telescope's `>`) */
 .ff10k-row.is-selected {
-	background: var(--background-modifier-active-hover);
+	background: var(--ff10k-selected-bg);
+	box-shadow: inset 3px 0 0 var(--ff10k-selection);
 }
 
 .ff10k-row-main {
@@ -161,32 +186,35 @@
 	padding: 0 6px;
 	border-radius: var(--radius-l);
 	border: 1px solid var(--background-modifier-border);
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
+/* Colours come from the theme (--text-accent, --text-title-h*), with Obsidian's defaults as
+   fallback: title and heading hits carry colour, every other badge stays quiet. */
 .ff10k-badge-t1 {
-	border-color: var(--color-green);
-	color: var(--color-green);
+	border-color: var(--ff10k-accent);
+	color: var(--ff10k-accent);
 }
 
 .ff10k-badge-t2 {
-	border-color: var(--color-orange);
-	color: var(--color-orange);
+	border-color: var(--ff10k-h2);
+	color: var(--ff10k-h2);
 }
 
 .ff10k-badge-t3,
 .ff10k-badge-t4 {
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 .ff10k-badge-t5 {
-	border-color: var(--color-purple);
-	color: var(--color-purple);
+	border-color: color-mix(in srgb, var(--text-title-h3, var(--color-yellow)) 55%, transparent);
+	color: var(--ff10k-faint);
 }
 
+/* the similar panel shows the details; the pill only hints, as quiet as a content badge */
 .ff10k-similar-badge {
-	border-color: var(--color-red);
-	color: var(--color-red);
+	color: var(--ff10k-faint);
+	font-variant-numeric: tabular-nums;
 }
 
 .ff10k-title {
@@ -199,13 +227,13 @@
 }
 
 .ff10k-hl {
-	color: var(--text-accent);
+	color: var(--ff10k-accent);
 	font-weight: var(--font-bold);
 }
 
 /* A note matched through an abbreviation or language word: highlights in a second colour. */
 .ff10k-row.is-expanded .ff10k-hl {
-	color: var(--color-orange);
+	color: var(--ff10k-orange);
 }
 
 /* file type marker for non-note results (canvas, base, drawing) */
@@ -216,15 +244,15 @@
 	padding: 0 5px;
 	border-radius: var(--radius-s);
 	border: 1px solid var(--background-modifier-border);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	letter-spacing: 0.02em;
 }
 
 .ff10k-expanded-badge {
 	flex: 0 0 auto;
 	font-size: var(--font-ui-smaller);
-	color: var(--color-orange);
-	border: 1px solid var(--color-orange);
+	color: var(--ff10k-orange);
+	border: 1px solid var(--ff10k-orange);
 	border-radius: var(--radius-s);
 	padding: 0 4px;
 	opacity: 0.85;
@@ -236,7 +264,7 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: var(--font-ui-small);
-	color: var(--color-orange);
+	color: var(--ff10k-h2);
 }
 
 .ff10k-excerpt,
@@ -247,7 +275,7 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 /* The folder gives way first (shrinks a thousand times faster than the title) and keeps a stub;
@@ -255,7 +283,7 @@
 .ff10k-folder {
 	flex: 0 1000 auto;
 	min-width: 8ch;
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 .ff10k-heading,
@@ -268,27 +296,27 @@
 }
 
 .ff10k-ghost .ff10k-title {
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 .ff10k-ghost .ff10k-title::before {
 	content: "+ ";
 	font-style: normal;
 	font-weight: var(--font-bold);
-	color: var(--color-green);
+	color: var(--ff10k-accent);
 }
 
 .ff10k-debug {
 	padding-left: var(--size-4-8);
 	font-family: var(--font-monospace);
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	overflow-wrap: anywhere; /* one line, wrapping when long */
 }
 
 .ff10k-empty {
 	padding: var(--size-4-3);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 /* Footer key hints */
@@ -298,7 +326,7 @@
 	gap: var(--size-4-1) var(--size-4-4);
 	padding: var(--size-4-1) var(--size-4-3);
 	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 	background: var(--background-secondary);
 	border-top: 1px solid var(--background-modifier-border);
 }
@@ -322,23 +350,23 @@
 }
 
 .ff10k-h1 {
-	color: var(--color-red);
+	color: var(--ff10k-h1);
 }
 
 .ff10k-h2 {
-	color: var(--color-orange);
+	color: var(--ff10k-h2);
 }
 
 .ff10k-h3 {
-	color: var(--color-yellow);
+	color: var(--ff10k-h3);
 }
 
 .ff10k-code {
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 .ff10k-link {
-	color: var(--text-accent);
+	color: var(--ff10k-accent);
 }
 
 .ff10k-tag {
@@ -372,18 +400,20 @@
 	pointer-events: auto;
 	padding: 1px var(--size-4-2);
 	border-radius: var(--radius-s);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	background: color-mix(in srgb, var(--background-primary) 70%, transparent);
 	cursor: pointer;
 }
 
 .ff10k-preview-head-label.is-active {
-	color: var(--text-accent);
+	color: var(--ff10k-accent);
 }
 
+/* the current match: a solid block of the accent with a ring, the only solid block in the preview */
 .ff10k-preview mark.is-current {
-	outline: 2px solid var(--text-accent);
-	outline-offset: 1px;
+	background: var(--ff10k-accent);
+	color: var(--ff10k-on-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--ff10k-accent) 35%, transparent);
 }
 
 .ff10k-ln {
@@ -391,13 +421,13 @@
 	min-width: 3.5ch;
 	margin-right: 1ch;
 	text-align: right;
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	font-variant-numeric: tabular-nums;
 	user-select: none;
 }
 
 .ff10k-gap {
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	text-align: center;
 	user-select: none;
 }
@@ -414,14 +444,28 @@
 	height: auto;
 }
 
+/* matched words bold and underlined, in the text colour even inside a heading (a heading colour
+   on the accent tint does not read); their lines get a faint band and a rule on the right */
 .ff10k-preview mark {
-	background: var(--text-highlight-bg);
-	color: inherit;
+	background: color-mix(in srgb, var(--ff10k-accent) 28%, transparent);
+	color: var(--text-normal);
+	font-weight: var(--font-bold);
+	border-radius: 3px;
+	padding: 0 1px;
+	box-shadow: inset 0 -2px 0 var(--ff10k-accent);
+}
+
+.ff10k-preview .ff10k-line:has(mark) {
+	margin-inline: calc(-1 * var(--size-4-3));
+	padding-left: var(--size-4-3);
+	padding-right: calc(var(--size-4-3) - 2px);
+	background: color-mix(in srgb, var(--ff10k-accent) 7%, transparent);
+	box-shadow: inset -2px 0 0 color-mix(in srgb, var(--ff10k-accent) 60%, transparent);
 }
 
 .ff10k-truncated,
 .ff10k-preview-empty {
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	font-style: italic;
 }
 
@@ -430,7 +474,7 @@
 	font-size: var(--font-ui-smaller);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--color-red);
+	color: var(--ff10k-faint);
 	margin-bottom: 2px;
 }
 
@@ -455,7 +499,8 @@
 }
 
 .ff10k-similar-row.is-selected {
-	background: var(--background-modifier-active-hover);
+	background: var(--ff10k-selected-bg);
+	box-shadow: inset 3px 0 0 var(--ff10k-selection);
 }
 
 .ff10k-similar-title,
@@ -469,22 +514,22 @@
 	grid-column: 1 / -1;
 	grid-row: 2;
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 .ff10k-similar-reason {
 	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 .ff10k-similar-none {
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 .ff10k-similar-hint {
 	margin-top: 2px;
 	font-size: var(--font-ui-smaller);
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 }
 
 /* Shortcut cheat-sheet overlay */
@@ -520,7 +565,7 @@
 	font-size: var(--font-ui-smaller);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--text-faint);
+	color: var(--ff10k-faint);
 	margin-bottom: var(--size-4-1);
 }
 
@@ -532,13 +577,13 @@
 
 .ff10k-help-keys {
 	flex: 0 0 45%;
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 .ff10k-help-note {
 	margin-top: var(--size-4-3);
 	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 /* Settings tab: rejected key binding */

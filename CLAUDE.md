@@ -88,6 +88,12 @@ the indexer, worker, cache or bridge change).
   without `?.` (a throw in the results path silently left the preview empty on mobile).
 - Preview is plain text (speed): image embeds as `<img>`, mermaid fences rendered 250 ms after the
   selection settles, Excalidraw PNG/SVG export shown if present. Nothing else is rendered.
+- Colours: `styles.css` uses only `--ff10k-*` palette variables (accent, h1–h3, faint, muted,
+  orange, selection, on-accent), never a raw theme colour. `ui/contrast.ts` sets them inline at
+  modal open (and on `css-change`): each theme colour is blended toward `--text-normal` until it
+  reads 4.5:1 on the primary and secondary backgrounds (3:1 for the selection bar/tint). The
+  stylesheet's `color-mix` values are only the fallback. Measured across Kanagawa, Asia Neon,
+  Fireplace, Osaka Jade, Omarchy and the default theme in both modes (2026-10-30).
 - Diagnostics only through `debug.ts` (`console.debug`, "Log engine timings"); timers via
   `window.*` (`self.*` in the worker); `createFragment()` not `document.*` (Obsidian review).
 - Settings: new fields need a default in `DEFAULT_SETTINGS`, clamping in `mergeSettings`, a row in
