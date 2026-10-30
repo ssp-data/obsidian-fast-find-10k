@@ -91,6 +91,7 @@ function harness(files, cachedRead) {
 		workspace: { onLayoutReady: (cb) => cb() },
 		vault: {
 			getMarkdownFiles: () => files,
+			getFiles: () => files.map((f) => ({ extension: f.path.split('.').pop(), ...f })),
 			getFileByPath: (p) => files.find((f) => f.path === p) ?? null,
 			cachedRead,
 		},
