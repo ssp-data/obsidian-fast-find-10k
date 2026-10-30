@@ -223,6 +223,15 @@ export function richBlocks(lines: readonly string[]): { start: number; end: numb
 	return out;
 }
 
+/** Lines shown in "matches only" mode: every line with a match plus `context` lines around it. */
+export function visibleLines(matchLines: readonly number[], total: number, context = 1): boolean[] {
+	const show: boolean[] = new Array(total).fill(false);
+	for (const m of matchLines) {
+		for (let i = Math.max(0, m - context); i <= Math.min(total - 1, m + context); i++) show[i] = true;
+	}
+	return show;
+}
+
 /** The drawing export an Excalidraw file may have next to it (`name.excalidraw.png` / `.svg`), to show above its text. */
 export function excalidrawExports(path: string): string[] {
 	const m = /^(.*\.excalidraw)(\.md)?$/i.exec(path);
@@ -236,6 +245,12 @@ export class Preview {
 	private readonly renderMarkdown: MarkdownRenderFn | null;
 	private richTimer = 0;
 	private token = 0;
+	/** "Matches only": the lines around each match instead of the whole note (session state). */
+	matchesOnly = false;
+	private marks: HTMLElement[] = [];
+	private current = -1;
+	private headEl: HTMLElement | null = null;
+	private last: { text: string | null; hit: Hit; terms: string[] } | null = null;
 
 	constructor(el: HTMLElement, resolveImage: ImageResolver | null = null, renderMarkdown: MarkdownRenderFn | null = null) {
 		this.el = el;
@@ -265,6 +280,42 @@ export class Preview {
 		this.token++;
 		window.clearTimeout(this.richTimer);
 		this.el.empty();
+		this.marks = [];
+		this.current = -1;
+		this.headEl = null;
+		this.last = null;
+	}
+
+	/** Number of highlighted matches in the rendered note. */
+	get matchCount(): number {
+		return this.marks.length;
+	}
+
+	/** Scrolls to the next (`1`) or previous (`-1`) match, cycling; false when there is none. */
+	nextMatch(dir: 1 | -1): boolean {
+		const n = this.marks.length;
+		if (n === 0) return false;
+		this.marks[this.current]?.removeClass('is-current');
+		this.current = this.current < 0 ? (dir > 0 ? 0 : n - 1) : (this.current + dir + n) % n;
+		const m = this.marks[this.current];
+		m.addClass('is-current');
+		m.scrollIntoView({ block: 'center' });
+		this.renderHead();
+		return true;
+	}
+
+	/** Flips "matches only" and re-renders the current note. */
+	toggleMatchesOnly(): void {
+		this.matchesOnly = !this.matchesOnly;
+		if (this.last) this.render(this.last.text, this.last.hit, this.last.terms);
+	}
+
+	private renderHead(): void {
+		if (!this.headEl) return;
+		const n = this.marks.length;
+		const pos = this.current >= 0 ? `${this.current + 1} / ${n}` : `${n}`;
+		this.headEl.setText(n === 0 ? 'no matches in this note' : `${pos} match${n === 1 ? '' : 'es'}${this.matchesOnly ? ' · matches only' : ''}`);
+		this.headEl.toggleClass('is-active', this.matchesOnly);
 	}
 
 	private remember(path: string, text: string | null): void {
@@ -275,6 +326,10 @@ export class Preview {
 
 	private render(text: string | null, hit: Hit, terms: string[]): void {
 		this.el.empty();
+		this.marks = [];
+		this.current = -1;
+		this.headEl = null;
+		this.last = { text, hit, terms };
 		if (text === null) {
 			this.el.createDiv({ cls: 'ff10k-preview-empty', text: hit.isGhost ? 'not created yet' : 'no preview' });
 			return;
@@ -291,6 +346,16 @@ export class Preview {
 		const lazyFrom = Math.max(anchor, 0) + LAZY_MARGIN;
 		const frag = createFragment();
 		let target = null as HTMLElement | null;
+		// match count, current match and the "matches only" mode; a click flips the mode
+		const head = frag.createDiv({ cls: 'ff10k-preview-head', attr: { title: 'Click: matches only / whole note' } });
+		head.addEventListener('click', () => this.toggleMatchesOnly());
+		this.headEl = head;
+		const matchLines: number[] = [];
+		segs.forEach((ss, i) => {
+			if (ss.some((x) => x.mark)) matchLines.push(i);
+		});
+		const show = this.matchesOnly && matchLines.length > 0 ? visibleLines(matchLines, lines.length) : null;
+		let gap = false;
 		// an Excalidraw drawing's export, when the plugin wrote one next to the file
 		for (const exp of this.resolveImage ? excalidrawExports(hit.path) : []) {
 			const src = this.resolveImage!(exp, hit.path);
@@ -305,6 +370,14 @@ export class Preview {
 		let skipTo = -1;
 		for (let i = 0; i < lines.length; i++) {
 			if (i <= skipTo) continue;
+			if (show && !show[i]) {
+				gap = true;
+				continue;
+			}
+			if (gap) {
+				frag.createDiv({ cls: 'ff10k-line ff10k-gap', text: '⋯' });
+				gap = false;
+			}
 			const block = rich.find((b) => b.start === i);
 			if (block) {
 				const div = frag.createDiv({ cls: 'ff10k-line ff10k-rich' });
@@ -340,6 +413,10 @@ export class Preview {
 		}
 		if (all.length > MAX_LINES) frag.createDiv({ cls: 'ff10k-line ff10k-truncated', text: '… truncated' });
 		this.el.appendChild(frag);
+		this.marks = Array.from(this.el.querySelectorAll('mark'));
+		this.current = target ? this.marks.indexOf(target) : -1;
+		this.marks[this.current]?.addClass('is-current');
+		this.renderHead();
 		this.el.scrollTop = 0;
 		target?.scrollIntoView({ block: 'start' });
 		window.clearTimeout(this.richTimer);

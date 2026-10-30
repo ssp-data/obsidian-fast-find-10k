@@ -19,7 +19,14 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { classifyLines, segmentLine, queryTerms, imageEmbed, richBlocks, excalidrawExports, MAX_LINE_CHARS, MAX_LINE_STYLES } = await load('src/ui/preview.ts');
+const { classifyLines, segmentLine, queryTerms, imageEmbed, richBlocks, excalidrawExports, visibleLines, MAX_LINE_CHARS, MAX_LINE_STYLES } = await load('src/ui/preview.ts');
+
+test('matches only: each match line with one line of context, bounds respected', () => {
+	assert.deepEqual(visibleLines([2, 7], 10), [false, true, true, true, false, false, true, true, true, false]);
+	assert.deepEqual(visibleLines([0, 9], 10), [true, true, false, false, false, false, false, false, true, true]);
+	assert.deepEqual(visibleLines([], 3), [false, false, false]);
+	assert.deepEqual(visibleLines([1], 3, 0), [false, true, false]);
+});
 
 test('rich blocks: mermaid fences are found with their bounds, other fences and nested markers are not', () => {
 	const lines = ['# T', '```mermaid', 'graph TD;', 'A-->B;', '```', 'text', '```js', 'x', '```', '~~~ mermaid', 'pie', '~~~', '```mermaid', 'unterminated'];

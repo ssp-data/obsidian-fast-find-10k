@@ -16,7 +16,7 @@ export interface HelpGroup {
 }
 
 const GROUPS: [string, [keyof Keymap | 'close', string][]][] = [
-	['Navigate', [['moveDown', 'next result'], ['moveUp', 'previous result'], ['previewDown', 'scroll preview down'], ['previewUp', 'scroll preview up'], ['focusSimilar', 'focus similar notes'], ['panelRight', 'similar notes (right)'], ['panelLeft', 'back to the results (left)']]],
+	['Navigate', [['moveDown', 'next result'], ['moveUp', 'previous result'], ['previewDown', 'scroll preview down'], ['previewUp', 'scroll preview up'], ['nextMatch', 'next match in the preview'], ['prevMatch', 'previous match in the preview'], ['toggleMatchesOnly', 'preview: matches only / whole note'], ['focusSimilar', 'focus similar notes'], ['panelRight', 'similar notes (right)'], ['panelLeft', 'back to the results (left)']]],
 	['Open', [['open', 'open'], ['openTab', 'open in new tab'], ['openSplit', 'open in split'], ['openAll', 'open all shown in tabs (≤ 10)']]],
 	['Create', [['create', 'create note from query'], ['createTab', 'create note in new tab']]],
 	['Modes & panels', [['filesOnly', 'toggle files only'], ['semantic', 'add semantic results'], ['toggleLanguages', 'toggle language expansion (German list, dictionary note)'], ['togglePreview', 'toggle preview'], ['toggleDebug', 'toggle why ranked']]],

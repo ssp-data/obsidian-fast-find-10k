@@ -360,6 +360,9 @@ export class FastFindModal extends Modal {
 			toggleDebug: () => this.toggleDebug(),
 			previewDown: () => this.scrollPreview(1),
 			previewUp: () => this.scrollPreview(-1),
+			nextMatch: () => this.jumpMatch(1),
+			prevMatch: () => this.jumpMatch(-1),
+			toggleMatchesOnly: () => this.toggleMatchesOnly(),
 			showHelp: () => this.toggleHelp(),
 			openAll: () => void this.openAll(),
 			toggleLanguages: () => this.toggleLanguages(),
@@ -546,6 +549,8 @@ export class FastFindModal extends Modal {
 			[[km.filesOnly], 'files only'],
 			[[km.semantic], 'semantic'],
 			[[km.moveDown, km.moveUp], 'move'],
+			[[km.nextMatch, km.prevMatch], 'next / prev match'],
+			[[km.toggleMatchesOnly], 'matches only'],
 			[[km.togglePreview], 'toggle preview'],
 			[[km.focusSimilar, km.panelRight], 'similar notes'],
 			[[km.toggleDebug], 'why ranked'],
@@ -769,6 +774,18 @@ export class FastFindModal extends Modal {
 	private scrollPreview(dir: 1 | -1): void {
 		if (!this.state.previewOpen) return;
 		this.previewEl.scrollBy({ top: (dir * this.previewEl.clientHeight) / 2 });
+	}
+
+	/** Alt+N / Alt+Shift+N: the next / previous highlighted match in the preview. */
+	private jumpMatch(dir: 1 | -1): void {
+		if (!this.state.previewOpen) return;
+		this.preview.nextMatch(dir);
+	}
+
+	/** Ctrl+M: only the lines around each match, or the whole note. */
+	private toggleMatchesOnly(): void {
+		if (!this.state.previewOpen) return;
+		this.preview.toggleMatchesOnly();
 	}
 
 	/** Opens every shown note (≤ OPEN_ALL_MAX, ghosts excluded) in background tabs, then closes. */

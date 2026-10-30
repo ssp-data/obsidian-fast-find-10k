@@ -350,6 +350,35 @@
 	object-fit: contain;
 }
 
+.ff10k-preview-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	margin: calc(-1 * var(--size-4-2)) calc(-1 * var(--size-4-3)) var(--size-4-2);
+	padding: 2px var(--size-4-3);
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	background: var(--background-primary);
+	border-bottom: 1px solid var(--background-modifier-border);
+	cursor: pointer;
+	font-variant-numeric: tabular-nums;
+}
+
+.ff10k-preview-head.is-active {
+	color: var(--text-accent);
+}
+
+.ff10k-preview mark.is-current {
+	outline: 2px solid var(--text-accent);
+	outline-offset: 1px;
+}
+
+.ff10k-gap {
+	color: var(--text-faint);
+	text-align: center;
+	user-select: none;
+}
+
 .ff10k-rich {
 	white-space: pre-wrap;
 	font-family: var(--font-monospace);

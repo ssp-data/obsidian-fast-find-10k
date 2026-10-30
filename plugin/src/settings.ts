@@ -31,6 +31,9 @@ export interface Keymap {
 	panelRight: string;
 	panelLeft: string;
 	clearQuery: string;
+	nextMatch: string;
+	prevMatch: string;
+	toggleMatchesOnly: string;
 }
 
 export const DEFAULT_KEYMAP: Keymap = {
@@ -60,6 +63,10 @@ export const DEFAULT_KEYMAP: Keymap = {
 	// clears the query (the last query is still there for "Search (resume last)"); with text
 	// selected in the field it stays the copy shortcut
 	clearQuery: 'Ctrl+C',
+	// preview: jump between highlighted matches (vim n / N), and "matches only"
+	nextMatch: 'Alt+N',
+	prevMatch: 'Alt+Shift+N',
+	toggleMatchesOnly: 'Ctrl+M',
 };
 
 export interface FastFindSettings {

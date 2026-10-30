@@ -183,6 +183,9 @@ test('languages: empty by default, saved list kept, only sent while language exp
 	assert.equal(DEFAULT_KEYMAP.panelRight, 'Shift+L');
 	assert.equal(DEFAULT_KEYMAP.panelLeft, 'Shift+H');
 	assert.equal(DEFAULT_KEYMAP.clearQuery, 'Ctrl+C');
+	assert.equal(DEFAULT_KEYMAP.nextMatch, 'Alt+N');
+	assert.equal(DEFAULT_KEYMAP.prevMatch, 'Alt+Shift+N');
+	assert.equal(DEFAULT_KEYMAP.toggleMatchesOnly, 'Ctrl+M');
 });
 
 test('key specs split into modifiers and key', () => {
