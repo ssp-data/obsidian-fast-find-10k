@@ -5,7 +5,8 @@
 #   make install VAULT=~/my-vault   symlink plugin/dist into <vault>/.obsidian/plugins/fast-find
 #   make recall VAULT=~/my-vault    title / two-word / one-typo recall over that vault (ff10k recall)
 #   make release-notes VERSION=0.1.1  draft RELEASE_NOTES.md from the commits since the last tag (Claude Code
-#                                     when `claude` is installed, else a grouped commit list); review, commit
+#                                     when `claude` is installed, else a grouped commit list), with screenshots
+#                                     from issues/PRs closed since then (needs `gh`); review, commit
 #   make release VERSION=0.1.1      requires committed RELEASE_NOTES.md newer than the last tag; bumps
 #                                   manifest.json, versions.json, plugin/package.json; builds; commits; tags
 #                                   and pushes — the Release workflow then builds, attests and publishes
@@ -67,20 +68,26 @@ check-clean:
 
 # Drafts RELEASE_NOTES.md for VERSION from the commits since the last tag (PREV=x.y.z overrides).
 # With the `claude` CLI the notes are written in prose (scripts/release-notes-prompt.md); without
-# it a grouped commit list is written for editing by hand. Review, then commit the file.
+# it a grouped commit list is written for editing by hand. Images in issues/PRs closed since PREV
+# (scripts/release-images.sh, via `gh`) go into the prompt, or at the end of the hand-edit draft.
+# Review, then commit the file.
 release-notes:
 	@test -n "$(VERSION)" || { echo "usage: make release-notes VERSION=x.y.z [PREV=x.y.z]"; exit 1; }
 	@PREV="$(PREV)"; test -n "$$PREV" || PREV=$$(git describe --tags --abbrev=0); \
 	echo "Drafting RELEASE_NOTES.md for $(VERSION) (changes since $$PREV)…"; \
+	IMAGES=$$(bash scripts/release-images.sh "$$PREV"); \
 	if command -v claude >/dev/null; then \
-	  sed -e "s/{{VERSION}}/$(VERSION)/g" -e "s/{{PREV}}/$$PREV/g" scripts/release-notes-prompt.md \
+	  { sed -e "s/{{VERSION}}/$(VERSION)/g" -e "s/{{PREV}}/$$PREV/g" scripts/release-notes-prompt.md; \
+	    echo; echo "## Images from closed issues and PRs"; echo; echo "$$IMAGES"; } \
 	    | env -u ANTHROPIC_API_KEY claude -p --allowedTools "Read,Write,Bash(git log:*),Bash(git diff:*),Bash(git describe:*),Bash(head:*)"; \
 	else \
 	  { echo "## What has changed?"; echo; echo "<intro>"; echo; \
 	    for t in feat fix docs chore ci test; do \
 	      lines=$$(git log --no-merges --format='%s' "$$PREV..HEAD" | grep -E "^$$t(\(.*\))?:" | sed -E "s/^$$t(\(.*\))?: /- /"); \
 	      test -z "$$lines" || { echo "**$$t**"; echo; echo "$$lines"; echo; }; \
-	    done; } > RELEASE_NOTES.md; \
+	    done; \
+	    test -z "$$IMAGES" || { echo "<!-- images from closed issues/PRs: move the useful ones under their bullet, delete the rest -->"; echo; echo "$$IMAGES"; }; \
+	  } > RELEASE_NOTES.md; \
 	  echo "claude CLI not found: wrote a grouped commit list; edit it into prose"; \
 	fi
 	@echo; echo "Review RELEASE_NOTES.md, then: git add RELEASE_NOTES.md && git commit -m 'release notes $(VERSION)'"

@@ -21,4 +21,6 @@ Structure (exactly this, Markdown):
 
 <Optional last line: one sentence on how to install or a pointer to a README section, only if it earns its place.>
 
+Images: the section "Images from closed issues and PRs" at the end of this prompt lists the screenshots posted on issues and PRs closed since {{PREV}}. Screenshots the maintainer posted in comments show the shipped result; images in someone else's opening post usually show the problem or the request. Put a fitting result screenshot on its own line directly under the Highlights or Fixes bullet it illustrates, at most one or two per bullet, and end that bullet with the issue reference (`(#7)`). Copy each image tag exactly as listed; for a very wide or tall `<img>`, set `width` to at most 800 and drop `height`. Skip images that do not show a change in this release, and skip problem images unless a before/after pair makes the fix clearer. If the section is empty or missing, use no images.
+
 Rules: plain English, no marketing adjectives, no exclamation marks, no emoji, no headings other than the one `##` above and the two bold labels. Do not mention this prompt, Claude, or AI. If the range since {{PREV}} contains nothing user-visible, say so in the intro and leave the bullet sections short rather than inventing content. Finish by printing the file's first ten lines so the caller can see it was written.
