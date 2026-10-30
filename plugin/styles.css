@@ -9,28 +9,26 @@
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
-	/* Readability: theme colours are blended toward the theme's own text colour, a little in dark
-	   themes (Kanagawa dark H2 4.2:1, faint text 3.3–3.6:1) and more in light ones, whose accents
-	   are often pale (Osaka Jade light: accent 2.0:1, faint 1.8:1). Hue and hierarchy stay. */
-	--ff10k-keep: 80%;
-	--ff10k-faint-keep: 75%;
-	--ff10k-accent: color-mix(in srgb, var(--text-accent) var(--ff10k-keep), var(--text-normal));
-	--ff10k-h1: color-mix(in srgb, var(--text-title-h1, var(--color-red)) var(--ff10k-keep), var(--text-normal));
-	--ff10k-h2: color-mix(in srgb, var(--text-title-h2, var(--color-orange)) var(--ff10k-keep), var(--text-normal));
-	--ff10k-h3: color-mix(in srgb, var(--text-title-h3, var(--color-yellow)) var(--ff10k-keep), var(--text-normal));
-	--ff10k-faint: color-mix(in srgb, var(--text-faint) var(--ff10k-faint-keep), var(--text-normal));
-	/* similar notes (row pill and panel label): the theme's red, toned down by the muted text colour */
-	--ff10k-similar: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 60%, var(--text-muted));
-}
-
-.theme-light .modal.ff10k-modal {
-	--ff10k-keep: 55%;
-	--ff10k-faint-keep: 55%;
-}
-
-.theme-light .ff10k-pill.is-active {
-	background: color-mix(in srgb, var(--interactive-accent) 35%, transparent);
-	color: var(--text-normal);
+	/* Palette: the theme's own colours (accent, H1–H3, faint, muted), each blended toward the
+	   theme's text colour only as far as small text needs to read (4.5:1). contrast.ts measures
+	   that at open and writes the result inline; these color-mix values are the fallback until
+	   then. Hue and hierarchy stay: title hits in the accent, headings in the H2 colour, the rest
+	   quiet. */
+	--ff10k-accent: color-mix(in srgb, var(--text-accent) 70%, var(--text-normal));
+	--ff10k-h1: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 70%, var(--text-normal));
+	--ff10k-h2: color-mix(in srgb, var(--text-title-h2, var(--color-orange)) 70%, var(--text-normal));
+	--ff10k-h3: color-mix(in srgb, var(--text-title-h3, var(--color-yellow)) 70%, var(--text-normal));
+	--ff10k-faint: color-mix(in srgb, var(--text-faint) 60%, var(--text-normal));
+	--ff10k-muted: var(--text-muted);
+	--ff10k-orange: color-mix(in srgb, var(--color-orange) 70%, var(--text-normal));
+	--ff10k-on-accent: var(--background-primary);
+	/* the selected row and the active pills: the theme's UI accent (pushed to 3:1 where it is
+	   pale) as a bar, a ring and a tint, never a solid block, so the text on them stays the
+	   theme's own text colour */
+	--ff10k-selection: color-mix(in srgb, var(--interactive-accent) 80%, var(--text-normal));
+	--ff10k-selected-bg: color-mix(in srgb, var(--ff10k-selection) 16%, var(--background-primary));
+	--ff10k-pill-bg: color-mix(in srgb, var(--ff10k-selection) 22%, transparent);
+	--ff10k-pill-ring: color-mix(in srgb, var(--ff10k-selection) 70%, transparent);
 }
 
 /* Esc closes (footer hint); the close button would sit on top of the status text. */
@@ -64,19 +62,22 @@
 	min-width: 0;
 }
 
+/* inactive pills are outlined, the active one is tinted and ringed with the selection colour */
 .ff10k-pill {
 	font-size: var(--font-ui-smaller);
 	padding: 2px var(--size-4-2);
 	border-radius: var(--radius-l);
-	background: var(--background-modifier-hover);
-	color: var(--text-muted);
+	background: transparent;
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
+	color: var(--ff10k-muted);
 	cursor: pointer;
 	white-space: nowrap;
 }
 
 .ff10k-pill.is-active {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
+	background: var(--ff10k-pill-bg);
+	color: var(--text-normal);
+	box-shadow: inset 0 0 0 1px var(--ff10k-pill-ring);
 }
 
 .ff10k-status {
@@ -164,8 +165,10 @@
 	background: var(--background-modifier-hover);
 }
 
+/* the selection must be found at a glance: a tinted row with a bar on the left (Telescope's `>`) */
 .ff10k-row.is-selected {
-	background: var(--background-modifier-active-hover);
+	background: var(--ff10k-selected-bg);
+	box-shadow: inset 3px 0 0 var(--ff10k-selection);
 }
 
 .ff10k-row-main {
@@ -183,7 +186,7 @@
 	padding: 0 6px;
 	border-radius: var(--radius-l);
 	border: 1px solid var(--background-modifier-border);
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 /* Colours come from the theme (--text-accent, --text-title-h*), with Obsidian's defaults as
@@ -208,10 +211,10 @@
 	color: var(--ff10k-faint);
 }
 
-/* the similar panel shows the details; the pill only hints, in the theme's red, dimmed */
+/* the similar panel shows the details; the pill only hints, as quiet as a content badge */
 .ff10k-similar-badge {
-	border-color: color-mix(in srgb, var(--text-title-h1, var(--color-red)) 30%, transparent);
-	color: var(--ff10k-similar);
+	color: var(--ff10k-faint);
+	font-variant-numeric: tabular-nums;
 }
 
 .ff10k-title {
@@ -230,7 +233,7 @@
 
 /* A note matched through an abbreviation or language word: highlights in a second colour. */
 .ff10k-row.is-expanded .ff10k-hl {
-	color: var(--color-orange);
+	color: var(--ff10k-orange);
 }
 
 /* file type marker for non-note results (canvas, base, drawing) */
@@ -248,8 +251,8 @@
 .ff10k-expanded-badge {
 	flex: 0 0 auto;
 	font-size: var(--font-ui-smaller);
-	color: var(--color-orange);
-	border: 1px solid var(--color-orange);
+	color: var(--ff10k-orange);
+	border: 1px solid var(--ff10k-orange);
 	border-radius: var(--radius-s);
 	padding: 0 4px;
 	opacity: 0.85;
@@ -261,6 +264,7 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: var(--font-ui-small);
+	font-weight: var(--font-semibold);
 	color: var(--ff10k-h2);
 }
 
@@ -272,7 +276,7 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 /* The folder gives way first (shrinks a thousand times faster than the title) and keeps a stub;
@@ -293,7 +297,7 @@
 }
 
 .ff10k-ghost .ff10k-title {
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 .ff10k-ghost .ff10k-title::before {
@@ -323,7 +327,7 @@
 	gap: var(--size-4-1) var(--size-4-4);
 	padding: var(--size-4-1) var(--size-4-3);
 	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 	background: var(--background-secondary);
 	border-top: 1px solid var(--background-modifier-border);
 }
@@ -359,11 +363,11 @@
 }
 
 .ff10k-code {
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 .ff10k-link {
-	color: var(--text-accent);
+	color: var(--ff10k-accent);
 }
 
 .ff10k-tag {
@@ -406,10 +410,11 @@
 	color: var(--ff10k-accent);
 }
 
+/* the current match: a solid block of the accent with a ring, the only solid block in the preview */
 .ff10k-preview mark.is-current {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 35%, transparent);
+	background: var(--ff10k-accent);
+	color: var(--ff10k-on-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--ff10k-accent) 35%, transparent);
 }
 
 .ff10k-ln {
@@ -440,10 +445,11 @@
 	height: auto;
 }
 
-/* matched words bold and underlined; their lines get a faint band and a rule on the right */
+/* matched words bold and underlined, in the text colour even inside a heading (a heading colour
+   on the accent tint does not read); their lines get a faint band and a rule on the right */
 .ff10k-preview mark {
-	background: color-mix(in srgb, var(--text-accent) 32%, transparent);
-	color: inherit;
+	background: color-mix(in srgb, var(--ff10k-accent) 28%, transparent);
+	color: var(--text-normal);
 	font-weight: var(--font-bold);
 	border-radius: 3px;
 	padding: 0 1px;
@@ -454,8 +460,8 @@
 	margin-inline: calc(-1 * var(--size-4-3));
 	padding-left: var(--size-4-3);
 	padding-right: calc(var(--size-4-3) - 2px);
-	background: color-mix(in srgb, var(--text-accent) 6%, transparent);
-	box-shadow: inset -2px 0 0 color-mix(in srgb, var(--text-accent) 60%, transparent);
+	background: color-mix(in srgb, var(--ff10k-accent) 7%, transparent);
+	box-shadow: inset -2px 0 0 color-mix(in srgb, var(--ff10k-accent) 60%, transparent);
 }
 
 .ff10k-truncated,
@@ -469,7 +475,7 @@
 	font-size: var(--font-ui-smaller);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
-	color: var(--ff10k-similar);
+	color: var(--ff10k-faint);
 	margin-bottom: 2px;
 }
 
@@ -494,7 +500,8 @@
 }
 
 .ff10k-similar-row.is-selected {
-	background: var(--background-modifier-active-hover);
+	background: var(--ff10k-selected-bg);
+	box-shadow: inset 3px 0 0 var(--ff10k-selection);
 }
 
 .ff10k-similar-title,
@@ -513,7 +520,7 @@
 
 .ff10k-similar-reason {
 	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 .ff10k-similar-none {
@@ -571,13 +578,13 @@
 
 .ff10k-help-keys {
 	flex: 0 0 45%;
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 .ff10k-help-note {
 	margin-top: var(--size-4-3);
 	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
+	color: var(--ff10k-muted);
 }
 
 /* Settings tab: rejected key binding */

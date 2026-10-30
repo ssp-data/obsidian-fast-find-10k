@@ -1,7 +1,7 @@
 // The search modal: query input, tiered results, data-driven keys, open/create actions,
 // help overlay.
 
-import { type App, Component, MarkdownRenderer, Modal, Notice, Platform, Scope, TFile, type WorkspaceLeaf } from 'obsidian';
+import { type App, Component, type EventRef, MarkdownRenderer, Modal, Notice, Platform, Scope, TFile, type WorkspaceLeaf } from 'obsidian';
 import { createGhostNote, createNote, ghostNotePath, open, type OpenWhere, sanitizeName } from '../actions';
 import type FastFindPlugin from '../main';
 import { debugLog } from '../debug';
@@ -10,6 +10,7 @@ import type { EngineClient } from '../engine-client';
 import { keyLabel as keyLabelFor, parseKeySpec, splitSpecs } from '../keys';
 import type { FastFindSettings, Keymap } from '../settings';
 import type { SmartConnectionsBridge } from '../smart-connections-bridge';
+import { applyContrast } from './contrast';
 import { Preview, queryTerms } from './preview';
 import { renderHelp } from './help';
 import { renderRow, renderTierLabel } from './results';
@@ -193,6 +194,7 @@ export class FastFindModal extends Modal {
 	private closed = false;
 	private deadNoticeShown = false;
 	private unsubscribeStatus: (() => void) | null = null;
+	private cssChangeRef: EventRef | null = null;
 	private preview!: Preview;
 	private similar!: SimilarPanel;
 	/** Pending paint of preview + similar panel (one per frame, superseded by newer selections). */
@@ -242,6 +244,9 @@ export class FastFindModal extends Modal {
 		this.modalEl.addClass('ff10k-modal');
 		this.modalEl.toggleClass('ff10k-preview-hidden', !this.state.previewOpen);
 		this.modalEl.toggleClass('ff10k-mobile', Platform.isMobile);
+		// theme colours pushed to readable contrast, once now and again if the theme changes while open
+		applyContrast(this.modalEl);
+		this.cssChangeRef = this.app.workspace.on('css-change', () => applyContrast(this.modalEl));
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass('ff10k-content');
@@ -356,6 +361,8 @@ export class FastFindModal extends Modal {
 		this.leaveSimilar();
 		this.unsubscribeStatus?.();
 		this.unsubscribeStatus = null;
+		if (this.cssChangeRef) this.app.workspace.offref(this.cssChangeRef);
+		this.cssChangeRef = null;
 		this.contentEl.empty();
 	}
 
