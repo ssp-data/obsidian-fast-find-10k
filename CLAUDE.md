@@ -114,7 +114,9 @@ the indexer, worker, cache or bridge change).
   similarity needs no Smart Connections, so the panel is not empty with that plugin off; the
   create guard shows it regardless); `keyHints` desktop; `fontScale` 100 (80–130 %, phones cap
   at 120): `--ff10k-scale` on the modal scales results, preview and similar panel through
-  `--ff10k-fs-small/smaller`; input bar, pills, footer and help keep the theme size.
+  `--ff10k-fs-small/smaller` (bar, results, preview, similar); footer and help keep the theme
+  size. The settings tab shows a live sample (`.ff10k-sample`, built from the modal's own
+  classes) and pushes the slider to an open search via `plugin.applyFontScale()`.
 - Keys: Alt+J/K preview scroll, Alt+H/L panels, Alt+N next match, `Alt+Shift+N | Alt+P`
   previous, Ctrl+M matches-only (line numbers, `matches` pill on mobile). `startState` takes
   the preview from the platform setting for resume too.

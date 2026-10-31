@@ -9,6 +9,11 @@
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
+}
+
+/* The modal and the text-size sample in the settings tab share the palette and the scale. */
+.modal.ff10k-modal,
+.ff10k-sample {
 	/* Palette: the theme's own colours (accent, H1–H3, faint, muted), each blended toward the
 	   theme's text colour only as far as small text needs to read (4.5:1). contrast.ts measures
 	   that at open and writes the result inline; these color-mix values are the fallback until
@@ -37,6 +42,32 @@
 	--ff10k-fs-small: calc(var(--font-ui-small) * var(--ff10k-scale));
 }
 
+/* Text-size sample under the slider in the settings tab: the real bar, row and preview classes
+   in a bordered box, so what the slider shows is what the modal renders. */
+.ff10k-sample-row {
+	flex-wrap: wrap;
+}
+.ff10k-sample {
+	flex: 1 0 100%;
+	margin-top: var(--size-4-2);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-primary);
+	overflow: hidden;
+}
+.ff10k-sample .ff10k-results {
+	flex: none;
+	border-right: 0;
+}
+.ff10k-sample .ff10k-row {
+	cursor: default;
+}
+.ff10k-sample .ff10k-preview {
+	flex: none;
+	overflow: visible;
+	border-bottom: 0;
+}
+
 /* hidden probe: ui/contrast.ts resolves theme colours through it at modal open */
 .ff10k-modal .ff10k-probe {
 	display: none;
@@ -60,6 +91,7 @@
 
 /* Top bar */
 .ff10k-bar {
+	font-size: calc(1em * var(--ff10k-scale));
 	display: flex;
 	align-items: center;
 	gap: var(--size-4-2);
@@ -71,11 +103,12 @@
 .ff10k-bar .ff10k-input {
 	flex: 1;
 	min-width: 0;
+	font-size: var(--ff10k-fs-small);
 }
 
 /* inactive pills are outlined, the active one is tinted and ringed with the selection colour */
 .ff10k-pill {
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	padding: 2px var(--size-4-2);
 	border-radius: var(--radius-l);
 	background: transparent;
@@ -92,7 +125,7 @@
 }
 
 .ff10k-status {
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	color: var(--ff10k-faint);
 	white-space: nowrap;
 	font-variant-numeric: tabular-nums;
@@ -629,7 +662,7 @@ input.ff10k-invalid {
 .ff10k-mobile .ff10k-bar .ff10k-input {
 	flex: 1 1 0;
 	min-width: 0;
-	font-size: var(--font-ui-medium);
+	font-size: calc(var(--font-ui-medium) * var(--ff10k-scale));
 }
 
 /* close button on the search line (44 px tap target, no layout space beyond that) */

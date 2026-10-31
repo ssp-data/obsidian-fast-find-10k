@@ -63,6 +63,11 @@ export default class FastFindPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	/** Pushes the text-size setting to a search that is open right now (the settings slider). */
+	applyFontScale(): void {
+		this.modal?.applyFontScale();
+	}
+
 	/** Adds or removes the ribbon icon to match the setting (Lucide `text-search`, the plugin's store icon). */
 	applyRibbon(): void {
 		if (this.settings.ribbonIcon && !this.ribbonEl) {

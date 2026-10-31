@@ -241,12 +241,16 @@ export class FastFindModal extends Modal {
 		this.registerKeys(plugin.settings.keymap);
 	}
 
+	/** Text size of the bar, results, preview and similar notes: styles.css scales by `--ff10k-scale`. */
+	applyFontScale(): void {
+		this.modalEl.setCssProps({ '--ff10k-scale': String(fontScaleFactor(this.plugin.settings.fontScale, Platform.isMobile)) });
+	}
+
 	onOpen(): void {
 		this.modalEl.addClass('ff10k-modal');
 		this.modalEl.toggleClass('ff10k-preview-hidden', !this.state.previewOpen);
 		this.modalEl.toggleClass('ff10k-mobile', Platform.isMobile);
-		// text size of results, preview and similar notes (styles.css scales its font sizes by it)
-		this.modalEl.setCssProps({ '--ff10k-scale': String(fontScaleFactor(this.plugin.settings.fontScale, Platform.isMobile)) });
+		this.applyFontScale();
 		// theme colours pushed to readable contrast, once now and again if the theme changes while open
 		applyContrast(this.modalEl);
 		this.cssChangeRef = this.app.workspace.on('css-change', () => applyContrast(this.modalEl));
