@@ -7,7 +7,7 @@ import { type App, Notice, Platform, PluginSettingTab, requireApiVersion, Settin
 import { validateBinding } from './keys';
 import type FastFindPlugin from './main';
 import type { PartialMode, Weights } from './protocol';
-import { DEFAULT_KEYMAP, DEFAULT_WEIGHTS, type FuzzySetting, type KeyHintsSetting, type Keymap, type SemanticSetting, type SimilarPanelSetting } from './settings';
+import { DEFAULT_KEYMAP, DEFAULT_WEIGHTS, fontScaleFactor, type FuzzySetting, type KeyHintsSetting, type Keymap, type SemanticSetting, type SimilarPanelSetting } from './settings';
 import { helpGroups } from './ui/help';
 
 const WEIGHT_NAMES: Record<keyof Weights, string> = {
@@ -182,6 +182,16 @@ export class FastFindSettingTab extends PluginSettingTab {
 						control: { type: 'toggle', key: 'previewOpenMobile' },
 					},
 					{
+						name: 'Text size',
+						desc: "Results, preview and similar notes as a percentage of the theme's size (80–130, default 100). The input, pills and footer keep the theme size; phones and tablets cap at 120 %. Applies the next time the search opens.",
+						control: { type: 'slider', key: 'fontScale', min: 80, max: 130, step: 5 },
+					},
+					{
+						name: 'Text size sample',
+						desc: 'The search line, a result row and a preview line at the size above; it follows the slider as you drag.',
+						render: (setting) => this.renderSample(setting),
+					},
+					{
 						name: 'Ribbon icon',
 						desc: 'A search icon in the left ribbon (the drawer on mobile) that opens the search, for vaults with no hotkey to spare.',
 						control: { type: 'toggle', key: 'ribbonIcon' },
@@ -271,6 +281,53 @@ export class FastFindSettingTab extends PluginSettingTab {
 		if (RANKING_KEYS.has(key)) this.saveRanking();
 		else this.save();
 		if (key === 'ribbonIcon') this.plugin.applyRibbon();
+		if (key === 'fontScale') this.applyFontScale();
+	}
+
+	/** The slider moved: the sample and any open search follow at once. The sample is looked up
+	 * in the tab's container rather than kept in a field, since the declarative tab may re-attach
+	 * a row it rendered earlier instead of calling `render` again. */
+	private applyFontScale(): void {
+		const scale = String(fontScaleFactor(this.s.fontScale, Platform.isMobile));
+		for (const el of Array.from(this.containerEl.querySelectorAll<HTMLElement>('.ff10k-sample'))) el.setCssProps({ '--ff10k-scale': scale });
+		this.plugin.applyFontScale();
+	}
+
+	/** A miniature of the modal built from its own classes (bar, tier label, two rows, two preview
+	 * lines), so the sample always renders exactly what styles.css does at the chosen size. */
+	private renderSample(setting: Setting): void {
+		setting.settingEl.addClass('ff10k-sample-row');
+		const box = setting.settingEl.createDiv({ cls: 'ff10k-sample' });
+		const bar = box.createDiv({ cls: 'ff10k-bar' });
+		bar.createEl('input', { cls: 'ff10k-input', type: 'text', value: 'delta lake', attr: { readonly: '', tabindex: '-1' } });
+		bar.createSpan({ cls: 'ff10k-pill is-active', text: 'all' });
+		bar.createSpan({ cls: 'ff10k-status', text: '30 / 17,782 · 7 ms' });
+		const results = box.createDiv({ cls: 'ff10k-results' });
+		results.createDiv({ cls: 'ff10k-tier', text: 'Titles' });
+		const row = results.createDiv({ cls: 'ff10k-row is-selected' });
+		const main = row.createDiv({ cls: 'ff10k-row-main' });
+		main.createSpan({ cls: 'ff10k-badge ff10k-badge-t1', text: 'title' });
+		const title = main.createSpan({ cls: 'ff10k-title' });
+		title.createSpan({ cls: 'ff10k-hl', text: 'Delta Lake' });
+		title.appendText(' table format');
+		main.createSpan({ cls: 'ff10k-folder', text: 'Docs/duckdb' });
+		main.createSpan({ cls: 'ff10k-similar-badge', text: '3 similar' });
+		const row2 = results.createDiv({ cls: 'ff10k-row' });
+		const main2 = row2.createDiv({ cls: 'ff10k-row-main' });
+		main2.createSpan({ cls: 'ff10k-badge ff10k-badge-t3', text: 'body' });
+		main2.createSpan({ cls: 'ff10k-title', text: 'databricks-setup' });
+		const ex = main2.createSpan({ cls: 'ff10k-excerpt' });
+		ex.appendText('only available on ');
+		ex.createSpan({ cls: 'ff10k-hl', text: 'Delta' });
+		ex.appendText(' tables');
+		main2.createSpan({ cls: 'ff10k-folder', text: 'Docs/dbt' });
+		const preview = box.createDiv({ cls: 'ff10k-preview' });
+		preview.createDiv({ cls: 'ff10k-line ff10k-h2', text: 'Supported functionality' });
+		const line = preview.createDiv({ cls: 'ff10k-line ff10k-hit' });
+		line.appendText('Most features are supported, some only on ');
+		line.createEl('mark', { text: 'Delta Lake' });
+		line.appendText('.');
+		this.applyFontScale();
 	}
 
 	private async clearFrecency(): Promise<void> {
@@ -498,6 +555,21 @@ export class FastFindSettingTab extends PluginSettingTab {
 					this.save();
 				}),
 			);
+		new Setting(el)
+			.setName('Text size')
+			.setDesc("Results, preview and similar notes as a percentage of the theme's size (80–130, default 100). The input, pills and footer keep the theme size; phones and tablets cap at 120 %. Applies the next time the search opens.")
+			.addSlider((sl) =>
+				sl
+					.setLimits(80, 130, 5)
+					.setValue(this.s.fontScale)
+					.setDynamicTooltip()
+					.onChange((v) => {
+						this.s.fontScale = v;
+						this.save();
+						this.applyFontScale();
+					}),
+			);
+		this.renderSample(new Setting(el).setName('Text size sample').setDesc('The search line, a result row and a preview line at the size above.'));
 		new Setting(el)
 			.setName('Ribbon icon')
 			.setDesc('A search icon in the left ribbon (the drawer on mobile) that opens the search.')
