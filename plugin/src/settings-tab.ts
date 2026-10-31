@@ -182,6 +182,11 @@ export class FastFindSettingTab extends PluginSettingTab {
 						control: { type: 'toggle', key: 'previewOpenMobile' },
 					},
 					{
+						name: 'Text size',
+						desc: "Results, preview and similar notes as a percentage of the theme's size (80–130, default 100). The input, pills and footer keep the theme size; phones and tablets cap at 120 %. Applies the next time the search opens.",
+						control: { type: 'slider', key: 'fontScale', min: 80, max: 130, step: 5 },
+					},
+					{
 						name: 'Ribbon icon',
 						desc: 'A search icon in the left ribbon (the drawer on mobile) that opens the search, for vaults with no hotkey to spare.',
 						control: { type: 'toggle', key: 'ribbonIcon' },
@@ -497,6 +502,19 @@ export class FastFindSettingTab extends PluginSettingTab {
 					this.s.previewOpenMobile = v;
 					this.save();
 				}),
+			);
+		new Setting(el)
+			.setName('Text size')
+			.setDesc("Results, preview and similar notes as a percentage of the theme's size (80–130, default 100). The input, pills and footer keep the theme size; phones and tablets cap at 120 %. Applies the next time the search opens.")
+			.addSlider((sl) =>
+				sl
+					.setLimits(80, 130, 5)
+					.setValue(this.s.fontScale)
+					.setDynamicTooltip()
+					.onChange((v) => {
+						this.s.fontScale = v;
+						this.save();
+					}),
 			);
 		new Setting(el)
 			.setName('Ribbon icon')

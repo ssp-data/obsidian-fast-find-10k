@@ -104,6 +104,10 @@ export interface FastFindSettings {
 	similarPanel: SimilarPanelSetting;
 	/** A ribbon icon (left bar on desktop, the drawer on mobile) that opens the search. */
 	ribbonIcon: boolean;
+	/** Text size of results, preview and similar notes as a percentage of the theme's UI size
+	 * (80–130, default 100). Input bar, pills and footer keep the theme size; phones cap at
+	 * `MOBILE_FONT_SCALE_MAX` so the one-column layout keeps fitting. */
+	fontScale: number;
 	debugByDefault: boolean;
 	logTimings: boolean;
 	keymap: Keymap;
@@ -146,6 +150,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	keyHints: 'desktop',
 	similarPanel: 'always',
 	ribbonIcon: true,
+	fontScale: 100,
 	debugByDefault: false,
 	logTimings: false,
 	keymap: { ...DEFAULT_KEYMAP },
@@ -177,6 +182,17 @@ function oneOf<T extends string>(v: T, allowed: readonly T[], fallback: T): T {
 	return allowed.includes(v) ? v : fallback;
 }
 
+export const FONT_SCALE_MIN = 80;
+export const FONT_SCALE_MAX = 130;
+/** Phones and tablets stop here: beyond it the pill row and preview no longer share a screen. */
+export const MOBILE_FONT_SCALE_MAX = 120;
+
+/** The `--ff10k-scale` factor for a saved `fontScale` percentage on the given platform. */
+export function fontScaleFactor(percent: number, mobile: boolean): number {
+	const p = clamp(percent, FONT_SCALE_MIN, mobile ? MOBILE_FONT_SCALE_MAX : FONT_SCALE_MAX, 100, true);
+	return p / 100;
+}
+
 /** `v` clamped to `[lo, hi]` (rounded when `int`); `fallback` when not finite. */
 function clamp(v: number, lo: number, hi: number, fallback: number, int = false): number {
 	if (!Number.isFinite(v)) return fallback;
@@ -205,6 +221,7 @@ export function mergeSettings(saved: unknown): FastFindSettings {
 	s.minSimilarity = clamp(s.minSimilarity, 0.5, 0.95, d.minSimilarity);
 	s.semanticMinSimilarity = clamp(s.semanticMinSimilarity, 0.3, 0.95, d.semanticMinSimilarity);
 	s.downrankFactor = clamp(s.downrankFactor, 0, 1, d.downrankFactor);
+	s.fontScale = clamp(s.fontScale, FONT_SCALE_MIN, FONT_SCALE_MAX, d.fontScale, true);
 	s.keymap = pick(DEFAULT_KEYMAP, src.keymap);
 	s.ignoredGlobs = [...s.ignoredGlobs];
 	s.downrankedFolders = [...s.downrankedFolders];

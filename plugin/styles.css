@@ -29,6 +29,12 @@
 	--ff10k-selected-bg: color-mix(in srgb, var(--ff10k-selection) 16%, var(--background-primary));
 	--ff10k-pill-bg: color-mix(in srgb, var(--ff10k-selection) 22%, transparent);
 	--ff10k-pill-ring: color-mix(in srgb, var(--ff10k-selection) 70%, transparent);
+	/* Text size setting: modal.ts writes --ff10k-scale (0.8–1.3) at open. Results, preview and the
+	   similar panel size through these two; the input bar, pills, footer and help keep the theme
+	   sizes so the chrome never grows. */
+	--ff10k-scale: 1;
+	--ff10k-fs-smaller: calc(var(--font-ui-smaller) * var(--ff10k-scale));
+	--ff10k-fs-small: calc(var(--font-ui-small) * var(--ff10k-scale));
 }
 
 /* hidden probe: ui/contrast.ts resolves theme colours through it at modal open */
@@ -101,6 +107,7 @@
 }
 
 .ff10k-results {
+	font-size: calc(1em * var(--ff10k-scale));
 	flex: 0 0 55%;
 	min-width: 0;
 	overflow-y: auto;
@@ -121,7 +128,7 @@
 	overflow-y: auto;
 	padding: var(--size-4-2) var(--size-4-3);
 	border-bottom: 1px solid var(--background-modifier-border);
-	font-size: var(--font-ui-small);
+	font-size: var(--ff10k-fs-small);
 	line-height: 1.5;
 	color: var(--text-normal);
 }
@@ -131,6 +138,7 @@
 }
 
 .ff10k-similar {
+	font-size: calc(1em * var(--ff10k-scale));
 	flex: 0 0 auto;
 	max-height: 40%;
 	display: flex;
@@ -155,7 +163,7 @@
 /* Tier group labels and rows */
 .ff10k-tier {
 	padding: var(--size-4-2) var(--size-4-3) 2px;
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--ff10k-faint);
@@ -187,7 +195,7 @@
 .ff10k-badge,
 .ff10k-similar-badge {
 	flex: 0 0 auto;
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	padding: 0 6px;
 	border-radius: var(--radius-l);
 	border: 1px solid var(--background-modifier-border);
@@ -244,7 +252,7 @@
 /* file type marker for non-note results (canvas, base, drawing) */
 .ff10k-kind {
 	flex: 0 0 auto;
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	line-height: 1.4;
 	padding: 0 5px;
 	border-radius: var(--radius-s);
@@ -255,7 +263,7 @@
 
 .ff10k-expanded-badge {
 	flex: 0 0 auto;
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	color: var(--ff10k-orange);
 	border: 1px solid var(--ff10k-orange);
 	border-radius: var(--radius-s);
@@ -268,7 +276,7 @@
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	font-size: var(--font-ui-small);
+	font-size: var(--ff10k-fs-small);
 	color: var(--ff10k-h2);
 }
 
@@ -279,7 +287,7 @@
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	color: var(--ff10k-muted);
 }
 
@@ -314,7 +322,7 @@
 .ff10k-debug {
 	padding-left: var(--size-4-8);
 	font-family: var(--font-monospace);
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	color: var(--ff10k-faint);
 	overflow-wrap: anywhere; /* one line, wrapping when long */
 }
@@ -395,7 +403,7 @@
 	overflow: visible;
 	text-align: right;
 	pointer-events: none;
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	line-height: 1.4;
 	font-variant-numeric: tabular-nums;
 }
@@ -440,7 +448,7 @@
 .ff10k-rich {
 	white-space: pre-wrap;
 	font-family: var(--font-monospace);
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 }
 
 .ff10k-rich .mermaid,
@@ -476,7 +484,7 @@
 
 /* Similar notes panel */
 .ff10k-similar-label {
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--ff10k-faint);
@@ -518,12 +526,12 @@
 .ff10k-similar-path {
 	grid-column: 1 / -1;
 	grid-row: 2;
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	color: var(--ff10k-faint);
 }
 
 .ff10k-similar-reason {
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	color: var(--ff10k-muted);
 }
 
@@ -533,7 +541,7 @@
 
 .ff10k-similar-hint {
 	margin-top: 2px;
-	font-size: var(--font-ui-smaller);
+	font-size: var(--ff10k-fs-smaller);
 	color: var(--ff10k-faint);
 }
 

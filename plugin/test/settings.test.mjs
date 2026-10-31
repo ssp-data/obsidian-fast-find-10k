@@ -8,7 +8,7 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { mergeSettings, settingsToEngineConfig, migrateKeymap, parseDictionaryLines, DEFAULT_SETTINGS, DEFAULT_KEYMAP } = await load('src/settings.ts');
+const { mergeSettings, settingsToEngineConfig, migrateKeymap, parseDictionaryLines, fontScaleFactor, DEFAULT_SETTINGS, DEFAULT_KEYMAP } = await load('src/settings.ts');
 const { parseKeySpec, validateBinding, keyLabel, conflicts, splitSpecs } = await load('src/keys.ts');
 const { helpGroups, helpNotes } = await load('src/ui/help.ts');
 
@@ -299,4 +299,18 @@ test('help overlay: a Shift+letter binding notes that the capital letter cannot 
 	assert.match(notes[0], /Shift\+J, Shift\+K/);
 	assert.match(notes[0], /capital J, K/);
 	assert.match(notes[0], /Alt\+J/);
+});
+
+test('fontScale: default 100, clamped to 80–130, phones capped at 120', () => {
+	assert.equal(DEFAULT_SETTINGS.fontScale, 100);
+	assert.equal(mergeSettings({ fontScale: 115 }).fontScale, 115);
+	assert.equal(mergeSettings({ fontScale: 40 }).fontScale, 80);
+	assert.equal(mergeSettings({ fontScale: 200 }).fontScale, 130);
+	assert.equal(mergeSettings({ fontScale: 'big' }).fontScale, 100);
+	assert.equal(mergeSettings({}).fontScale, 100);
+	assert.equal(fontScaleFactor(100, false), 1);
+	assert.equal(fontScaleFactor(130, false), 1.3);
+	assert.equal(fontScaleFactor(130, true), 1.2);
+	assert.equal(fontScaleFactor(90, true), 0.9);
+	assert.equal(fontScaleFactor(NaN, false), 1);
 });
