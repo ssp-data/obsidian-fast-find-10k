@@ -108,11 +108,10 @@ export const SELECTED_TINT = 0.16;
  * primary and secondary backgrounds and the selected row's tint. Leaves the stylesheet's
  * fallbacks in place for a colour that cannot be resolved. */
 export function applyContrast(modalEl: HTMLElement): void {
-	const probe = modalEl.createSpan();
-	probe.style.display = 'none';
+	const probe = modalEl.createSpan({ cls: 'ff10k-probe' });
 	const resolve = (expr: string): Rgb | null => {
-		probe.style.color = '';
-		probe.style.color = expr;
+		probe.setCssStyles({ color: '' });
+		probe.setCssStyles({ color: expr });
 		return parseColor(getComputedStyle(probe).color);
 	};
 	try {
@@ -124,9 +123,9 @@ export function applyContrast(modalEl: HTMLElement): void {
 		const rawSelection = resolve(ROLES.selection.from);
 		if (rawSelection) {
 			const selection = readable(rawSelection, text, backgrounds, ROLES.selection.target);
-			modalEl.style.setProperty('--ff10k-selection', toCss(selection));
+			modalEl.setCssProps({ '--ff10k-selection': toCss(selection) });
 			const tint = mix(primary, selection, SELECTED_TINT);
-			modalEl.style.setProperty('--ff10k-selected-bg', toCss(tint));
+			modalEl.setCssProps({ '--ff10k-selected-bg': toCss(tint) });
 			backgrounds.push(tint);
 		}
 		let accent: Rgb | null = null;
@@ -136,9 +135,9 @@ export function applyContrast(modalEl: HTMLElement): void {
 			if (!c) continue;
 			const fixed = readable(c, text, backgrounds, target);
 			if (role === 'accent') accent = fixed;
-			modalEl.style.setProperty(`--ff10k-${role}`, toCss(fixed));
+			modalEl.setCssProps({ [`--ff10k-${role}`]: toCss(fixed) });
 		}
-		if (accent) modalEl.style.setProperty('--ff10k-on-accent', toCss(onAccent(accent, primary, text)));
+		if (accent) modalEl.setCssProps({ '--ff10k-on-accent': toCss(onAccent(accent, primary, text)) });
 	} finally {
 		probe.detach();
 	}
