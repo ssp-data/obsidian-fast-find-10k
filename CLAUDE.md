@@ -26,24 +26,26 @@ the indexer, worker, cache or bridge change).
   query, index, matcher (neo_frizbee fuzzy), rank, frecency, similar, vectors, engine, golden.
 - `crates/ff10k-wasm`: JSON-string API over `Engine` (wasm-bindgen 0.2.128 pinned, simd128).
 - `crates/ff10k-cli` (`ff10k`): index / query / similar / golden / bench / profile / recall.
-- `plugin/src`: `main.ts` (lifecycle, settings, dictionary note, language toggle), `indexer.ts`
-  (IndexedDB raw-text cache, 500 ms coalescing), `engine-client.ts` + `worker.ts` (wasm embedded
-  in `main.js` via Blob URL), `ui/modal.ts` (Telescope modal, keymap scope), `ui/results.ts`,
-  `ui/preview.ts`, `ui/similar.ts`, `ui/help.ts`, `settings.ts`, `settings-tab.ts`
-  (declarative on 1.13+, imperative fallback), `smart-connections-bridge.ts`, `debug.ts`.
+- `plugin/src`: `main.ts` (lifecycle, settings, ribbon, dictionary note, language toggle),
+  `indexer.ts` (vault diff + events, 500 ms coalescing) over `cache.ts` (IndexedDB raw text,
+  frecency, combos), `engine-client.ts` + `worker.ts` + `protocol.ts` (wasm embedded in `main.js`
+  via Blob URL), `unresolved.ts` (ghost docs), `actions.ts` (open/create/copy), `keys.ts`
+  (binding parse, alternatives), `settings.ts`, `settings-tab.ts` (declarative on 1.13+,
+  imperative fallback), `smart-connections-bridge.ts`, `debug.ts`; `ui/`: `modal.ts` (Telescope
+  modal, keymap scope), `results.ts`, `preview.ts`, `similar.ts`, `help.ts`, `contrast.ts`.
 - `fixtures/vault` + `tests/golden/core.toml`: golden queries (`expect_top`, `expect_in_top`,
   `expect_tier`, `must_not_top3`, `must_not_appear`, `expect_similar_count`).
 - `manifest.json`, `versions.json` live in the repo root (Obsidian review requirement).
 - `docs/showcase.md`: one screenshot per feature, hot-linked from the GitHub issue that asked
   for it (`scripts/release-images.sh PREV` lists those URLs); the README keeps only three images.
 - `docs/architecture.md`: reader-facing overview (worker, cache, updates, Smart Connections).
-- `docs/comparison.md`: native search vs Omnisearch vs Fast Find vs QMD on the test vault, with
-  screenshots in `docs/images/compare/*.webp` (1600 px, ~100 KB each). Method: Obsidian CLI
-  evals drive each tool (`openGlobalSearch(q)` + `view.resultCountEl`, `omnisearch.api.search`,
+- `docs/comparison.md`: native search vs Omnisearch vs Fast Find vs QMD on the test vault,
+  screenshots in `docs/images/compare/*.webp` (1600 px, ~100 KB). Method: Obsidian CLI evals
+  drive each tool (`openGlobalSearch(q)` + `view.resultCountEl`, `omnisearch.api.search`,
   `plugins['fast-find'].engine.search(q,'all',30,false)`), `dev:screenshot`, `magick -resize
-  1600x -quality 80`. QMD (`npm i -g @tobilu/qmd`, index in `~/.cache/qmd`, collections
-  `testvault`/`coffee`/`dbt`) is a CLI; its embed takes ~1 h on this CPU and may stop with
-  "LLM session expired", just run `qmd embed` again.
+  1600x -quality 80`. QMD is a CLI with its own index in `~/.cache/qmd`.
+- `docs/dev-checklist.md` (build/install/reload/eval recipes per task), `docs/perf.md`
+  (timings, memory), `docs/recall.md` (recall vs Omnisearch, how to re-run).
 
 ## Engine behaviour that tests guard (see spec §6 for the rules themselves)
 
@@ -97,8 +99,10 @@ the indexer, worker, cache or bridge change).
 - Obsidian's release review lints the source: set styles with classes, `setCssStyles` or
   `setCssProps`, never `el.style.x = …`; no `:has()` in `styles.css` (toggle a class from TS
   instead, e.g. `.ff10k-hit` on preview lines with a match); no scrollbar properties.
-- Diagnostics only through `debug.ts` (`console.debug`, "Log engine timings"); timers via
-  `window.*` (`self.*` in the worker); `createFragment()` not `document.*` (Obsidian review).
+- Obsidian review lint: `createFragment()` not `document.*`, `el.setCssStyles()` /
+  `el.setCssProps()` not `el.style.*`, no `:has()` in `styles.css` (class the element instead),
+  no `innerHTML`. Diagnostics only through `debug.ts` (`console.debug`, "Log engine timings");
+  timers via `window.*` (`self.*` in the worker).
 - Settings: new fields need a default in `DEFAULT_SETTINGS`, clamping in `mergeSettings`, a row in
   both `getSettingDefinitions()` and the legacy tab, and a serde default on the Rust `Config` so
   old configs still parse. New `Field`s need `FIELDS` in both index.rs and matcher.rs, the
@@ -136,8 +140,8 @@ result count) right before a screenshot and again after, and retry rather than t
 returned from `eval` are not awaited: write to `window.__x` and read it in a second eval.
 Modal internals are reachable as `plugins['fast-find'].modal` (private fields are plain JS).
 
-Shell: `pkill -f "qmd embed"` kills the calling shell too (the pattern matches its own command
-line); use `pgrep -f "bin/qmd [e]mbed"`. Parallel Bash calls share cwd; use absolute paths.
+Shell: `pkill -f <pattern>` matches the calling shell's own command line and kills it; bracket a
+letter (`pgrep -f "bin/qmd [e]mbed"`). Parallel Bash calls share cwd; use absolute paths.
 
 ## Releasing
 
@@ -145,7 +149,9 @@ line); use `pgrep -f "bin/qmd [e]mbed"`. Parallel Bash calls share cwd; use abso
 (Claude CLI prose, images from closed issues via `scripts/release-images.sh`); review, commit,
 then `make release VERSION=x.y.z` (refuses while the notes are unchanged since the last tag).
 The committed `RELEASE_NOTES.md` always describes the *last* release; do not edit it for
-unreleased work, the owner drafts at release time. Last released: 0.2.2.
+unreleased work, the owner drafts at release time. History: spec and plan 2026-10-26, 0.1.0
+2026-10-27, 0.2.0 and 0.2.4 2026-10-30 (0.2.3 docs: comparison, architecture, similar-panel
+setting; 0.2.4 theme-colour contrast pass). Last released: 0.2.4.
 
 ## Open items
 
@@ -154,5 +160,5 @@ unreleased work, the owner drafts at release time. Last released: 0.2.2.
   `docs/recall.md`.
 - Canvas/Excalidraw are previewed as text, not rendered.
 - Worker memory ~164 MB on the 9k-note vault (budget 150), `docs/perf.md`.
-- Unreleased on main after 0.2.2: comparison + architecture docs, retaken screenshots,
-  `similarPanel` setting. Reddit/GitHub asks still open: none known.
+- Reddit/GitHub asks still open: none known. Check `git status` first: another session may have
+  left an uncommitted review-lint pass (`contrast.ts`, `preview.ts`, `styles.css`).
