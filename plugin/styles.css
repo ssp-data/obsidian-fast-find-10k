@@ -31,6 +31,11 @@
 	--ff10k-pill-ring: color-mix(in srgb, var(--ff10k-selection) 70%, transparent);
 }
 
+/* hidden probe: ui/contrast.ts resolves theme colours through it at modal open */
+.ff10k-modal .ff10k-probe {
+	display: none;
+}
+
 /* Esc closes (footer hint); the close button would sit on top of the status text. */
 .ff10k-modal .modal-close-button,
 .ff10k-modal .modal-header-button,
@@ -455,7 +460,7 @@
 	box-shadow: inset 0 -2px 0 var(--ff10k-accent);
 }
 
-.ff10k-preview .ff10k-line:has(mark) {
+.ff10k-preview .ff10k-line.ff10k-hit {
 	margin-inline: calc(-1 * var(--size-4-3));
 	padding-left: var(--size-4-3);
 	padding-right: calc(var(--size-4-3) - 2px);
@@ -643,7 +648,6 @@ input.ff10k-invalid {
 	align-items: center;
 	gap: var(--size-4-2);
 	overflow-x: auto;
-	scrollbar-width: none;
 }
 
 .ff10k-mobile .ff10k-status {

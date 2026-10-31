@@ -412,6 +412,7 @@ export class Preview {
 			for (const s of segs[i]) {
 				const host = s.style ? div.createSpan({ cls: `ff10k-${s.style}` }) : div;
 				if (s.mark) {
+					div.addClass('ff10k-hit'); // styles.css bands the line (no :has(), which the review lint rejects)
 					const m = host.createEl('mark', { text: s.text });
 					if (i === anchor && anchor === markLine) target ??= m;
 				} else host.appendText(s.text);

@@ -94,6 +94,9 @@ the indexer, worker, cache or bridge change).
   reads 4.5:1 on the primary and secondary backgrounds (3:1 for the selection bar/tint). The
   stylesheet's `color-mix` values are only the fallback. Measured across Kanagawa, Asia Neon,
   Fireplace, Osaka Jade, Omarchy and the default theme in both modes (2026-10-30).
+- Obsidian's release review lints the source: set styles with classes, `setCssStyles` or
+  `setCssProps`, never `el.style.x = …`; no `:has()` in `styles.css` (toggle a class from TS
+  instead, e.g. `.ff10k-hit` on preview lines with a match); no scrollbar properties.
 - Diagnostics only through `debug.ts` (`console.debug`, "Log engine timings"); timers via
   `window.*` (`self.*` in the worker); `createFragment()` not `document.*` (Obsidian review).
 - Settings: new fields need a default in `DEFAULT_SETTINGS`, clamping in `mergeSettings`, a row in
