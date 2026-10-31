@@ -160,5 +160,5 @@ setting; 0.2.4 theme-colour contrast pass). Last released: 0.2.4.
   `docs/recall.md`.
 - Canvas/Excalidraw are previewed as text, not rendered.
 - Worker memory ~164 MB on the 9k-note vault (budget 150), `docs/perf.md`.
-- Reddit/GitHub asks still open: none known. Check `git status` first: another session may have
-  left an uncommitted review-lint pass (`contrast.ts`, `preview.ts`, `styles.css`).
+- Reddit/GitHub asks still open: none known. Unreleased after 0.2.4: the review-lint fix
+  (`9b7f659`). Several sessions may run at once: check `git status` and `git log` before editing.
