@@ -1,17 +1,15 @@
 ## What has changed?
 
-A small release with one new setting: you can now make the search text larger or smaller than your theme's size. Results, preview, similar notes and the search bar all follow it, so a dense list on a big screen or a cramped one on a phone is a slider away.
-
-![image](docs/images/change-font-size-preview.webp)
+A small release about accented and special letters. Searching `cafe` already found "Vienna Café", but the title lost its highlight and the preview said "no matches"; both now mark the accented text. Letters that have no plain-ASCII decomposition, such as `ß`, `ø` and `æ`, are now folded in the search itself, so a US keyboard finds "Straße" with `strasse` and "Søren" with `soren`.
 
 **Highlights**
 
-- **Text size setting.** Settings → Behaviour → `Text size` scales the result rows, the preview, the similar-notes panel and the search bar (input, pills, count) from 80 % to 130 % of the theme's size. The footer hints and the help overlay keep the theme size, so the modal's frame never grows with the text.
-- **Live sample and instant apply.** A sample under the slider, built from the same search line, tier label, result rows and preview lines the modal uses, follows the slider as you drag. If a search is open while you move it, the open search resizes too.
-- **Phones cap at 120 %.** On mobile the slider still goes to 130 but the applied size stops at 120 %, so a single-column layout stays usable.
+- **Special letters fold in search.** `ß`, `ø`, `æ`, `œ`, `ł`, `đ`, `ı`, `ð` and `þ` are matched as `ss`, `o`, `ae`, `oe`, `l`, `d`, `i`, `d` and `th` in titles, headings and content, for the typed query and the note alike. `soren kierkegaard`, `søren kierkegaard`, `strasse` and `straße` all land on the same note in the same tier. German `ä` still folds to `a`, not `ae`: `spati` finds "Späti", `spaeti` only through the typo allowance.
+- **Highlights follow the engine's folding.** The title row and the preview now fold the displayed text the same way the engine does (case, diacritics, the letter table) and map the match back onto the original span. `muller` marks "Müller", `cafe` marks "Café", and the `3 / 12 matches` count and Alt+N / Alt+P jumps include those lines. Fuzzy (typo) and word-list hits are still not marked in the preview.
 
 **Fixes**
 
-- No user-facing bugs were fixed in this release. Search, ranking and keys are unchanged from 0.2.5.
+- Searching an accented word with its plain spelling (`cafe` for "Café") found the note but showed no highlight on the title and "no matches" in the preview, because the preview compared lower-cased raw text while the engine compared folded text. Both now mark the match.
+- Titles containing a character whose lower-case form changes its length (some Unicode letters, emoji sequences) dropped every highlight on that row. Highlights are now mapped by offset and only the unmatched range is skipped.
 
-Install from the release assets or build with `make build` as described in the README.
+Numbers for a 100k-note vault (searchable after 0.6 s, 20–400 ms per query) are in the README's Performance section.
