@@ -32,7 +32,8 @@ the indexer, worker, cache or bridge change).
   via Blob URL), `unresolved.ts` (ghost docs), `actions.ts` (open/create/copy), `keys.ts`
   (binding parse, alternatives), `settings.ts`, `settings-tab.ts` (declarative on 1.13+,
   imperative fallback), `smart-connections-bridge.ts`, `debug.ts`; `ui/`: `modal.ts` (Telescope
-  modal, keymap scope), `results.ts`, `preview.ts`, `similar.ts`, `help.ts`, `contrast.ts`.
+  modal, keymap scope), `results.ts`, `preview.ts`, `similar.ts`, `help.ts`, `contrast.ts`,
+  `fold.ts` (engine-style fold + offset map for title and preview highlights).
 - `fixtures/vault` + `tests/golden/core.toml`: golden queries (`expect_top`, `expect_in_top`,
   `expect_tier`, `must_not_top3`, `must_not_appear`, `expect_similar_count`).
 - `manifest.json`, `versions.json` live in the repo root (Obsidian review requirement).
@@ -90,6 +91,9 @@ the indexer, worker, cache or bridge change).
   without `?.` (a throw in the results path silently left the preview empty on mobile).
 - Preview is plain text (speed): image embeds as `<img>`, mermaid fences rendered 250 ms after the
   selection settles, Excalidraw PNG/SVG export shown if present. Nothing else is rendered.
+  Title and preview highlights fold the display text like the engine (`ui/fold.ts`: NFKC, lower,
+  diacritics stripped, offsets mapped back), so `cafe` marks "Café" and `muller` marks "Müller".
+  The preview marks exact folded substrings only: fuzzy (typo) and expanded hits show no marks.
 - Colours: `styles.css` uses only `--ff10k-*` palette variables (accent, h1–h3, faint, muted,
   orange, selection, on-accent), never a raw theme colour. `ui/contrast.ts` sets them inline at
   modal open (and on `css-change`): each theme colour is blended toward `--text-normal` until it

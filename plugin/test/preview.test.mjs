@@ -109,8 +109,29 @@ test('plain lines (code) get marks but no link or tag tint', () => {
 	assert.deepEqual(segmentLine('x = [[a]] #bb', ['bb'], { marks: 200, styles: 2000 }, true), [seg('x = [[a]] #'), seg('bb', null, true)]);
 });
 
-test('a line whose lowercase changes length gets no marks rather than wrong ones', () => {
-	assert.deepEqual(segmentLine('İstanbul data', ['data'], { marks: 200, styles: 2000 }, false), [seg('İstanbul data')]);
+test('marks fold diacritics like the engine: cafe marks Café, both ways', () => {
+	const b = () => ({ marks: 200, styles: 2000 });
+	assert.deepEqual(segmentLine('Vienna Café', ['cafe'], b(), false), [seg('Vienna '), seg('Café', null, true)]);
+	assert.deepEqual(segmentLine('## Café Sperl', ['cafe'], b(), false), [seg('## '), seg('Café', null, true), seg(' Sperl')]);
+	assert.deepEqual(segmentLine('Ölmühle Müller', ['olmuhle', 'muller'], b(), false), [seg('Ölmühle', null, true), seg(' '), seg('Müller', null, true)]);
+	// the query carries the accent, the note does not
+	assert.deepEqual(segmentLine('a cafe here', queryTerms('Café'), b(), false), [seg('a '), seg('cafe', null, true), seg(' here')]);
+	// decomposed text (e + combining acute) marks the whole original span
+	assert.deepEqual(segmentLine('Café x', ['cafe'], b(), false), [seg('Café', null, true), seg(' x')]);
+});
+
+test('letters without a decomposition fold like the engine: strasse marks Straße', () => {
+	const b = () => ({ marks: 200, styles: 2000 });
+	assert.deepEqual(segmentLine('Die Straße', ['strasse'], b(), false), [seg('Die '), seg('Straße', null, true)]);
+	assert.deepEqual(segmentLine('Søren in Łódź', ['soren', 'lodz'], b(), false), [seg('Søren', null, true), seg(' in '), seg('Łódź', null, true)]);
+	assert.deepEqual(segmentLine('Æbleskiver', ['aeble'], b(), false), [seg('Æble', null, true), seg('skiver')]);
+	// a match ending inside an expanded letter (`stras` ends in the first `s` of `ß`) stops before it
+	assert.deepEqual(segmentLine('Straße', ['stras'], b(), false), [seg('Stra', null, true), seg('ße')]);
+});
+
+test('a line whose lowercase changes length still gets correct marks', () => {
+	assert.deepEqual(segmentLine('İstanbul data', ['data'], { marks: 200, styles: 2000 }, false), [seg('İstanbul '), seg('data', null, true)]);
+	assert.deepEqual(segmentLine('İstanbul data', ['istanbul'], { marks: 200, styles: 2000 }, false), [seg('İstanbul', null, true), seg(' data')]);
 });
 
 test('numeric-only hashes are not tags', () => {

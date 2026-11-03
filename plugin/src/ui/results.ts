@@ -1,6 +1,7 @@
 // Result rows of the search modal: tier group labels and one row per hit.
 
 import type { Hit } from '../protocol';
+import { fold, unfoldRange } from './fold';
 
 export const TIER_LABELS: Record<number, string> = {
 	0: 'recent',
@@ -11,20 +12,21 @@ export const TIER_LABELS: Record<number, string> = {
 	5: 'semantic',
 };
 
-/** Maps `titleRanges` (UTF-16 offsets into `titleNorm`) onto the display title: each matched
- * substring is located case-insensitively after the previous match; ranges whose text does not
- * occur (diacritics, emoji, width differences) are dropped. Never throws. */
+/** Maps `titleRanges` (UTF-16 offsets into `titleNorm`) onto the display title: the display is
+ * folded like the engine folds the title (case, diacritics), each matched substring is located
+ * after the previous match and mapped back to display offsets; ranges whose text does not occur
+ * (emoji, width differences) are dropped. Never throws. */
 export function mapTitleRanges(display: string, norm: string, ranges: [number, number][]): [number, number][] {
-	const lower = display.toLowerCase();
-	if (lower.length !== display.length) return []; // case folding changed offsets; skip highlights
+	const folded = fold(display);
 	const out: [number, number][] = [];
 	let from = 0;
 	for (const [s, e] of [...ranges].sort((a, b) => a[0] - b[0])) {
 		if (!(s >= 0 && e > s && e <= norm.length)) continue;
 		const sub = norm.slice(s, e).toLowerCase();
-		const at = lower.indexOf(sub, from);
+		const at = folded.text.indexOf(sub, from);
 		if (at < 0) continue;
-		out.push([at, at + sub.length]);
+		const r = unfoldRange(folded, at, at + sub.length);
+		if (r[1] > r[0]) out.push(r);
 		from = at + sub.length;
 	}
 	return out;

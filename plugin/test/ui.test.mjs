@@ -54,9 +54,22 @@ test('title ranges follow shifted positions in the display title', () => {
 	assert.deepEqual(mapTitleRanges('👉🏻 Data Engineering', 'data engineering', [[0, 4], [5, 13]]), [[5, 9], [10, 18]]);
 });
 
+test('title ranges survive diacritics in the display title', () => {
+	assert.deepEqual(mapTitleRanges('Café Ölmühle', 'cafe olmuhle', [[0, 4], [5, 7]]), [[0, 4], [5, 7]]);
+	assert.deepEqual(mapTitleRanges('Café AI', 'cafe ai', [[0, 4], [5, 7]]), [[0, 4], [5, 7]]);
+	assert.deepEqual(mapTitleRanges('Vienna café test note', 'vienna cafe test note', [[7, 11]]), [[7, 11]]);
+	// decomposed display title: the mapped range covers the combining mark too
+	assert.deepEqual(mapTitleRanges('Café AI', 'cafe ai', [[0, 4], [5, 7]]), [[0, 5], [6, 8]]);
+	assert.deepEqual(mapTitleRanges('İstanbul', 'istanbul', [[0, 8]]), [[0, 8]]);
+});
+
+test('title ranges survive letters without a decomposition', () => {
+	assert.deepEqual(mapTitleRanges('Straße', 'strasse', [[0, 7]]), [[0, 6]]);
+	assert.deepEqual(mapTitleRanges('Søren Kierkegaard', 'soren kierkegaard', [[0, 5]]), [[0, 5]]);
+});
+
 test('a range not found in the display title is skipped, others kept', () => {
-	assert.deepEqual(mapTitleRanges('Café Ölmühle', 'cafe olmuhle', [[0, 4], [5, 7]]), []);
-	assert.deepEqual(mapTitleRanges('Café AI', 'cafe ai', [[0, 4], [5, 7]]), [[5, 7]]);
+	assert.deepEqual(mapTitleRanges('Café AI', 'cafe ai', [[0, 4], [5, 7], [8, 10]]), [[0, 4], [5, 7]]);
 });
 
 test('repeated substrings map to successive occurrences', () => {
