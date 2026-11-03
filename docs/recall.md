@@ -57,7 +57,7 @@ to its title now outranks a tied note without an H1.
 
 Latencies are not directly comparable: Fast Find 10K ran natively (release build, one core),
 Omnisearch inside Obsidian's renderer. Inside Obsidian a Fast Find 10K query takes about 5 ms for
-one word and 15 ms for three (see [perf.md](perf.md)).
+one word and 15 ms for three (see [performance.md](performance.md)).
 
 ## What the misses were (Fast Find 10K, before the fixes)
 

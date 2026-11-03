@@ -114,7 +114,7 @@ every index mutation and rebuilds them once it has been idle for 100 ms, so the 
 does not pay for them.
 
 Measured on a 9,385-note vault: 4–18 ms engine time per query in Obsidian, 1–8 ms native
-(`docs/perf.md`). The number next to the result count in the modal is the engine time of the
+(`docs/performance.md`). The number next to the result count in the modal is the engine time of the
 query you just typed.
 
 ## How edits reach the index

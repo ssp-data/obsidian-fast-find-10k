@@ -1,5 +1,123 @@
 # Performance notes
 
+## 100k notes
+
+Measured 2026-11-03 on `trouble-tags-testvault_100k`: **98,892 indexed notes, 584 MB of markdown**
+(the test vault plus documentation from MDN, Azure, SQL Server, .NET, GitHub, Fabric, PowerShell,
+Docker, ClickHouse, Obsidian Help and Hub, Neovim, and 6,000 Simple English Wikipedia articles).
+Obsidian 1.14.4 desktop with only Fast Find 10K 0.2.6 and Vimrc Support enabled, no Smart
+Connections vectors. Same machine as below (AMD Ryzen AI 9 HX 370, `powersave` governor). For
+comparison, the 17,783-note / 82 MB `trouble-tags-testvault` was open in the same Obsidian
+instance.
+
+### Start and memory, in Obsidian
+
+| | 98,892 notes / 584 MB |
+|---|---|
+| Plugin reload → searchable (first batch in the engine) | 0.57 s |
+| Plugin reload → fully indexed (warm, from the cache) | 37.9 s |
+| Worker memory (`stats.wasmBytes`) | 2.32 GB |
+
+The finder answers 0.6 s after start; until the index is done, queries search the notes ingested
+so far and the status line shows `indexing N / M`.
+
+### Queries in Obsidian
+
+Engine time (`elapsedUs` of `engine.search(q, 'all', 30, false)`), median of 7 runs each, both
+vaults measured back to back. Wall clock around the worker round trip was at most 1 ms more.
+
+| Query | 17,783 notes | 98,892 notes |
+|---|---|---|
+| `kafka` | 6.9 ms | 19.1 ms |
+| `ai` | 5.8 ms | 41.9 ms |
+| `path:resources` | 5.8 ms | 41.7 ms |
+| `git` | 19.4 ms | 55.2 ms |
+| `duckdb` | 9.1 ms | 67.2 ms |
+| `zettelkasten` | 9.5 ms | 93.4 ms |
+| `kubernetes` | 13.8 ms | 148.6 ms |
+| `troubleshoot` | 11.6 ms | 154.0 ms |
+| `dagster` | 15.0 ms | 173.9 ms |
+| `linux kernel` | 16.1 ms | 182.8 ms |
+| `data engineering` | 17.1 ms | 219.2 ms |
+| `obsidian troubelshoot` (typo) | 24.8 ms | 221.4 ms |
+| `data engineer ai` | 18.5 ms | 229.4 ms |
+| `select` | 27.1 ms | 354.1 ms |
+| `sql server` | 19.8 ms | 401.2 ms |
+
+Obsidian's native search on the same 100k vault, timed until it stopped working (the search
+view's `dom.working` flag; it streams results, so the first ones appear earlier):
+
+| Query | Native search | Native results | Fast Find |
+|---|---|---|---|
+| `obsidian troubelshoot` | 2.0 s | 47 | 221 ms |
+| `kafka` | 14.0 s | 7,803 | 19 ms |
+| `data engineering` | 34.9 s | 44,394 | 219 ms |
+| `sql server` | 57.4 s | 620,690 | 401 ms |
+
+### Screenshots
+
+The status line at the top right shows hits / indexed notes · engine time; the vault name is at
+the bottom left.
+
+`kafka`, 41 ms (first run in the modal; repeated runs take 19 ms):
+
+![kafka on 98,892 notes](images/perf-100k/kafka.webp)
+
+`obsidian troubelshoot` (typo), 225 ms:
+
+![obsidian troubelshoot on 98,892 notes](images/perf-100k/obsidian-troubelshoot.webp)
+
+`data engineering`, 218 ms:
+
+![data engineering on 98,892 notes](images/perf-100k/data-engineering.webp)
+
+`sql server`, the slowest query measured, 395 ms:
+
+![sql server on 98,892 notes](images/perf-100k/sql-server.webp)
+
+### Native CLI (`ff10k`, pinned with `taskset -c 2`)
+
+| | 17,783 notes / 82 MB | 98,892 notes / 584 MB |
+|---|---|---|
+| `ff10k index` (read + index + CLI ghost scan) | 7.85 s, RSS 790.5 MB | 44.71 s, RSS 3,181.7 MB |
+| read files | 136 ms | 982 ms |
+| upsert (engine only) | 4,858 ms (16.9 MB/s) | 30,230 ms (19.3 MB/s) |
+| extract / derive / insert / keys | 974 / 1,945 / 1,858 / 49 ms | 6,150 / 13,803 / 9,674 / 435 ms |
+| first search | 117 ms | 601 ms |
+| engine heap | 627.5 MB | 2,585.7 MB |
+
+| Query (`ff10k bench`) | 17,783 notes p50 / p95 | 98,892 notes p50 / p95 |
+|---|---|---|
+| `ai` | 3.4 / 6.0 ms | 43.2 / 50.4 ms |
+| `data engineering` | 32.1 / 34.2 ms | 187.4 / 193.9 ms |
+| `data engineer ai` | 24.1 / 25.7 ms | 171.9 / 182.0 ms |
+| `obsidian troubelshoot` | 38.1 / 39.4 ms | 129.6 / 136.5 ms |
+| `path:resources` | 1.8 / 2.7 ms | 20.0 / 23.2 ms |
+
+### What it means
+
+- **It works at 100k.** Every query returned its ranked list in under half a second, most in
+  150–230 ms, against 14–57 s for Obsidian's own search on the same vault. Every keystroke is a
+  query and a superseded one is dropped, so typing does not queue up.
+- **Cost grows with the text.** 7× the markdown (82 → 584 MB) makes queries about 3–20× slower.
+  The slowest are common words that hit a large share of the vault (`sql server`, `select`):
+  every candidate is scored before the list is cut.
+- **Indexing and memory grow linearly.** Ingest runs at the same ~19 MB/s, so 584 MB takes about
+  30 s in the engine and 38 s in Obsidian, in the worker, searchable from 0.6 s on. The worker
+  holds 2.3 GB, far above the 150 MB budget set for 10k notes: the index keeps postings plus the
+  raw text for excerpts and the preview, so it grows with the markdown.
+- **Obsidian itself is the bottleneck at this size.** Its metadata cache took many minutes on
+  first open, and renaming a note with link updates (`fileManager.renameFile`) took 44.6 s,
+  against 0.26 s for a plain `vault.rename`; creating a note took 0.3 s. Fast Find's part of
+  either is the same coalesced 500 ms update as on a small vault.
+
+Method: the evals in `docs/dev-checklist.md` against the second vault
+(`obsidian vault=trouble-tags-testvault_100k eval code=…`), Obsidian's search timed through
+`openGlobalSearch(q)` and `dom.working`, screenshots with `dev:screenshot` and
+`magick -resize 1600x -quality 80`.
+
+## The 9k-note test vault
+
 Budgets from spec §14 (10k notes, 30 MB, desktop). Measured 2026-10-26 on the test vault
 (`trouble-tags-testvault`: 9,385 indexed notes, 27 MB of markdown) on an AMD Ryzen AI 9 HX 370
 (4 Zen 5 + 8 Zen 5c cores, `powersave` governor). Native runs are pinned to a Zen 5 core
