@@ -12,6 +12,10 @@
 #   kubernetes/website           content/en/docs    CC BY 4.0
 #   microsoft/vscode-docs        docs/              CC BY 3.0
 #   rust-lang/book               src/               MIT / Apache-2.0
+# Chinese (CJK tokenization, issue #11):
+#   kubernetes/website           content/zh-cn/docs CC BY 4.0 (translation of the English docs above)
+#   tldr-pages/tldr              pages.zh           CC BY 4.0 (short command notes, mixed Chinese and English)
+#   KaiserY/trpl-zh-cn           src/               MIT (the Rust book in Chinese)
 set -euo pipefail
 
 VAULT="${1:?usage: make-test-vault.sh <vault>}"
@@ -42,5 +46,8 @@ fetch dbt        https://github.com/dbt-labs/docs.getdbt.com.git   website/docs 
 fetch kubernetes https://github.com/kubernetes/website.git         content/en/docs "CC BY 4.0"
 fetch vscode     https://github.com/microsoft/vscode-docs.git      docs            "CC BY 3.0"
 fetch rust-book  https://github.com/rust-lang/book.git             src             "MIT / Apache-2.0"
+fetch kubernetes-zh https://github.com/kubernetes/website.git      content/zh-cn/docs "CC BY 4.0"
+fetch tldr-zh    https://github.com/tldr-pages/tldr.git            pages.zh        "CC BY 4.0"
+fetch rust-book-zh https://github.com/KaiserY/trpl-zh-cn.git       src             "MIT"
 
 echo "== total markdown notes in $VAULT: $(find "$VAULT" -name '*.md' -not -path '*/.obsidian/*' -not -path '*/.smart-env/*' -not -path '*/.trash/*' | wc -l)"
