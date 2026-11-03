@@ -219,3 +219,30 @@ must_not_appear = ["KAFOJ Espresso", "Adrianos Espresso"]
 [[case]]
 query = "type:canvas plan"
 expect_top = "Book Plan"
+
+# Letters with no Unicode decomposition fold by table (ß→ss, ø→o, æ→ae, œ→oe, ł→l, đ→d, ı→i, ð→d, þ→th),
+# so a US keyboard finds them; the accented spelling folds to the same form.
+[[case]]
+query = "soren kierkegaard"
+expect_top = "Søren Kierkegaard"
+expect_tier = 1
+
+[[case]]
+query = "søren kierkegaard"
+expect_top = "Søren Kierkegaard"
+expect_tier = 1
+
+[[case]]
+query = "strasse"
+expect_top = "Søren Kierkegaard"
+expect_tier = 2
+
+[[case]]
+query = "straße"
+expect_top = "Søren Kierkegaard"
+expect_tier = 2
+
+[[case]]
+query = "lodz aebleskiver"
+expect_top = "Søren Kierkegaard"
+expect_tier = 3

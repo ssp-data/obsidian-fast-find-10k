@@ -45,7 +45,7 @@ the indexer, worker, cache or bridge change).
   drive each tool (`openGlobalSearch(q)` + `view.resultCountEl`, `omnisearch.api.search`,
   `plugins['fast-find'].engine.search(q,'all',30,false)`), `dev:screenshot`, `magick -resize
   1600x -quality 80`. QMD is a CLI with its own index in `~/.cache/qmd`.
-- `docs/dev-checklist.md` (build/install/reload/eval recipes per task), `docs/perf.md`
+- `docs/dev-checklist.md` (build/install/reload/eval recipes per task), `docs/performance.md`
   (timings, memory), `docs/recall.md` (recall vs Omnisearch, how to re-run).
 
 ## Engine behaviour that tests guard (see spec §6 for the rules themselves)
@@ -60,7 +60,9 @@ the indexer, worker, cache or bridge change).
   ratio ≥ 0.65 and matched-char guards; a match never borrows a letter from a neighbouring word
   (`invoice` ≠ "Brand Voice"); window retry per word.
 - Short-term rule: ≤ 3 letters exact-only in single-term queries, per compound part.
-- Compounds join on `-`, `_` and `.` (`jasper.ai`); camelCase splits.
+- Compounds join on `-`, `_` and `.` (`jasper.ai`); camelCase splits. `normalize`: NFKC, lowercase,
+  diacritics stripped (Japanese marks kept), then the letter table `ß→ss ø→o æ→ae œ→oe ł→l đ→d
+  ı→i ð→d þ→th` (`fold_letter`); `ui/fold.ts` must mirror any change to it. No `ä→ae`.
 - Optional words (`a an the of to in on i`) never required. Abbreviation groups
   (`oss: open source, open-source software`) merge into the typed term's unit; hits through them
   are `expanded` (orange in the UI). Languages: built-in `dict/de.txt` + the dictionary note,
@@ -167,6 +169,6 @@ setting; 0.2.4 theme-colour contrast pass). Last released: 0.2.4.
 - `first two words` recall trails Omnisearch at @1 (tie-break among equals); accepted, see
   `docs/recall.md`.
 - Canvas/Excalidraw are previewed as text, not rendered.
-- Worker memory ~164 MB on the 9k-note vault (budget 150), `docs/perf.md`.
+- Worker memory ~164 MB on the 9k-note vault (budget 150), `docs/performance.md`.
 - Reddit/GitHub asks still open: none known. Unreleased after 0.2.4: the review-lint fix
   (`9b7f659`). Several sessions may run at once: check `git status` and `git log` before editing.

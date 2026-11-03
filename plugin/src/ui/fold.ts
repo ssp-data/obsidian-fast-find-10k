@@ -1,10 +1,13 @@
 // Text folding for highlights: the same shape the engine's `normalize` gives a string
-// (NFKC, lowercase, diacritics stripped) plus an offset map back into the original text, so a
+// (NFKC, lowercase, diacritics stripped, letter table) plus an offset map back into the original text, so a
 // match found in the folded string can be marked on the text the user sees.
 
 /** Combining marks the engine keeps (Japanese voiced-sound marks). */
-const KEEP_MARKS = /[゙゚]/;
+const KEEP_MARKS = /[\u3099\u309A]/;
 const MARKS = /\p{M}/gu;
+/** Lowercase letters with no decomposition, folded by table like the engine's `fold_letter`. */
+const LETTERS: Record<string, string> = { ß: 'ss', ø: 'o', æ: 'ae', œ: 'oe', ł: 'l', đ: 'd', ı: 'i', ð: 'd', þ: 'th' };
+const LETTER_RE = /[ßøæœłđıðþ]/g;
 
 /** Per-code-point fold cache: non-ASCII text repeats its characters (umlauts, CJK). */
 const cache = new Map<string, string>();
@@ -12,7 +15,13 @@ const cache = new Map<string, string>();
 function foldChar(c: string): string {
 	let f = cache.get(c);
 	if (f === undefined) {
-		f = c.normalize('NFKC').toLowerCase().normalize('NFD').replace(MARKS, (m) => (KEEP_MARKS.test(m) ? m : '')).normalize('NFC');
+		f = c
+			.normalize('NFKC')
+			.toLowerCase()
+			.normalize('NFD')
+			.replace(MARKS, (m) => (KEEP_MARKS.test(m) ? m : ''))
+			.normalize('NFC')
+			.replace(LETTER_RE, (m) => LETTERS[m]);
 		if (cache.size > 4096) cache.clear();
 		cache.set(c, f);
 	}

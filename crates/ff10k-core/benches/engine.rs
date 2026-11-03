@@ -4,7 +4,7 @@
 //! The 10k notes are clones of the fixture vault (`fixtures/vault`) with numbered suffixes on
 //! the file name and folder, each text cut to at most 3,000 bytes (at a char boundary). The
 //! fixture notes are short, so the corpus is about 3 MB; real-vault numbers (27 MB) come from
-//! `ff10k profile` / `ff10k bench` (see docs/perf.md).
+//! `ff10k profile` / `ff10k bench` (see docs/performance.md).
 
 use std::path::Path;
 
