@@ -32,7 +32,8 @@ the indexer, worker, cache or bridge change).
   via Blob URL), `unresolved.ts` (ghost docs), `actions.ts` (open/create/copy), `keys.ts`
   (binding parse, alternatives), `settings.ts`, `settings-tab.ts` (declarative on 1.13+,
   imperative fallback), `smart-connections-bridge.ts`, `debug.ts`; `ui/`: `modal.ts` (Telescope
-  modal, keymap scope), `results.ts`, `preview.ts`, `similar.ts`, `help.ts`, `contrast.ts`.
+  modal, keymap scope), `results.ts`, `preview.ts`, `similar.ts`, `help.ts`, `contrast.ts`,
+  `fold.ts` (engine-style fold + offset map for title and preview highlights).
 - `fixtures/vault` + `tests/golden/core.toml`: golden queries (`expect_top`, `expect_in_top`,
   `expect_tier`, `must_not_top3`, `must_not_appear`, `expect_similar_count`).
 - `manifest.json`, `versions.json` live in the repo root (Obsidian review requirement).
@@ -44,7 +45,7 @@ the indexer, worker, cache or bridge change).
   drive each tool (`openGlobalSearch(q)` + `view.resultCountEl`, `omnisearch.api.search`,
   `plugins['fast-find'].engine.search(q,'all',30,false)`), `dev:screenshot`, `magick -resize
   1600x -quality 80`. QMD is a CLI with its own index in `~/.cache/qmd`.
-- `docs/dev-checklist.md` (build/install/reload/eval recipes per task), `docs/perf.md`
+- `docs/dev-checklist.md` (build/install/reload/eval recipes per task), `docs/performance.md`
   (timings, memory), `docs/recall.md` (recall vs Omnisearch, how to re-run).
 
 ## Engine behaviour that tests guard (see spec §6 for the rules themselves)
@@ -59,7 +60,9 @@ the indexer, worker, cache or bridge change).
   ratio ≥ 0.65 and matched-char guards; a match never borrows a letter from a neighbouring word
   (`invoice` ≠ "Brand Voice"); window retry per word.
 - Short-term rule: ≤ 3 letters exact-only in single-term queries, per compound part.
-- Compounds join on `-`, `_` and `.` (`jasper.ai`); camelCase splits.
+- Compounds join on `-`, `_` and `.` (`jasper.ai`); camelCase splits. `normalize`: NFKC, lowercase,
+  diacritics stripped (Japanese marks kept), then the letter table `ß→ss ø→o æ→ae œ→oe ł→l đ→d
+  ı→i ð→d þ→th` (`fold_letter`); `ui/fold.ts` must mirror any change to it. No `ä→ae`.
 - Optional words (`a an the of to in on i`) never required. Abbreviation groups
   (`oss: open source, open-source software`) merge into the typed term's unit; hits through them
   are `expanded` (orange in the UI). Languages: built-in `dict/de.txt` + the dictionary note,
@@ -90,6 +93,9 @@ the indexer, worker, cache or bridge change).
   without `?.` (a throw in the results path silently left the preview empty on mobile).
 - Preview is plain text (speed): image embeds as `<img>`, mermaid fences rendered 250 ms after the
   selection settles, Excalidraw PNG/SVG export shown if present. Nothing else is rendered.
+  Title and preview highlights fold the display text like the engine (`ui/fold.ts`: NFKC, lower,
+  diacritics stripped, offsets mapped back), so `cafe` marks "Café" and `muller` marks "Müller".
+  The preview marks exact folded substrings only: fuzzy (typo) and expanded hits show no marks.
 - Colours: `styles.css` uses only `--ff10k-*` palette variables (accent, h1–h3, faint, muted,
   orange, selection, on-accent), never a raw theme colour. `ui/contrast.ts` sets them inline at
   modal open (and on `css-change`): each theme colour is blended toward `--text-normal` until it
@@ -163,6 +169,6 @@ setting; 0.2.4 theme-colour contrast pass). Last released: 0.2.4.
 - `first two words` recall trails Omnisearch at @1 (tie-break among equals); accepted, see
   `docs/recall.md`.
 - Canvas/Excalidraw are previewed as text, not rendered.
-- Worker memory ~164 MB on the 9k-note vault (budget 150), `docs/perf.md`.
+- Worker memory ~164 MB on the 9k-note vault (budget 150), `docs/performance.md`.
 - Reddit/GitHub asks still open: none known. Unreleased after 0.2.4: the review-lint fix
   (`9b7f659`). Several sessions may run at once: check `git status` and `git log` before editing.

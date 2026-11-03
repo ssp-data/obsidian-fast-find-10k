@@ -3,6 +3,7 @@
 
 import type { EngineClient } from '../engine-client';
 import type { Hit } from '../protocol';
+import { fold, foldTerm, unfoldRange } from './fold';
 
 const MAX_LINES = 4000;
 const MAX_MARKS = 200;
@@ -32,12 +33,12 @@ const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const TAG_BODY = /[\p{L}\p{N}_\-/]+/uy;
 
 /** Query input → highlight terms: whitespace split, filters (`-x`, `#x`, `path:x`) dropped,
- * quotes stripped, lower-cased, deduplicated. */
+ * quotes stripped, folded like the engine (lower-case, no diacritics), deduplicated. */
 export function queryTerms(input: string): string[] {
 	const out: string[] = [];
 	for (const raw of input.split(/\s+/)) {
 		if (!raw || raw.startsWith('-') || raw.startsWith('#') || raw.toLowerCase().startsWith('path:')) continue;
-		const t = raw.replace(/["']/g, '').toLowerCase();
+		const t = foldTerm(raw.replace(/["']/g, ''));
 		if (t && !out.includes(t)) out.push(t);
 	}
 	return out;
@@ -69,13 +70,14 @@ export interface Budget {
 	styles: number;
 }
 
-/** Non-overlapping case-insensitive matches of the terms (≥ 2 chars), leftmost first, longest
- * term on ties; consumes `budget.marks`. Empty when lower-casing changes the line's length.
- * Each term's next occurrence is cached, so a term absent from the line is scanned once. */
+/** Non-overlapping matches of the (folded) terms (≥ 2 chars) in the folded line, leftmost first,
+ * longest term on ties, mapped back onto `text`; consumes `budget.marks`. Each term's next
+ * occurrence is cached, so a term absent from the line is scanned once. */
 function markRanges(text: string, terms: string[], budget: Budget): [number, number][] {
-	const lower = text.toLowerCase();
 	const usable = terms.filter((t) => t.length >= MIN_TERM);
-	if (lower.length !== text.length || usable.length === 0) return [];
+	if (usable.length === 0) return [];
+	const folded = fold(text);
+	const lower = folded.text;
 	const next = usable.map((t) => lower.indexOf(t));
 	const out: [number, number][] = [];
 	let pos = 0;
@@ -91,8 +93,11 @@ function markRanges(text: string, terms: string[], budget: Budget): [number, num
 			}
 		}
 		if (best < 0) break;
-		out.push([best, best + len]);
-		budget.marks--;
+		const r = unfoldRange(folded, best, best + len);
+		if (r[1] > r[0]) {
+			out.push(r);
+			budget.marks--;
+		}
 		pos = best + len;
 	}
 	return out;

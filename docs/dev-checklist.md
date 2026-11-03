@@ -368,7 +368,7 @@ Observed on the test vault, 2026-10-26:
 
 ## Performance pass (task 22)
 
-Numbers, method and before/after tables: [perf.md](perf.md). Native measurements go through
+Numbers, method and before/after tables: [performance.md](performance.md). Native measurements go through
 `ff10k profile <vault>` (ingest split, engine heap) and `ff10k bench <vault>`, pinned to a fast
 core (`taskset -c 2`; this laptop mixes Zen 5 and Zen 5c cores). Worker memory in Obsidian:
 

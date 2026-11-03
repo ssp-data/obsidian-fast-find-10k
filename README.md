@@ -36,6 +36,8 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 
 > [!NOTE]
 > The name "Fast Find 10K" comes from finding fast notes, which is the key of this plugin and the 10k is a hint to my personal limitation I got from 10k above. It's not meant to stay like this, or not usable below 10k, it will work peferctly fine too for low files, but that's the reason why I created it, and hence the name.
+>
+> But it goes way beyond 10k, as a fun exersices, as someone on [HN asked](https://news.ycombinator.com/item?id=50286885) me, I tested it with a 100k-note vault (98,892 notes, 584 MB of markdown). Fast Find is searchable 0.6 s after Obsidian loads, and a query returns its ranked list in 20–400 ms, while Obsidian's own search needs 2–57 s to finish the same queries. Numbers, method and screenshots: [Performance with 100k notes](docs/performance.md#100k-notes).
 
 ## Features
 
@@ -230,7 +232,26 @@ Without Smart Connections the panel uses title overlap only: "👉🏻 Data Engi
 
 ## Performance
 
-On a 9,385-note / 27 MB vault: warm start about 1.2–1.4 s to fully indexed (searchable after the first 500 notes), engine time per query 4–18 ms in Obsidian, 1–8 ms native. Numbers and method in [docs/perf.md](docs/perf.md).
+On a 9,385-note / 27 MB vault: warm start about 1.2–1.4 s to fully indexed (searchable after the first 500 notes), engine time per query 4–18 ms in Obsidian, 1–8 ms native. On a 98,892-note / 584 MB vault: searchable after 0.6 s, fully indexed after 38 s, 20–400 ms per query in Obsidian (typically 150–230 ms), worker memory 2.3 GB. Numbers, method and screenshots in [docs/performance.md](docs/performance.md).
+
+### Tests with 100K Markdown Files Vaults
+
+Full write-up with screenshots of the search window (engine time at the top right), 15 queries side by side, the native CLI breakdown and how it was measured: **[docs/performance.md](docs/performance.md#100k-notes)**. The short version, measured in Obsidian 1.14.4 on the same machine, Fast Find 10K 0.2.6, no other plugins than Vimrc Support:
+
+| | 17,783 notes / 82 MB | 98,892 notes / 584 MB |
+|---|---|---|
+| Searchable after start | — | 0.6 s |
+| Fully indexed (warm start) | — | 38 s, in the worker |
+| `kafka` | 7 ms | 19 ms |
+| `kubernetes` | 14 ms | 149 ms |
+| `data engineering` | 17 ms | 219 ms |
+| `obsidian troubelshoot` (typo) | 25 ms | 221 ms |
+| `sql server` (slowest measured) | 20 ms | 401 ms |
+| Native search, same queries, until done | — | 2–57 s, streaming |
+| Worker memory | — | 2.3 GB |
+
+> [!NOTE]
+> **What it means at 100k:** every query returned its ranked list in under half a second, most in 150–230 ms, against 2–57 s for Obsidian's own search. Query time grows with the amount of text (7× the markdown, 3–20× slower queries), common words that hit much of the vault cost most, and memory grows with it too. At this size Obsidian itself becomes the bottleneck: its first index took many minutes, and renaming a note with link updates took 45 s.
 
 ## Comparisons to other Searches
 

@@ -11,7 +11,50 @@ pub fn is_whitespace_like(c: char) -> bool {
         )
 }
 
-/// NFKC, lowercase, diacritic folding, whitespace collapse, trim.
+/// Lowercase letters with no Unicode decomposition that other keyboards type as ASCII:
+/// `ß`→`ss`, `ø`→`o`, `æ`→`ae`, `œ`→`oe`, `ł`→`l`, `đ`→`d`, `ı`→`i`, `ð`→`d`, `þ`→`th`
+/// (capitals are lowercased first: `ẞ`, `Ø`, `Æ`, `Œ`, `Ł`, `Đ`, `Ð`, `Þ`). Applied to documents
+/// and queries alike, so `straße` and `strasse` meet at `strasse`.
+fn fold_letter(c: char) -> Option<&'static str> {
+    Some(match c {
+        'ß' => "ss",
+        'ø' => "o",
+        'æ' => "ae",
+        'œ' => "oe",
+        'ł' => "l",
+        'đ' => "d",
+        'ı' => "i",
+        'ð' => "d",
+        'þ' => "th",
+        _ => return None,
+    })
+}
+
+/// Chars of `inner` with `fold_letter` applied (expansions are spliced in).
+struct FoldLetters<I: Iterator<Item = char>> {
+    inner: I,
+    pending: std::str::Chars<'static>,
+}
+
+impl<I: Iterator<Item = char>> Iterator for FoldLetters<I> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<char> {
+        if let Some(c) = self.pending.next() {
+            return Some(c);
+        }
+        let c = self.inner.next()?;
+        match fold_letter(c) {
+            Some(s) => {
+                self.pending = s.chars();
+                self.pending.next()
+            }
+            None => Some(c),
+        }
+    }
+}
+
+/// NFKC, lowercase, diacritic folding, letter table (`fold_letter`), whitespace collapse, trim.
 pub fn normalize(s: &str) -> String {
     let mut out = String::new();
     normalize_into(s, &mut out);
@@ -33,7 +76,7 @@ pub fn normalize_into(s: &str, out: &mut String) {
         c == '\u{3099}' || c == '\u{309A}' || get_general_category(c) != GeneralCategory::NonspacingMark
     });
     out.reserve(lowered.len());
-    push_collapsed(out, folded.nfc());
+    push_collapsed(out, FoldLetters { inner: folded.nfc(), pending: "".chars() });
 }
 
 /// Appends `chars` with whitespace runs collapsed to one space and leading/trailing ones dropped.
@@ -78,6 +121,16 @@ mod tests {
     #[test]
     fn folds_diacritics() {
         assert_eq!(normalize("Späti café"), "spati cafe");
+    }
+
+    #[test]
+    fn folds_letters_without_a_decomposition() {
+        // No NFD mapping exists for these, so they are folded by the explicit table.
+        assert_eq!(
+            normalize("Straße ẞ Søren Æbleskiver Œuvre Łódź Đình ıstanbul Þór ð"),
+            "strasse ss soren aebleskiver oeuvre lodz dinh istanbul thor d"
+        );
+        assert_eq!(normalize("STRASSE"), "strasse");
     }
 
     #[test]
