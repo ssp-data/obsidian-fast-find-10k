@@ -33,15 +33,39 @@ const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const TAG_BODY = /[\p{L}\p{N}_\-/]+/uy;
 
 /** Query input → highlight terms: whitespace split, filters (`-x`, `#x`, `path:x`) dropped,
- * quotes stripped, folded like the engine (lower-case, no diacritics), deduplicated. */
-export function queryTerms(input: string): string[] {
+ * quotes stripped, folded like the engine (lower-case, no diacritics), deduplicated. Words on
+ * the `optional` list (Settings → Ranking → Optional words) are left out: the owner declared
+ * them noise, and `as` lit up inside "basic" and "cases" (2026-11-04). As in the engine, a
+ * query made only of optional words keeps them all. */
+export function queryTerms(input: string, optional: readonly string[] = []): string[] {
 	const out: string[] = [];
 	for (const raw of input.split(/\s+/)) {
 		if (!raw || raw.startsWith('-') || raw.startsWith('#') || raw.toLowerCase().startsWith('path:')) continue;
 		const t = foldTerm(raw.replace(/["']/g, ''));
 		if (t && !out.includes(t)) out.push(t);
 	}
-	return out;
+	const skip = new Set(optional.map((w) => foldTerm(w.trim())).filter(Boolean));
+	const kept = out.filter((t) => !skip.has(t));
+	return kept.length > 0 ? kept : out;
+}
+
+/** Terms this short mark whole words only (`as` must not light up inside "basic"), mirroring
+ * the engine's short-term rule; longer terms mark substrings (`code` in "codebase"). */
+const WHOLE_WORD_MAX = 3;
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+/** The next occurrence of `term` in `lower` at or after `from`, as a whole word when the term
+ * is short; -1 when there is none. */
+function nextOccurrence(lower: string, term: string, from: number): number {
+	let at = lower.indexOf(term, from);
+	if (term.length > WHOLE_WORD_MAX) return at;
+	while (at >= 0) {
+		const before = at === 0 || !WORD_CHAR.test(lower[at - 1]);
+		const after = at + term.length >= lower.length || !WORD_CHAR.test(lower[at + term.length]);
+		if (before && after) return at;
+		at = lower.indexOf(term, at + 1);
+	}
+	return -1;
 }
 
 /** Headings `#`–`###` (outside fenced code) get their kind and lose the markers; fence lines and
@@ -70,22 +94,23 @@ export interface Budget {
 	styles: number;
 }
 
-/** Non-overlapping matches of the (folded) terms (≥ 2 chars) in the folded line, leftmost first,
- * longest term on ties, mapped back onto `text`; consumes `budget.marks`. Each term's next
- * occurrence is cached, so a term absent from the line is scanned once. */
+/** Non-overlapping matches of the (folded) terms (≥ 2 chars; up to 3 chars as whole words) in
+ * the folded line, leftmost first, longest term on ties, mapped back onto `text`; consumes
+ * `budget.marks`. Each term's next occurrence is cached, so a term absent from the line is
+ * scanned once. */
 function markRanges(text: string, terms: string[], budget: Budget): [number, number][] {
 	const usable = terms.filter((t) => t.length >= MIN_TERM);
 	if (usable.length === 0) return [];
 	const folded = fold(text);
 	const lower = folded.text;
-	const next = usable.map((t) => lower.indexOf(t));
+	const next = usable.map((t) => nextOccurrence(lower, t, 0));
 	const out: [number, number][] = [];
 	let pos = 0;
 	while (budget.marks > 0) {
 		let best = -1;
 		let len = 0;
 		for (let k = 0; k < usable.length; k++) {
-			if (next[k] >= 0 && next[k] < pos) next[k] = lower.indexOf(usable[k], pos);
+			if (next[k] >= 0 && next[k] < pos) next[k] = nextOccurrence(lower, usable[k], pos);
 			const at = next[k];
 			if (at >= 0 && (best < 0 || at < best || (at === best && usable[k].length > len))) {
 				best = at;

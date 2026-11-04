@@ -100,7 +100,9 @@ the indexer, worker, cache or bridge change).
   selection settles, Excalidraw PNG/SVG export shown if present. Nothing else is rendered.
   Title and preview highlights fold the display text like the engine (`ui/fold.ts`: NFKC, lower,
   diacritics stripped, offsets mapped back), so `cafe` marks "Café" and `muller` marks "Müller".
-  The preview marks exact folded substrings only: fuzzy (typo) and expanded hits show no marks.
+  The preview marks exact folded substrings only: fuzzy (typo) and expanded hits show no marks;
+  optional words are skipped (`queryTerms(query, optionalTerms)`) and terms of ≤ 3 letters mark
+  whole words only (`as` not in "basic"; owner report 2026-11-04).
 - Colours: `styles.css` uses only `--ff10k-*` palette variables (accent, h1–h3, faint, muted,
   orange, selection, on-accent), never a raw theme colour. `ui/contrast.ts` sets them inline at
   modal open (and on `css-change`): each theme colour is blended toward `--text-normal` until it

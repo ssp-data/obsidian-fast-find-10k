@@ -644,7 +644,7 @@ export class FastFindModal extends Modal {
 			this.similar.clear();
 			return;
 		}
-		void this.preview.show(engine, hit, queryTerms(this.state.query));
+		void this.preview.show(engine, hit, queryTerms(this.state.query, this.plugin.settings.optionalTerms));
 		if (this.similarOn()) void this.similar.show(engine, hit, this.plugin.settings.minSimilarity, this.plugin.bridge?.hasVectors() ?? false);
 		else this.similar.clear();
 	}
