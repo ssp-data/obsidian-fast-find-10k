@@ -298,6 +298,31 @@ fn words_contribute_enough(s: &str, indices: &[u32]) -> bool {
     counts.len() <= 1 || counts.iter().all(|&(_, n)| n >= MIN_CHARS_PER_WORD)
 }
 
+/// Number of distinct words (runs of alphanumeric chars) that the matched `indices` of `s` touch.
+fn touched_words(s: &str, indices: &[u32]) -> usize {
+    let mut word_of: Vec<u32> = Vec::with_capacity(s.len());
+    let (mut word, mut prev_alnum) = (0u32, false);
+    for c in s.chars() {
+        let alnum = c.is_alphanumeric();
+        if alnum && !prev_alnum {
+            word += 1;
+        }
+        for _ in 0..c.len_utf8() {
+            word_of.push(if alnum { word } else { 0 });
+        }
+        prev_alnum = alnum;
+    }
+    let mut seen: SmallVec<[u32; 4]> = SmallVec::new();
+    for &i in indices {
+        if let Some(&w) = word_of.get(i as usize) {
+            if w != 0 && !seen.contains(&w) {
+                seen.push(w);
+            }
+        }
+    }
+    seen.len()
+}
+
 /// frizbee match indices are byte offsets of matched bytes; widen each to its whole char.
 /// Returns the merged char ranges and the number of distinct matched chars.
 fn byte_ranges(s: &str, indices: &[u32]) -> (SmallVec<[(u32, u32); 4]>, usize) {
@@ -343,6 +368,12 @@ impl FuzzyRules {
         // "data base design"), never when it borrows a letter from a neighbour (`invoice` →
         // "brand voice": `n` + `voice`). Owner report 2026-10-27.
         if !words_contribute_enough(s, indices) {
+            return None;
+        }
+        // And it never spans words: an alignment over several words passes only when every
+        // needle char is matched, i.e. only a space was dropped. `strasse` → "star system"
+        // (`s,t,r` + `s,s,e`, the `a` as its typo) is rejected. Owner ruling 2026-11-04.
+        if matched_chars < self.needle_chars && touched_words(s, indices) > 1 {
             return None;
         }
         Some((ratio, char_ranges))
@@ -586,6 +617,7 @@ mod tests {
             ("My Writing Voice.md", "tone"),
             ("Data Base Design.md", "schema"),
             ("Invoce Template.md", "typo in the title"),
+            ("Star system.md", "binary stars"),
         ] {
             index.upsert(extract(path, text, 0.0));
         }
@@ -604,6 +636,11 @@ mod tests {
         // A missing space is fine when both words carry the needle.
         assert_eq!(titles("database"), ["Data Base Design"]);
         assert!(words_contribute_enough("data base design", &[0, 1, 2, 3, 5, 6, 7, 8]));
+        // `strasse` → "Star system": 3 letters in each word, but the `a` is a typo spent across
+        // the boundary (owner ruling 2026-11-04).
+        assert!(!titles("strasse").contains(&"Star system".to_string()));
+        assert_eq!(touched_words("star system", &[0, 1, 3, 5, 7, 9]), 2);
+        assert_eq!(touched_words("stratosphere", &[0, 1, 2, 3, 6, 9]), 1);
         assert!(!words_contribute_enough("brand voice", &[3, 6, 7, 8, 9, 10]));
         assert!(words_contribute_enough("voice", &[1, 2, 3, 4]));
     }

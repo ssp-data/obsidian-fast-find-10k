@@ -242,6 +242,21 @@ query = "straße"
 expect_top = "Søren Kierkegaard"
 expect_tier = 2
 
+# A typo never spans words (owner ruling 2026-11-04): `strasse` aligned to "Star system" as
+# `s,t,r` + `s,s,e` with the missing `a` as its one typo. An alignment over several words passes
+# only when every needle letter is matched, i.e. only a space was dropped (`database` → "Data
+# Base Design" stays a title hit).
+[[case]]
+query = "strasse"
+expect_top = "Søren Kierkegaard"
+expect_tier = 2
+must_not_appear = ["Star system"]
+
+[[case]]
+query = "database"
+expect_top = "Data Base Design"
+expect_tier = 1
+
 [[case]]
 query = "lodz aebleskiver"
 expect_top = "Søren Kierkegaard"

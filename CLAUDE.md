@@ -58,7 +58,8 @@ the indexer, worker, cache or bridge change).
   multipliers. Ctrl+R shows them.
 - Fuzzy (frizbee): 1 typo at 6–9 letters, 2 at 10+, 1 at 5 letters in Title/Alias only; span,
   ratio ≥ 0.65 and matched-char guards; a match never borrows a letter from a neighbouring word
-  (`invoice` ≠ "Brand Voice"); window retry per word.
+  (`invoice` ≠ "Brand Voice") and a typo never spans words (`strasse` ≠ "Star system"; only a
+  dropped space may cross, `database` = "Data Base"); window retry per word.
 - Short-term rule: ≤ 3 letters exact-only in single-term queries, per compound part.
 - Compounds join on `-`, `_` and `.` (`jasper.ai`); camelCase splits. `normalize`: NFKC, lowercase,
   diacritics stripped (Japanese marks kept), then the letter table `ß→ss ø→o æ→ae œ→oe ł→l đ→d
