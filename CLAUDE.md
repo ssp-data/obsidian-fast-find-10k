@@ -62,7 +62,8 @@ the indexer, worker, cache or bridge change).
   word (`invoice` ≠ "Brand Voice") and a typo never spans words (`strasse` ≠ "Star system"; only
   a dropped space may cross, `database` = "Data Base"); quality is the best of the whole-string
   and per-word-window alignments. `Hit.fuzzy` marks rows whose word matched only fuzzily (sorted
-  after exact rows of the tier; `fuzzy` pill, `--ff10k-fuzzy` from the theme yellow).
+  after exact rows of the tier; `fuzzy` pill in the faint colour, square corners, no colour of
+  its own by owner ruling).
 - Short-term rule: ≤ 3 letters exact-only in single-term queries, per compound part.
 - Compounds join on `-`, `_` and `.` (`jasper.ai`); camelCase splits. `normalize`: NFKC, lowercase,
   diacritics stripped (Japanese marks kept), then the letter table `ß→ss ø→o æ→ae œ→oe ł→l đ→d

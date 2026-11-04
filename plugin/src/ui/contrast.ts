@@ -95,7 +95,6 @@ export const ROLES: Record<string, { from: string; target: number }> = {
 	faint: { from: 'var(--text-faint)', target: TARGET },
 	muted: { from: 'var(--text-muted)', target: TARGET },
 	orange: { from: 'var(--color-orange)', target: TARGET },
-	fuzzy: { from: 'var(--color-yellow)', target: TARGET },
 	selection: { from: 'var(--interactive-accent)', target: TARGET_UI },
 };
 

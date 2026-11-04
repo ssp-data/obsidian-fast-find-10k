@@ -26,7 +26,6 @@
 	--ff10k-faint: color-mix(in srgb, var(--text-faint) 60%, var(--text-normal));
 	--ff10k-muted: var(--text-muted);
 	--ff10k-orange: color-mix(in srgb, var(--color-orange) 70%, var(--text-normal));
-	--ff10k-fuzzy: color-mix(in srgb, var(--color-yellow) 70%, var(--text-normal));
 	--ff10k-on-accent: var(--background-primary);
 	/* the selected row and the active pills: the theme's UI accent (pushed to 3:1 where it is
 	   pale) as a bar, a ring and a tint, never a solid block, so the text on them stays the
@@ -284,8 +283,9 @@
 }
 
 /* A row whose word matched only with a typo: the title steps back a little and a quiet pill
-   says so, so rows with the typed word stand out at a glance. The pill is kept dim (owner
-   review 2026-11-04: at full strength it drew the eye more than the exact rows). */
+   says so, so rows with the typed word stand out at a glance. No colour of its own (owner
+   review 2026-11-04: yellow drew the eye more than the exact rows); the square corners set it
+   apart from the round `N similar` pill. */
 .ff10k-row.is-fuzzy .ff10k-title {
 	opacity: 0.8;
 }
@@ -293,11 +293,10 @@
 .ff10k-fuzzy-badge {
 	flex: 0 0 auto;
 	font-size: var(--ff10k-fs-smaller);
-	color: var(--ff10k-fuzzy);
-	border: 1px solid var(--ff10k-fuzzy);
+	color: var(--ff10k-faint);
+	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-s);
 	padding: 0 4px;
-	opacity: 0.55;
 }
 
 /* file type marker for non-note results (canvas, base, drawing) */

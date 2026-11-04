@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import esbuild from 'esbuild';
 
 const built = await esbuild.build({ entryPoints: ['src/ui/contrast.ts'], bundle: true, format: 'esm', write: false, absWorkingDir: new URL('..', import.meta.url).pathname });
-const { parseColor, contrast, readable, over, onAccent, toCss, TARGET, ROLES } = await import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
+const { parseColor, contrast, readable, over, onAccent, toCss, TARGET } = await import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 
 const hex = (s) => parseColor(s);
 
@@ -64,8 +64,4 @@ test('onAccent picks the side that reads better; toCss rounds', () => {
 	assert.deepEqual(onAccent(hex('#76946A'), hex('#1F1F28'), hex('#DCD7BA')), hex('#1F1F28'));
 	assert.deepEqual(onAccent(hex('#6f894e'), hex('#f2ecbc'), hex('#545464')), hex('#f2ecbc'));
 	assert.equal(toCss({ r: 1.4, g: 2.6, b: 255, a: 1 }), 'rgb(1 3 255)');
-});
-
-test('the fuzzy pill has its own role, from the theme yellow, tuned like the other text roles', () => {
-	assert.deepEqual(ROLES.fuzzy, { from: 'var(--color-yellow)', target: TARGET });
 });
