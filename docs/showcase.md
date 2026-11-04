@@ -65,6 +65,12 @@ The modal takes its colours from the theme and, when it opens, blends each one t
 
 ![Osaka Jade light, before and after: the pale accent is darkened until it reads](images/themes/osaka-jade-light.webp)
 
+## Tiers: every word beats some words
+
+A note that holds every typed word, even only in its body, ranks above a note whose title carries just one of them. `kafka prague`: "Franz Kafka" and "October 29" mention both words and form the **content** tier; "kafkacat", "Bubonic plague" or "Kakano" match one word each and wait in the **partial** tier below, the loose ones marked `fuzzy`. The preview highlights both words in the first line. See "How ranking works" in the README.
+
+![kafka prague: content rows with both words above partial title rows with one](images/tiers-content-partial.webp)
+
 ## Fuzzy rows and the quality floor (0.2.8)
 
 A row whose word matched only with a typo carries a square `fuzzy` pill (the round one counts similar notes) and a slightly dimmed title, so the rows holding the typed word stand out at a glance; exact and prefix rows sort first within their tier. Settings → Ranking → "Minimum fuzzy match quality" drops the loosest fuzzy rows (the number is the one Ctrl+R prints). Owner review 2026-11-04, after `strasse` had surfaced "Star system".
