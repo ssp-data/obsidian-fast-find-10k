@@ -1147,8 +1147,31 @@ mod tests {
         // Also inside a multi-word query.
         assert_eq!(hit(&e.search("alfed macos", &opts()), "Alfred MacOS").map(|h| h.tier), Some(1));
         // Fuzzy off: nothing.
-        e.set_config(Config { fuzzy: crate::matcher::FuzzyLevel { enabled: false, loose: false }, ..Config::default() });
+        e.set_config(Config { fuzzy: crate::matcher::FuzzyLevel { enabled: false, loose: false, min_quality: crate::matcher::DEFAULT_FUZZY_MIN_QUALITY }, ..Config::default() });
         assert!(hit(&e.search("gitub", &opts()), "GitHub").is_none());
+    }
+
+    /// A row whose typed word matched only with a typo says so (`fuzzy`), and the minimum fuzzy
+    /// quality is a setting: Ctrl+R prints `fuzzy 0.70` for `strasse` → "Fritz Strassmann", so a
+    /// floor of 0.72 drops that row while the exact hit stays (owner request 2026-11-04).
+    #[test]
+    fn fuzzy_rows_are_flagged_and_the_quality_floor_is_a_setting() {
+        let mut e = Engine::new();
+        e.upsert("Fritz Strassmann.md", 0.0, "chemist, with enough words to pass the short note rule, words words words words words");
+        e.upsert("Strasse Notes.md", 0.0, "streets, with enough words to pass the short note rule, words words words words words words");
+        let r = e.search("strasse", &opts());
+        assert_eq!(hit(&r, "Strasse Notes").map(|h| h.fuzzy), Some(false), "{:?}", titles(&r));
+        assert_eq!(hit(&r, "Fritz Strassmann").map(|h| h.fuzzy), Some(true), "{:?}", titles(&r));
+
+        e.set_config(Config { fuzzy: crate::matcher::FuzzyLevel { enabled: true, loose: false, min_quality: 0.72 }, ..Config::default() });
+        let r = e.search("strasse", &opts());
+        assert!(hit(&r, "Strasse Notes").is_some(), "{:?}", titles(&r));
+        assert!(hit(&r, "Fritz Strassmann").is_none(), "{:?}", titles(&r));
+
+        // Saved configs without the field keep today's floor.
+        let f: crate::matcher::FuzzyLevel = serde_json::from_str(r#"{"enabled":true,"loose":false}"#).unwrap();
+        assert_eq!(f.min_quality, crate::matcher::DEFAULT_FUZZY_MIN_QUALITY);
+        assert!((crate::matcher::DEFAULT_FUZZY_MIN_QUALITY - 0.58).abs() < 1e-6);
     }
 
     #[test]

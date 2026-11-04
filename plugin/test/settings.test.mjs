@@ -41,6 +41,19 @@ test('merge: weights are clamped to integers 0-150', () => {
 	assert.equal(s.weights.body, 10);
 });
 
+test('merge: the minimum fuzzy quality defaults to 0.58 and is clamped to 0.5-0.9', () => {
+	assert.equal(DEFAULT_SETTINGS.fuzzyMinScore, 0.58);
+	assert.equal(mergeSettings({ fuzzyMinScore: 0.3 }).fuzzyMinScore, 0.5);
+	assert.equal(mergeSettings({ fuzzyMinScore: 1.5 }).fuzzyMinScore, 0.9);
+	assert.equal(mergeSettings({ fuzzyMinScore: 'high' }).fuzzyMinScore, 0.58);
+	assert.equal(mergeSettings({ fuzzyMinScore: 0.7 }).fuzzyMinScore, 0.7);
+});
+
+test('engine config carries the minimum fuzzy quality next to the typo level', () => {
+	const s = mergeSettings({ fuzzy: 'loose', fuzzyMinScore: 0.7 });
+	assert.deepEqual(settingsToEngineConfig(s).fuzzy, { enabled: true, loose: true, minQuality: 0.7 });
+});
+
 test('merge: fewThreshold is clamped to an integer 1-50', () => {
 	assert.equal(mergeSettings({ fewThreshold: 0 }).fewThreshold, 1);
 	assert.equal(mergeSettings({ fewThreshold: -3 }).fewThreshold, 1);
@@ -102,14 +115,14 @@ test('merge: unknown keys are dropped, wrongly typed values fall back', () => {
 test('engine config: fuzzy, partial, folders, factor, threshold, weights', () => {
 	const base = mergeSettings(null);
 	const c = settingsToEngineConfig({ ...base, fuzzy: 'off', partial: 'always', downrankedFolders: ['Archive'] });
-	assert.deepEqual(c.fuzzy, { enabled: false, loose: false });
+	assert.deepEqual(c.fuzzy, { enabled: false, loose: false, minQuality: 0.58 });
 	assert.equal(c.partial, 'always');
 	assert.deepEqual(c.downrankedFolders, ['Archive']);
 	assert.equal(c.downrankFactor, 0.3);
 	assert.equal(c.fewThreshold, 5);
 	assert.deepEqual(c.weights, DEFAULT_SETTINGS.weights);
-	assert.deepEqual(settingsToEngineConfig({ ...base, fuzzy: 'normal' }).fuzzy, { enabled: true, loose: false });
-	assert.deepEqual(settingsToEngineConfig({ ...base, fuzzy: 'loose' }).fuzzy, { enabled: true, loose: true });
+	assert.deepEqual(settingsToEngineConfig({ ...base, fuzzy: 'normal' }).fuzzy, { enabled: true, loose: false, minQuality: 0.58 });
+	assert.deepEqual(settingsToEngineConfig({ ...base, fuzzy: 'loose' }).fuzzy, { enabled: true, loose: true, minQuality: 0.58 });
 	assert.equal(settingsToEngineConfig({ ...base, partial: 'never' }).partial, 'never');
 });
 

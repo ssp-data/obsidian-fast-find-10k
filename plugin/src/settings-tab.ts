@@ -33,7 +33,7 @@ type ListKey = 'ignoredGlobs' | 'downrankedFolders' | 'optionalTerms' | 'synonym
 /** Settings edited as one entry per line. */
 const LIST_KEYS: ReadonlySet<string> = new Set<ListKey>(['ignoredGlobs', 'downrankedFolders', 'optionalTerms', 'synonyms']);
 /** Plain settings the engine must hear about at once. */
-const RANKING_KEYS: ReadonlySet<string> = new Set(['fuzzy', 'partial', 'minSimilarity']);
+const RANKING_KEYS: ReadonlySet<string> = new Set(['fuzzy', 'fuzzyMinScore', 'partial', 'minSimilarity']);
 
 export class FastFindSettingTab extends PluginSettingTab {
 	private readonly plugin: FastFindPlugin;
@@ -113,7 +113,16 @@ export class FastFindSettingTab extends PluginSettingTab {
 							this.update();
 						},
 					},
-					{ name: 'Fuzzy typo tolerance', control: { type: 'dropdown', key: 'fuzzy', options: { off: 'Off', normal: 'Normal', loose: 'Loose' } } },
+					{
+						name: 'Fuzzy typo tolerance',
+						desc: 'Off: only the typed words (and their prefixes). Normal: one typo at 6–9 letters, two at 10+. Loose: one more typo each.',
+						control: { type: 'dropdown', key: 'fuzzy', options: { off: 'Off', normal: 'Normal', loose: 'Loose' } },
+					},
+					{
+						name: 'Minimum fuzzy match quality',
+						desc: 'A row whose word matched only with a typo is dropped below this quality (the number Ctrl+R prints as "fuzzy 0.62"; such rows carry a "fuzzy" pill). Default 0.58; raise it to see fewer loose matches.',
+						control: { type: 'slider', key: 'fuzzyMinScore', min: 0.5, max: 0.9, step: 0.01 },
+					},
 					{
 						name: 'Partial-match tier',
 						desc: 'Notes matching only some of the words.',
@@ -406,12 +415,26 @@ export class FastFindSettingTab extends PluginSettingTab {
 		);
 		new Setting(el)
 			.setName('Fuzzy typo tolerance')
+			.setDesc('Off: only the typed words (and their prefixes). Normal: one typo at 6–9 letters, two at 10+. Loose: one more typo each.')
 			.addDropdown((d) =>
 				d
 					.addOptions({ off: 'Off', normal: 'Normal', loose: 'Loose' })
 					.setValue(this.s.fuzzy)
 					.onChange((v) => {
 						this.s.fuzzy = v as FuzzySetting;
+						this.saveRanking();
+					}),
+			);
+		new Setting(el)
+			.setName('Minimum fuzzy match quality')
+			.setDesc('A row whose word matched only with a typo is dropped below this quality (the number Ctrl+R prints as "fuzzy 0.62"; such rows carry a "fuzzy" pill). Default 0.58; raise it to see fewer loose matches.')
+			.addSlider((sl) =>
+				sl
+					.setLimits(0.5, 0.9, 0.01)
+					.setValue(this.s.fuzzyMinScore)
+					.setDynamicTooltip()
+					.onChange((v) => {
+						this.s.fuzzyMinScore = v;
 						this.saveRanking();
 					}),
 			);

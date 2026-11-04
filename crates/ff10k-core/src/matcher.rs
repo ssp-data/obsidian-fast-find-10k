@@ -43,12 +43,28 @@ pub struct TermHit {
 }
 
 /// Fuzzy typo tolerance: normal allows 1 typo for 6–9 chars and 2 for 10+; `loose` adds 1 to each.
+/// `min_quality` is the floor on a fuzzy hit's quality (the number Ctrl+R prints as `fuzzy 0.62`:
+/// `QUALITY_FACTOR` × the alignment's score ratio); a setting since 2026-11-04, default
+/// `DEFAULT_FUZZY_MIN_QUALITY`.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FuzzyLevel {
     pub enabled: bool,
     pub loose: bool,
+    #[serde(default = "default_fuzzy_min_quality")]
+    pub min_quality: f32,
 }
+
+/// Default floor on a fuzzy hit's quality (ratio ≥ 0.65 before it became a setting, spec §16).
+pub const DEFAULT_FUZZY_MIN_QUALITY: f32 = 0.58;
+
+fn default_fuzzy_min_quality() -> f32 {
+    DEFAULT_FUZZY_MIN_QUALITY
+}
+
+/// A fuzzy hit's quality is this share of its score ratio, so a perfect fuzzy alignment stays
+/// below a prefix hit.
+const QUALITY_FACTOR: f32 = 0.9;
 
 const FIELDS: [Field; 10] = [
     Field::Title,
@@ -263,8 +279,10 @@ fn finish(index: &Index, field: Field, doc: DocId, mut acc: Acc) -> TermHit {
     }
 }
 
-/// Minimum `score / self_score` of a fuzzy hit (spec §16).
-const MIN_FUZZY_RATIO: f32 = 0.65;
+/// Minimum `score / self_score` of a fuzzy hit at the default floor (spec §16); the live cut is
+/// `FuzzyRules::min_ratio`.
+#[cfg(test)]
+const MIN_FUZZY_RATIO: f32 = DEFAULT_FUZZY_MIN_QUALITY / QUALITY_FACTOR;
 /// A fuzzy alignment spanning several words needs this many matched chars in each of them.
 const MIN_CHARS_PER_WORD: usize = 3;
 
@@ -347,6 +365,8 @@ struct FuzzyRules {
     typos: usize,
     needle_chars: usize,
     max_span: usize,
+    /// `FuzzyLevel::min_quality / QUALITY_FACTOR`: the score ratio a hit needs.
+    min_ratio: f32,
 }
 
 impl FuzzyRules {
@@ -360,7 +380,7 @@ impl FuzzyRules {
             (Some(a), Some(b)) => s[a.0 as usize..b.1 as usize].chars().count(),
             _ => return None,
         };
-        if ratio < MIN_FUZZY_RATIO || matched_chars + self.typos < self.needle_chars || span > self.max_span {
+        if ratio < self.min_ratio || matched_chars + self.typos < self.needle_chars || span > self.max_span {
             return None;
         }
         // A typo stays inside one word: an alignment over several words is only a match when
@@ -384,7 +404,7 @@ impl FuzzyRules {
     /// gain at most frizbee's prefix bonus (12, first haystack char) and exact-match bonus (8).
     fn window_can_pass(&self, score: u16) -> bool {
         const WINDOW_BONUS_MAX: f32 = 20.0;
-        score as f32 + WINDOW_BONUS_MAX >= MIN_FUZZY_RATIO * self.self_score
+        score as f32 + WINDOW_BONUS_MAX >= self.min_ratio * self.self_score
     }
 
     /// The best passing alignment over windows of `s`: one per token start, `max_span` chars
@@ -412,7 +432,7 @@ impl FuzzyRules {
             }
         }
         // Scores first (cheap); indices only for the windows whose score can pass.
-        let min_score = MIN_FUZZY_RATIO * self.self_score;
+        let min_score = self.min_ratio * self.self_score;
         let keep: Vec<usize> =
             m.match_list(&windows).iter().filter(|r| r.score as f32 >= min_score).map(|r| r.index as usize).collect();
         if keep.is_empty() {
@@ -558,23 +578,27 @@ pub fn match_term_scoped(
             let strings = index.field_strings(field);
             let hay: Vec<&str> = strings.iter().map(|e| e.2.as_str()).collect();
             let mut best: HashMap<DocId, TermHit> = HashMap::new();
-            let rules = FuzzyRules { self_score: *self_score, typos: *typos as usize, needle_chars, max_span };
+            let rules = FuzzyRules { self_score: *self_score, typos: *typos as usize, needle_chars, max_span, min_ratio: fuzzy.min_quality / QUALITY_FACTOR };
             for r in m.match_list_indices(&hay) {
                 let (doc, hidx, s) = &strings[r.index as usize];
                 if r.score == 0 || r.exact || matched.contains(doc) {
                     continue;
                 }
-                // A rejected whole-string alignment says little about the words in it: frizbee's
-                // best alignment may borrow chars from later words (0 typos, too wide), and a word
+                // The whole-string alignment says little about the words in it: frizbee's best
+                // alignment may borrow chars from later words (0 typos, too wide), and a word
                 // that does not start the string lacks the start bonus (ratio below the cut).
-                // Retry on one window per token start and keep the best window that passes.
-                let Some((ratio, char_ranges)) = rules
-                    .judge(s, r.score, &r.indices)
-                    .or_else(|| rules.window_can_pass(r.score).then(|| rules.best_window(m, s)).flatten())
-                else {
+                // Also judge one window per token start and keep the best alignment that passes,
+                // so a hit's quality does not depend on where the floor sits (a word in the
+                // middle of a title scores the same whether or not the whole string passed).
+                let whole = rules.judge(s, r.score, &r.indices);
+                let window = rules.window_can_pass(r.score).then(|| rules.best_window(m, s)).flatten();
+                let Some((ratio, char_ranges)) = (match (whole, window) {
+                    (Some(a), Some(b)) => Some(if b.0 > a.0 { b } else { a }),
+                    (a, b) => a.or(b),
+                }) else {
                     continue;
                 };
-                let quality = 0.9 * ratio;
+                let quality = QUALITY_FACTOR * ratio;
                 if best.get(doc).is_some_and(|h| h.quality >= quality) {
                     continue;
                 }
@@ -607,7 +631,7 @@ mod tests {
     use crate::markdown::extract;
     use crate::query::Query;
 
-    const NORMAL: FuzzyLevel = FuzzyLevel { enabled: true, loose: false };
+    const NORMAL: FuzzyLevel = FuzzyLevel { enabled: true, loose: false, min_quality: DEFAULT_FUZZY_MIN_QUALITY };
 
     #[test]
     fn fuzzy_match_may_not_borrow_a_letter_from_a_neighbour_word() {
@@ -716,7 +740,7 @@ mod tests {
     #[test]
     fn fuzzy_disabled_level() {
         let ix = ix();
-        let off = FuzzyLevel { enabled: false, loose: false };
+        let off = FuzzyLevel { enabled: false, loose: false, min_quality: DEFAULT_FUZZY_MIN_QUALITY };
         let hits = match_term(&ix, &term("troubelshoot"), false, off);
         assert!(hits.iter().all(|h| h.kind != MatchKind::Fuzzy));
         assert!(hits.is_empty());

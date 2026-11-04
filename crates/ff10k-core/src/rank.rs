@@ -44,7 +44,7 @@ const COMBO_MIN_COUNT: u32 = 3;
 const RECENT_LIMIT: usize = 20;
 /// Excerpt: bytes of context on each side of the first body match.
 const EXCERPT_RADIUS: usize = 60;
-const NO_FUZZY: FuzzyLevel = FuzzyLevel { enabled: false, loose: false };
+const NO_FUZZY: FuzzyLevel = FuzzyLevel { enabled: false, loose: false, min_quality: crate::matcher::DEFAULT_FUZZY_MIN_QUALITY };
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
@@ -128,7 +128,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             weights: Weights::default(),
-            fuzzy: FuzzyLevel { enabled: true, loose: false },
+            fuzzy: FuzzyLevel { enabled: true, loose: false, min_quality: crate::matcher::DEFAULT_FUZZY_MIN_QUALITY },
             partial: PartialMode::WhenFew,
             downranked_folders: Vec::new(),
             downrank_factor: 0.3,
@@ -200,6 +200,9 @@ pub struct Hit {
     pub similar_count: u32,
     /// Some typed word matched this note only through an abbreviation or language alternative.
     pub expanded: bool,
+    /// Some typed word matched this note only with a typo (the row sorts after exact/prefix
+    /// matches of its tier and the UI marks it).
+    pub fuzzy: bool,
     pub debug: Option<DebugInfo>,
 }
 
@@ -1011,6 +1014,7 @@ fn recent(index: &Index, opts: &SearchOptions, extras: &Extras) -> Ranked {
             ghost_refs: 0,
             similar_count: 0,
             expanded: false,
+            fuzzy: false,
             debug: None,
         })
         .collect();
@@ -1172,6 +1176,7 @@ fn page_hit(index: &Index, s: &Scored, units: &[Unit], cfg: &Config, opts: &Sear
         ghost_refs: s.ghost.map_or(0, |g| g.refs),
         similar_count: 0,
         expanded,
+        fuzzy: s.fuzzy,
         debug,
     }
 }

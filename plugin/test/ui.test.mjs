@@ -19,7 +19,42 @@ async function load(entry) {
 	return import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
 }
 
-const { mapTitleRanges, shortFolder, displayHeading, fileKind } = await load('src/ui/results.ts');
+const { mapTitleRanges, shortFolder, displayHeading, fileKind, renderRow } = await load('src/ui/results.ts');
+
+/** The slice of Obsidian's HTMLElement helpers that `renderRow` uses, over a plain tree. */
+function fakeEl(tag = 'div', cls = '', text = '') {
+	const el = {
+		tag,
+		classes: new Set(cls ? cls.split(' ') : []),
+		text,
+		attrs: {},
+		children: [],
+		addClass(c) { el.classes.add(c); },
+		toggleClass(c, on) { on ? el.classes.add(c) : el.classes.delete(c); },
+		setAttr(k, v) { el.attrs[k] = v; },
+		createDiv(o = {}) { return el.append('div', o); },
+		createSpan(o = {}) { return el.append('span', o); },
+		append(t, o) { const c = fakeEl(t, o.cls ?? '', o.text ?? ''); el.children.push(c); return c; },
+		appendText(t) { el.text += t; },
+		find(c) { for (const ch of el.children) { if (ch.classes.has(c)) return ch; const d = ch.find(c); if (d) return d; } return null; },
+	};
+	return el;
+}
+
+const baseHit = { path: 'a/b.md', title: 'Fritz Strassmann', tier: 1, score: 59, badge: 'Title', titleNorm: 'fritz strassmann', titleRanges: [], isGhost: false, ghostRefs: 0, similarCount: 0, expanded: false, fuzzy: false };
+
+test('a fuzzy row carries the typo pill and class; an exact row does not', () => {
+	const fuzzy = fakeEl();
+	renderRow(fuzzy, { ...baseHit, fuzzy: true }, false);
+	assert.ok(fuzzy.classes.has('is-fuzzy'));
+	assert.equal(fuzzy.find('ff10k-fuzzy-badge')?.text, 'fuzzy');
+	assert.match(fuzzy.attrs.title, /typo/);
+	const exact = fakeEl();
+	renderRow(exact, baseHit, false);
+	assert.ok(!exact.classes.has('is-fuzzy'));
+	assert.equal(exact.find('ff10k-fuzzy-badge'), null);
+	assert.equal(exact.attrs.title, 'a/b.md');
+});
 
 test('file kind labels for non-note results', () => {
 	assert.equal(fileKind('a/book.canvas'), 'canvas');

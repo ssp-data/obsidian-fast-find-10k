@@ -22,7 +22,8 @@ export interface Weights {
 
 export interface EngineConfig {
 	weights: Weights;
-	fuzzy: { enabled: boolean; loose: boolean };
+	/** `minQuality`: floor on a fuzzy hit's quality (the `fuzzy 0.62` Ctrl+R prints), default 0.58. */
+	fuzzy: { enabled: boolean; loose: boolean; minQuality: number };
 	partial: PartialMode;
 	downrankedFolders: string[];
 	downrankFactor: number;
@@ -78,6 +79,8 @@ export interface Hit {
 	similarCount: number;
 	/** Some typed word matched only through an abbreviation or language word (highlighted differently). */
 	expanded: boolean;
+	/** Some typed word matched only with a typo: the row sorts after exact/prefix rows of its tier and shows the `fuzzy` pill. */
+	fuzzy: boolean;
 	debug?: DebugInfo | null;
 }
 

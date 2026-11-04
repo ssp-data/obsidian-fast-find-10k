@@ -57,9 +57,12 @@ the indexer, worker, cache or bridge change).
   whole-title bonus (+15), proximity, backlinks, frecency, combo; short-note and downrank
   multipliers. Ctrl+R shows them.
 - Fuzzy (frizbee): 1 typo at 6–9 letters, 2 at 10+, 1 at 5 letters in Title/Alias only; span,
-  ratio ≥ 0.65 and matched-char guards; a match never borrows a letter from a neighbouring word
-  (`invoice` ≠ "Brand Voice") and a typo never spans words (`strasse` ≠ "Star system"; only a
-  dropped space may cross, `database` = "Data Base"); window retry per word.
+  quality floor (`FuzzyLevel.min_quality`, setting "Minimum fuzzy match quality", default 0.58 =
+  ratio 0.65 × 0.9) and matched-char guards; a match never borrows a letter from a neighbouring
+  word (`invoice` ≠ "Brand Voice") and a typo never spans words (`strasse` ≠ "Star system"; only
+  a dropped space may cross, `database` = "Data Base"); quality is the best of the whole-string
+  and per-word-window alignments. `Hit.fuzzy` marks rows whose word matched only fuzzily (sorted
+  after exact rows of the tier; `fuzzy` pill, `--ff10k-fuzzy` from the theme yellow).
 - Short-term rule: ≤ 3 letters exact-only in single-term queries, per compound part.
 - Compounds join on `-`, `_` and `.` (`jasper.ai`); camelCase splits. `normalize`: NFKC, lowercase,
   diacritics stripped (Japanese marks kept), then the letter table `ß→ss ø→o æ→ae œ→oe ł→l đ→d
@@ -127,6 +130,8 @@ the indexer, worker, cache or bridge change).
 - Keys: Alt+J/K preview scroll, Alt+H/L panels, Alt+N next match, `Alt+Shift+N | Alt+P`
   previous, Ctrl+M matches-only (line numbers, `matches` pill on mobile). `startState` takes
   the preview from the platform setting for resume too.
+- `fuzzyMinScore` 0.58 (0.5–0.9, slider under "Fuzzy typo tolerance"): `fuzzy.minQuality` in the
+  engine config; the `fuzzy` pill shows which rows it governs (2026-11-04).
 
 ## Verify before claiming done
 
