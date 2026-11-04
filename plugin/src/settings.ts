@@ -78,6 +78,8 @@ export interface FastFindSettings {
 	downrankFactor: number;
 	weights: Weights;
 	fuzzy: FuzzySetting;
+	/** Floor on a fuzzy hit's quality (what Ctrl+R prints as `fuzzy 0.62`); rows below it are dropped. */
+	fuzzyMinScore: number;
 	partial: PartialMode;
 	fewThreshold: number;
 	/** Query words that are never required (stopwords, single letters), only scored. */
@@ -134,6 +136,7 @@ export const DEFAULT_SETTINGS: FastFindSettings = {
 	downrankFactor: 0.3,
 	weights: { ...DEFAULT_WEIGHTS },
 	fuzzy: 'normal',
+	fuzzyMinScore: 0.58,
 	partial: 'whenFew',
 	fewThreshold: 5,
 	optionalTerms: ['a', 'an', 'the', 'of', 'to', 'in', 'on', 'i'],
@@ -213,6 +216,7 @@ export function mergeSettings(saved: unknown): FastFindSettings {
 		s.weights[k] = clamp(s.weights[k], 0, 150, DEFAULT_WEIGHTS[k], true);
 	}
 	s.fuzzy = oneOf(s.fuzzy, FUZZY_VALUES, d.fuzzy);
+	s.fuzzyMinScore = clamp(s.fuzzyMinScore, 0.5, 0.9, d.fuzzyMinScore);
 	s.partial = oneOf(s.partial, PARTIAL_VALUES, d.partial);
 	s.semantic = oneOf(s.semantic, SEMANTIC_VALUES, d.semantic);
 	s.keyHints = oneOf(s.keyHints, KEY_HINTS_VALUES, d.keyHints);
@@ -275,7 +279,7 @@ export function parseDictionaryLines(text: string): string[] {
 export function settingsToEngineConfig(s: FastFindSettings, extraSynonyms: readonly string[] = [], languagesActive = false): EngineConfig {
 	return {
 		weights: { ...s.weights },
-		fuzzy: { enabled: s.fuzzy !== 'off', loose: s.fuzzy === 'loose' },
+		fuzzy: { enabled: s.fuzzy !== 'off', loose: s.fuzzy === 'loose', minQuality: s.fuzzyMinScore },
 		partial: s.partial,
 		downrankedFolders: [...s.downrankedFolders],
 		downrankFactor: s.downrankFactor,

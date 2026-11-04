@@ -62,10 +62,11 @@ test('worker bundle answers init, upsert, search, stale and errors', async () =>
 		assert.deepEqual([stats.id, stats.docs], [4, 2]);
 		assert.ok(stats.wasmBytes >= 1 << 20, `wasm memory reported: ${stats.wasmBytes}`);
 
-		// Ranges arrive as UTF-16 offsets: 'ø' is 2 UTF-8 bytes, '💡' and 'ü'/'ß' shift the excerpt.
+		// Ranges arrive as UTF-16 offsets: '💡' and 'ü'/'ß' shift the excerpt. The title's 'ø'
+		// folds to 'o' (letter table, 2026-11-03), so titleNorm is plain ASCII here.
 		w.postMessage({ t: 'search', id: 5, query: 'cafe', mode: 'all', limit: 10, debug: false });
 		const title = (await waitFor((m) => m.t === 'results' && m.id === 5)).res.hits[0];
-		assert.equal(title.titleNorm, 'søren cafe notes');
+		assert.equal(title.titleNorm, 'soren cafe notes');
 		assert.deepEqual(title.titleRanges.map(([a, b]) => title.titleNorm.slice(a, b)), ['cafe']);
 		w.postMessage({ t: 'search', id: 6, query: 'scheduler', mode: 'all', limit: 10, debug: false });
 		const body = (await waitFor((m) => m.t === 'results' && m.id === 6)).res.hits[0];

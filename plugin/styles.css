@@ -282,6 +282,23 @@
 	color: var(--ff10k-orange);
 }
 
+/* A row whose word matched only with a typo: the title steps back a little and a quiet pill
+   says so, so rows with the typed word stand out at a glance. No colour of its own (owner
+   review 2026-11-04: yellow drew the eye more than the exact rows); the square corners set it
+   apart from the round `N similar` pill. */
+.ff10k-row.is-fuzzy .ff10k-title {
+	opacity: 0.8;
+}
+
+.ff10k-fuzzy-badge {
+	flex: 0 0 auto;
+	font-size: var(--ff10k-fs-smaller);
+	color: var(--ff10k-faint);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	padding: 0 4px;
+}
+
 /* file type marker for non-note results (canvas, base, drawing) */
 .ff10k-kind {
 	flex: 0 0 auto;

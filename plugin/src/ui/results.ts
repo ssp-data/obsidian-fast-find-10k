@@ -91,7 +91,12 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean, showSimi
 	el.toggleClass('is-selected', selected);
 	el.toggleClass('ff10k-ghost', hit.isGhost);
 	el.toggleClass('is-expanded', hit.expanded);
-	el.setAttr('title', hit.expanded ? `${hit.path}\nmatched through an abbreviation or language word` : hit.path);
+	el.toggleClass('is-fuzzy', hit.fuzzy);
+	const notes = [
+		hit.expanded ? 'matched through an abbreviation or language word' : '',
+		hit.fuzzy ? 'a word matched only with a typo (Ctrl+R shows the quality; Settings → Ranking sets the floor)' : '',
+	].filter(Boolean);
+	el.setAttr('title', notes.length > 0 ? `${hit.path}\n${notes.join('\n')}` : hit.path);
 	const main = el.createDiv({ cls: 'ff10k-row-main' });
 
 	// semantic rows (tier 5) show their cosine as Smart Connections does
@@ -116,6 +121,7 @@ export function renderRow(el: HTMLElement, hit: Hit, selected: boolean, showSimi
 		const folder = folderOf(hit.path);
 		if (folder) main.createSpan({ cls: 'ff10k-folder', text: shortFolder(folder) });
 	}
+	if (hit.fuzzy) main.createSpan({ cls: 'ff10k-fuzzy-badge', text: 'fuzzy' });
 	if (hit.expanded) main.createSpan({ cls: 'ff10k-expanded-badge', text: 'via word list' });
 	if (showSimilar && hit.similarCount > 0) main.createSpan({ cls: 'ff10k-similar-badge', text: `${hit.similarCount} similar` });
 

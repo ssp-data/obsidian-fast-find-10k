@@ -65,8 +65,14 @@ The modal takes its colours from the theme and, when it opens, blends each one t
 
 ![Osaka Jade light, before and after: the pale accent is darkened until it reads](images/themes/osaka-jade-light.webp)
 
+## Fuzzy rows and the quality floor (0.2.8)
+
+A row whose word matched only with a typo carries a square `fuzzy` pill (the round one counts similar notes) and a slightly dimmed title, so the rows holding the typed word stand out at a glance; exact and prefix rows sort first within their tier. Settings → Ranking → "Minimum fuzzy match quality" drops the loosest fuzzy rows (the number is the one Ctrl+R prints). Owner review 2026-11-04, after `strasse` had surfaced "Star system".
+
+![kafka: Franz Kafka and kafkacat exact, Kakano / kaffarell / Karakaz and the ghost Afrika Korps marked fuzzy](images/fuzzy-rows.webp)
+
 ## Why ranked
 
-`Ctrl+R` shows the tier, the matched fields and every score part of each row.
+`Ctrl+R` shows the tier, the matched fields and every score part of each row (`kafka` on the test vault: exact 1.00 for the title hit, fuzzy 0.62–0.64 for the typo rows, the ghost penalty ×0.80).
 
 ![why ranked](images/why-ranked.webp)
