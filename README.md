@@ -3,7 +3,7 @@
 A fast note finder for large vaults (10k+ notes). A Rust search engine compiled to WebAssembly runs in a worker and powers instant fuzzy, field-weighted, frecency-ranked search with optional semantic "similar notes".
 
 I've built my dream search for Obsidian based on fzf/Telescope from Neovim for preview style and fuzzy search, Omnisearch for smarter search, and Smart Connections for similar notes, all based on Rust WASM to be super fast. This is how it looks:
-![image](docs/images/find-fast-preview.png)
+![Fast Find 10K: `kafka` on the test vault (Asia Neon). Exact title first, the typo-tolerant rows marked `fuzzy`, a ghost link, a heading hit, content rows, `N similar` pills, the note preview with its 21 matches and the similar-notes panel](docs/images/find-fast-preview.webp)
 
 **Video showcase:**
 
@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/2a36f06a-0cf9-4156-a0aa-6bbc0249ea34
 Also see longer Form [YT video](https://youtu.be/jyqBh0pn2Eo) (13 min).
 
 **Mobile View:**:
-![image](docs/images/ff10k-mobile-preview.png)
+![image](docs/images/ff10k-mobile-preview.webp)
 
 *More screenshots, one per feature: [docs/showcase.md](docs/showcase.md)*
 
@@ -48,7 +48,7 @@ And bottom right, there's similar notes to show and avoid creating an existing n
 
   ![why ranked](docs/images/why-ranked.webp)
 
-  "Obsidian Troubleshoot" wins over "Obsidian Trouble Tags Plugin" although the latter matches `trouble` exactly: two of its title words were not in the query (`titleFactor ×0.70`), and the first note was opened before (`frecency +155`).
+  `kafka`: "Franz Kafka" leads with an exact title hit (`exact 1.00`, `fields +85`), "kafkacat" follows as a prefix hit, and "Kakano" or "kaffarell" sit below as fuzzy hits (`fuzzy 0.64`, the `fuzzy` pill); the ghost "Afrika Korps" carries the ghost penalty (`×0.80`). A row with an exact hit in a shorter title beats one whose title has extra words (`titleFactor ×0.85` vs `×0.70`).
 - **Similar notes, to avoid creating a note twice.** The panel bottom right lists near-duplicates of the selected result, and every row carries an `N similar` pill. Similarity comes from title overlap, plus [Smart Connections](#smart-connections) embeddings when that plugin is installed. Before creating a note with Shift+Enter, the create guard shows the closest existing notes first ("Already have?"). This is the feature that stops a vault with no folders from collecting "AI", "AI and Data Engineering" and "AI for Data Engineers" three times over.
 - **Create when nothing exists.** Shift+Enter creates a note named after the query (Mod+Shift+Enter in a new tab). Unresolved `[[links]]` show as ghost rows (`[ghost x2]` = linked from two notes) and can be created the same way.
 - **Files only (Ctrl+F)** switches to titles, aliases and paths, as a Quick Switcher replacement.
