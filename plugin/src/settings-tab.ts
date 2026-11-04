@@ -130,7 +130,7 @@ export class FastFindSettingTab extends PluginSettingTab {
 					},
 					{
 						name: 'Optional words (never required)',
-						desc: 'One per line. A query word on this list need not match; where it does, it still adds to the score. Default: a an the of to in on i.',
+						desc: 'One per line. A query word on this list need not match; where it does, it still adds to the score, but the preview does not highlight it. An empty box means no optional words. Default: a an the of to in on i.',
 						control: { type: 'textarea', key: 'optionalTerms' },
 					},
 					{
@@ -452,7 +452,7 @@ export class FastFindSettingTab extends PluginSettingTab {
 			);
 		new Setting(el)
 			.setName('Optional words (never required)')
-			.setDesc('One per line. A query word on this list need not match; where it does, it still adds to the score. Default: a an the of to in on i.')
+			.setDesc('One per line. A query word on this list need not match; where it does, it still adds to the score, but the preview does not highlight it. An empty box means no optional words. Default: a an the of to in on i.')
 			.addTextArea((t) =>
 				t.setValue(this.s.optionalTerms.join('\n')).onChange((v) => {
 					this.s.optionalTerms = lines(v);

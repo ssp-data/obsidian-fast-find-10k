@@ -196,7 +196,7 @@ All results below come from the CLI on the 9,385-note test vault (`ff10k query <
 
 The second row is a ghost: a `[[link]]` to a note that does not exist yet. Shift+Enter creates it. `path:inbox dagster -airflow` limits the path to `inbox`, requires `dagster` and drops every note that mentions Airflow.
 
-**Optional words.** `should i change` finds "Should I Change My Writing because of AI" first, and a note titled "Change Should Happen" also qualifies for the title tier although it has no `i`, because `i` is on the optional list. Where an optional word does hit, it still adds to the score.
+**Optional words.** `should i change` finds "Should I Change My Writing because of AI" first, and a note titled "Change Should Happen" also qualifies for the title tier although it has no `i`, because `i` is on the optional list. Where an optional word does hit, it still adds to the score. The preview does not highlight optional words (so `as` no longer lights up all over a note), and a term of up to three letters is marked only as a whole word, never inside a longer one (`as` in "basic"). An empty box means no optional words at all; the default list is the one above.
 
 **Abbreviations.** With the setting line `oss: open source, open-source software`, the query `oss` matches notes that say OSS, "open source" or "open-source software" in the title, headings or body:
 

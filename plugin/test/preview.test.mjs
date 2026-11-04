@@ -94,7 +94,7 @@ test('links, tags and query terms split a line into segments', () => {
 });
 
 test('matches are case-insensitive, non-overlapping and prefer the longest term', () => {
-	assert.deepEqual(segmentLine('aaaa', ['aa'], { marks: 200, styles: 2000 }, false), [seg('aa', null, true), seg('aa', null, true)]);
+	assert.deepEqual(segmentLine('datadata', ['data'], { marks: 200, styles: 2000 }, false), [seg('data', null, true), seg('data', null, true)]);
 	assert.deepEqual(segmentLine('Database', ['data', 'database', 'base'], { marks: 200, styles: 2000 }, false), [seg('Database', null, true)]);
 });
 
@@ -195,4 +195,19 @@ test('similar reasons map to panel labels, including object variants', () => {
 	assert.equal(reasonLabel('sameTitleDifferentFolder'), 'same title, other folder');
 	assert.equal(reasonLabel({ similarTitle: 0.65 }), 'similar title');
 	assert.equal(reasonLabel({ semantic: 0.834 }), '0.83');
+});
+
+test('optional words are not highlighted; a query of only optional words keeps them', () => {
+	assert.deepEqual(queryTerms('context as code', ['as', 'the']), ['context', 'code']);
+	assert.deepEqual(queryTerms('Context AS code', ['as']), ['context', 'code']);
+	assert.deepEqual(queryTerms('as the', ['as', 'the']), ['as', 'the']);
+	assert.deepEqual(queryTerms('context as code'), ['context', 'as', 'code']);
+});
+
+test('terms of up to three letters mark whole words only; longer terms still mark substrings', () => {
+	const b = () => ({ marks: 200, styles: 2000 });
+	assert.deepEqual(segmentLine('basic cases as fast, as.', ['as'], b(), false), [seg('basic cases '), seg('as', null, true), seg(' fast, '), seg('as', null, true), seg('.')]);
+	assert.deepEqual(segmentLine('aid ai AI-first', ['ai'], b(), false), [seg('aid '), seg('ai', null, true), seg(' '), seg('AI', null, true), seg('-first')]);
+	assert.deepEqual(segmentLine('Straße 5', ['de'], b(), false), [seg('Straße 5')]);
+	assert.deepEqual(segmentLine('codebase', ['code'], b(), false), [seg('code', null, true), seg('base')]);
 });
