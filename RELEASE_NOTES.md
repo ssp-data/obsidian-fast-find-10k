@@ -1,19 +1,14 @@
 ## What has changed?
 
-A release about typo matches. Rows that reached a note only through a typo now carry a `fuzzy` pill and sort after the exact and prefix hits of their tier, so the rows holding the word you typed stand out. A new slider sets how loose such a match may be, and a typo can no longer stitch letters from two neighbouring words together, so `strasse` stops finding "Star system".
+A small release about the preview. Optional words such as `as` or `i` no longer light up all over a note, and a short query word is marked only where it stands as a word of its own, so the highlights in the preview point at the hits that matter.
 
 **Highlights**
 
-- **Fuzzy rows are marked and sort last in their tier.** A row where some typed word matched only with a typo shows a square `fuzzy` pill (the round one still counts similar notes) and a slightly dimmed title. Within a tier, notes whose every word matched exactly or by prefix come first; `kafka` lists "Franz Kafka" and "kafkacat" before "Kakano" or "kaffarell". Hovering the row says why, and `Ctrl+R` prints the match quality as `fuzzy 0.62`.
-- **A floor for fuzzy matches.** The new "Minimum fuzzy match quality" slider under Settings → Ranking (0.5 to 0.9, default 0.58) drops fuzzy rows below that quality. Raise it to see fewer loose matches; the number is the same one `Ctrl+R` shows, so you can read the value off a row you do not want and set the slider just above it. "Fuzzy typo tolerance" above it now explains its three levels.
-
-  ![Settings → Ranking: Fuzzy typo tolerance and Minimum fuzzy match quality](docs/images/fuzzy-settings.webp)
-
-  ![kafka: exact rows first, then the rows marked fuzzy](docs/images/fuzzy-rows.webp)
-- **A typo never spans words.** A one-typo alignment must stay inside one word of the title, heading or body. Only a dropped space may cross a word boundary, and then every typed letter has to match: `database` still finds "Data Base Design" as a title hit.
+- **Optional words are not highlighted in the preview.** Words on the "Optional words (never required)" list (`a an the of to in on i` by default) still add to the score where they match, but the preview leaves them unmarked, so `should i change` marks "should" and "change" and skips every `i`. A query made only of optional words keeps its highlights. The setting's description now says so, and that an empty box means no optional words at all.
+- **Short terms mark whole words only.** A query word of up to three letters is highlighted only as a word of its own, never inside a longer one, mirroring the engine's rule that such words match exactly. Longer words still mark substrings, so `code` still marks "codebase".
 
 **Fixes**
 
-- `strasse` surfaced "Star system", because the matcher accepted `str` from the first word plus `sse` from the second with the missing `a` as its one allowed typo. Such cross-word alignments are rejected now, and the query lands on "Søren Kierkegaard" through its folded `Straße` heading as before.
+- Searching for `as` painted the letters inside "basic", "cases" and every similar word across the preview, and the match counter in the header counted them too. Both now count and mark only the standalone word.
 
-How the tiers, the fuzzy guards and the score parts fit together is described in the README under "How ranking works".
+How optional words take part in ranking and in the preview is described in the README under "How ranking works" and the "Optional words" example.
