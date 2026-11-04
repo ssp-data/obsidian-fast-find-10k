@@ -71,6 +71,8 @@ A row whose word matched only with a typo carries a square `fuzzy` pill (the rou
 
 ![kafka: Franz Kafka and kafkacat exact, Kakano / kaffarell / Karakaz and the ghost Afrika Korps marked fuzzy](images/fuzzy-rows.webp)
 
+![Settings → Ranking: Fuzzy typo tolerance (off / normal / loose) and the Minimum fuzzy match quality slider](images/fuzzy-settings.webp)
+
 ## Why ranked
 
 `Ctrl+R` shows the tier, the matched fields and every score part of each row (`kafka` on the test vault: exact 1.00 for the title hit, fuzzy 0.62–0.64 for the typo rows, the ghost penalty ×0.80).
