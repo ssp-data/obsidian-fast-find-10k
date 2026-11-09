@@ -278,15 +278,20 @@ export class FastFindModal extends Modal {
 				start = null;
 			}, { passive: true });
 		}
-		// pills: tap targets; their key labels are omitted on mobile (no keyboard shortcuts there)
-		const key = (spec: string) => (Platform.isMobile ? '' : ` ${keyLabel(spec)}`);
+		// pills: tap targets. The shortcut is not in the label (owner, 2026-11-04: the footer hints
+		// and Ctrl+? already list it); on desktop it sits in the tooltip.
+		const key = (spec: string) => (Platform.isMobile ? '' : ` (${keyLabel(spec)})`);
 		const pills = Platform.isMobile ? bar.createDiv({ cls: 'ff10k-pills' }) : bar;
 		this.pillAll = pills.createSpan({ cls: 'ff10k-pill', text: 'all' });
-		this.pillFiles = pills.createSpan({ cls: 'ff10k-pill', text: `files only${key(this.plugin.settings.keymap.filesOnly)}` });
+		this.pillFiles = pills.createSpan({
+			cls: 'ff10k-pill',
+			text: 'files only',
+			attr: { title: `Titles, aliases and paths only${key(this.plugin.settings.keymap.filesOnly)}` },
+		});
 		this.pillLang = pills.createSpan({
 			cls: 'ff10k-pill',
-			text: `+languages${key(this.plugin.settings.keymap.toggleLanguages)}`,
-			attr: { title: 'Also search the German word list and the dictionary note' },
+			text: '+languages',
+			attr: { title: `Also search the German word list and the dictionary note${key(this.plugin.settings.keymap.toggleLanguages)}` },
 		});
 		if (Platform.isMobile) {
 			const pillPreview = pills.createSpan({ cls: 'ff10k-pill', text: 'preview' });

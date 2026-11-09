@@ -1,14 +1,14 @@
 ## What has changed?
 
-A small release about the preview. Optional words such as `as` or `i` no longer light up all over a note, and a short query word is marked only where it stands as a word of its own, so the highlights in the preview point at the hits that matter.
+A small cosmetic release for the header of the search. The `files only` and `+languages` pills no longer carry their keyboard shortcut in the label, so the header reads as two plain mode switches. Searching, ranking and the keys themselves are unchanged.
 
 **Highlights**
 
-- **Optional words are not highlighted in the preview.** Words on the "Optional words (never required)" list (`a an the of to in on i` by default) still add to the score where they match, but the preview leaves them unmarked, so `should i change` marks "should" and "change" and skips every `i`. A query made only of optional words keeps its highlights. The setting's description now says so, and that an empty box means no optional words at all.
-- **Short terms mark whole words only.** A query word of up to three letters is highlighted only as a word of its own, never inside a longer one, mirroring the engine's rule that such words match exactly. Longer words still mark substrings, so `code` still marks "codebase".
+- **Shorter header pills.** The pills now read `files only` and `+languages` without the `Ctrl+F` and `Ctrl+L` suffixes. On desktop the shortcut moves into the pill's tooltip and stays in the footer hints and in the key help under `Ctrl+?`. On mobile, where the pills are tap targets and never showed a key, nothing changes.
+- **Tooltip on "files only".** Hovering the pill explains what the mode does (titles, aliases and paths only, as a Quick Switcher replacement), matching the tooltip the `+languages` pill already had.
 
 **Fixes**
 
-- Searching for `as` painted the letters inside "basic", "cases" and every similar word across the preview, and the match counter in the header counted them too. Both now count and mark only the standalone word.
+- No user-facing bugs were fixed in this release.
 
-How optional words take part in ranking and in the preview is described in the README under "How ranking works" and the "Optional words" example.
+The pills and their keys are listed in the README under "Keys".
